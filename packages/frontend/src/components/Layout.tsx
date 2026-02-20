@@ -1,0 +1,92 @@
+import React from 'react';
+import { Link, useLocation, Outlet } from 'react-router-dom';
+import styled from 'styled-components';
+import { theme } from '../styles/theme';
+
+const Wrapper = styled.div`
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+`;
+
+const Header = styled.header`
+  background: ${theme.colors.secondary};
+  color: ${theme.colors.white};
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  height: 60px;
+  gap: 32px;
+`;
+
+const Logo = styled(Link)`
+  font-size: 24px;
+  font-weight: 900;
+  color: ${theme.colors.primary};
+  letter-spacing: 3px;
+  text-transform: uppercase;
+`;
+
+const Nav = styled.nav`
+  display: flex;
+  gap: 4px;
+  margin-left: 16px;
+`;
+
+const NavLink = styled(Link)<{ $active?: boolean }>`
+  color: ${(p) => (p.$active ? theme.colors.primary : theme.colors.white)};
+  padding: 8px 14px;
+  border-radius: ${theme.borderRadius};
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.15s;
+  background: ${(p) => (p.$active ? 'rgba(255,95,0,0.1)' : 'transparent')};
+
+  &:hover {
+    color: ${theme.colors.primary};
+    background: rgba(255, 95, 0, 0.08);
+  }
+`;
+
+const Main = styled.main`
+  flex: 1;
+  padding: 24px;
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+`;
+
+const navItems = [
+  { path: '/import', label: 'Datenimport' },
+  { path: '/stammdaten/upload', label: 'Stammdaten Upload' },
+  { path: '/stammdaten/view', label: 'Stammdaten' },
+  { path: '/statement', label: 'Statement' },
+  { path: '/uploads', label: 'Upload History' },
+  { path: '/export', label: 'PDF Export' },
+];
+
+export default function Layout() {
+  const location = useLocation();
+
+  return (
+    <Wrapper>
+      <Header>
+        <Logo to="/">SIXT</Logo>
+        <Nav>
+          {navItems.map((item) => (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              $active={location.pathname.startsWith(item.path)}
+            >
+              {item.label}
+            </NavLink>
+          ))}
+        </Nav>
+      </Header>
+      <Main>
+        <Outlet />
+      </Main>
+    </Wrapper>
+  );
+}

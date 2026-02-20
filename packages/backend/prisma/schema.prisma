@@ -1,0 +1,112 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Country {
+  id               Int       @id @default(autoincrement())
+  fir              Int
+  debitor1         String
+  iso              String
+  kst              Int?
+  name             String
+  comment          String?
+  verrkto          String?
+  kreditor         String?
+  revc             String?
+  debitor760       String?
+  kreditor760      String?
+  stSchlLstRe      String?
+  stSchlLstGs      String?
+  revc2            String?
+  stSchlLiefRe     String?
+  emails           String?
+  partnerStatus    String?
+  zusatz           String?
+  finalInterfacing String?
+  vertragsende     DateTime?
+  debitor10        String?
+
+  @@index([debitor1])
+  @@index([fir])
+  @@index([iso])
+  @@map("countries")
+}
+
+model MasterData {
+  id    Int     @id @default(autoincrement())
+  uid   String?
+  ktod  String
+  nam1  String?
+  nam2  String?
+  nam3  String?
+  str   String?
+  ort   String?
+  plz   String?
+  lanb  String?
+  payt  Int?
+
+  @@unique([ktod])
+  @@index([ktod])
+  @@map("master_data")
+}
+
+model SapImport {
+  id                  Int       @id @default(autoincrement())
+  uploadId            Int
+  upload              Upload    @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  konto               String
+  buchungsschluessel  String?
+  belegart            String?
+  referenzschluessel3 String?
+  referenz            String?
+  zuordnung           String?
+  buchungsperiode     String?
+  buchungsdatum       DateTime?
+  belegdatum          DateTime?
+  nettofaelligkeit    DateTime?
+  kontoGegenbuchung   String?
+  sollHabenKennz      String?
+  steuerkennzeichen   String?
+  belegnummer         String?
+  p                   String?
+  ausgleichsdatum     DateTime?
+  text                String?
+  belegkopftext       String?
+  buchungsprogramm    String?
+  betragHauswaehrung  Float     @default(0)
+  hauswaehrung        String?
+  type                String?
+
+  @@index([konto])
+  @@index([buchungsdatum])
+  @@index([type])
+  @@index([uploadId])
+  @@map("sap_imports")
+}
+
+model Upload {
+  id               Int         @id @default(autoincrement())
+  filename         String
+  uploadType       String
+  accountingPeriod String?
+  uploadedAt       DateTime    @default(now())
+  recordCount      Int         @default(0)
+  sapImports       SapImport[]
+
+  @@map("uploads")
+}
+
+model BillingRun {
+  id               Int      @id @default(autoincrement())
+  accountingPeriod String
+  releaseDate      DateTime
+  paymentTermDays  Int      @default(30)
+  createdAt        DateTime @default(now())
+
+  @@map("billing_runs")
+}

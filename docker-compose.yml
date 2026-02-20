@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sixt-interfacing-db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sixt}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sixt_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-interfacing}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
