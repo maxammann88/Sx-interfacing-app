@@ -87,6 +87,20 @@ const CloseButton = styled.button`
   &:hover { background: rgba(255,255,255,0.15); }
 `;
 
+const CorrectedBadge = styled(Badge)`
+  background: #e65100;
+  font-size: 10px;
+  padding: 2px 6px;
+  margin-left: 6px;
+`;
+
+const OriginalBadge = styled(Badge)`
+  background: #999;
+  font-size: 10px;
+  padding: 2px 6px;
+  margin-left: 6px;
+`;
+
 export default function ExportPage() {
   const [countries, setCountries] = useState<Country[]>([]);
   const [period, setPeriod] = useState(getDefaultPeriod());
@@ -103,6 +117,9 @@ export default function ExportPage() {
   const [previewTitle, setPreviewTitle] = useState('');
   const [error, setError] = useState('');
   const [assignments, setAssignments] = useState<Record<number, { creator: string | null; reviewer: string | null }>>({});
+  const [corrections, setCorrections] = useState<Record<number, { id: number; data: any; createdAt: string }[]>>({});
+  const [exportingCorrPdf, setExportingCorrPdf] = useState<string | null>(null);
+  const [exportingCorrXlsx, setExportingCorrXlsx] = useState<string | null>(null);
 
   const periods = generatePeriodOptions();
 
@@ -126,6 +143,10 @@ export default function ExportPage() {
         setAssignments(map);
       })
       .catch(() => setAssignments({}));
+
+    api.get('/export/corrections', { params: { period } })
+      .then(res => setCorrections(res.data.data || {}))
+      .catch(() => setCorrections({}));
   }, [period]);
 
   useEffect(() => {
@@ -291,6 +312,40 @@ export default function ExportPage() {
     }
   };
 
+  const handleExportCorrectedPdf = async (corrId: number, corrData: any, countryId: number) => {
+    const key = `${countryId}-${corrId}`;
+    setExportingCorrPdf(key);
+    try {
+      const res = await api.post('/export/render/pdf', corrData, { responseType: 'blob' });
+      const disposition = res.headers['content-disposition'];
+      const filename = disposition
+        ? decodeURIComponent(disposition.split('filename=')[1]?.replace(/"/g, ''))
+        : `Interfacing_${countryId}_${period}_v${corrId}.pdf`;
+      downloadBlob(new Blob([res.data]), filename);
+    } catch {
+      setError('Error exporting corrected PDF.');
+    } finally {
+      setExportingCorrPdf(null);
+    }
+  };
+
+  const handleExportCorrectedXlsx = async (corrId: number, corrData: any, countryId: number) => {
+    const key = `${countryId}-${corrId}`;
+    setExportingCorrXlsx(key);
+    try {
+      const res = await api.post('/export/render/xlsx', corrData, { responseType: 'blob' });
+      const disposition = res.headers['content-disposition'];
+      const filename = disposition
+        ? decodeURIComponent(disposition.split('filename=')[1]?.replace(/"/g, ''))
+        : `Interfacing_${countryId}_${period}_v${corrId}.xlsx`;
+      downloadBlob(new Blob([res.data]), filename);
+    } catch {
+      setError('Error exporting corrected XLSX.');
+    } finally {
+      setExportingCorrXlsx(null);
+    }
+  };
+
   const closePreview = () => {
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl);
@@ -372,43 +427,94 @@ export default function ExportPage() {
           <tbody>
             {countries.map((c) => {
               const a = assignments[c.id];
+              const countryCorrections = corrections[c.id] || [];
+              const hasCorrection = countryCorrections.length > 0;
               return (
-              <tr key={c.id}>
-                <td>{c.fir}</td>
-                <td><strong>{c.name}</strong></td>
-                <td>{c.iso}</td>
-                <td style={{ fontSize: 12, color: a?.creator ? theme.colors.textPrimary : '#ccc' }}>
-                  {a?.creator || '–'}
-                </td>
-                <td style={{ fontSize: 12, color: a?.reviewer ? theme.colors.textPrimary : '#ccc' }}>
-                  {a?.reviewer || '–'}
-                </td>
-                <td>
-                  <Badge $color={theme.colors.success}>{c.partnerStatus}</Badge>
-                </td>
-                <td>
-                  <PreviewButton
-                    onClick={() => handlePreview(c)}
-                    disabled={previewing === c.id || !period}
-                  >
-                    {previewing === c.id ? '...' : 'Preview'}
-                  </PreviewButton>
-                  <Button
-                    onClick={() => handleExport(c.id)}
-                    disabled={exporting === c.id || !period}
-                    style={{ padding: '6px 14px', fontSize: '12px' }}
-                  >
-                    {exporting === c.id ? 'Exporting...' : 'PDF'}
-                  </Button>
-                  <Button
-                    onClick={() => handleExportXlsx(c.id)}
-                    disabled={exportingXlsx === c.id || !period}
-                    style={{ padding: '6px 14px', fontSize: '12px', marginLeft: 4, background: '#217346' }}
-                  >
-                    {exportingXlsx === c.id ? 'Exporting...' : 'XLSX'}
-                  </Button>
-                </td>
-              </tr>
+                <React.Fragment key={c.id}>
+                  <tr style={hasCorrection ? { textDecoration: 'line-through', opacity: 0.5, background: '#f9f9f9' } : undefined}>
+                    <td>{c.fir}</td>
+                    <td>
+                      <strong>{c.name}</strong>
+                      {hasCorrection && <OriginalBadge $color="#999">Original</OriginalBadge>}
+                    </td>
+                    <td>{c.iso}</td>
+                    <td style={{ fontSize: 12, color: a?.creator ? theme.colors.textPrimary : '#ccc' }}>
+                      {a?.creator || '–'}
+                    </td>
+                    <td style={{ fontSize: 12, color: a?.reviewer ? theme.colors.textPrimary : '#ccc' }}>
+                      {a?.reviewer || '–'}
+                    </td>
+                    <td>
+                      <Badge $color={theme.colors.success}>{c.partnerStatus}</Badge>
+                    </td>
+                    <td>
+                      <PreviewButton
+                        onClick={() => handlePreview(c)}
+                        disabled={previewing === c.id || !period}
+                      >
+                        {previewing === c.id ? '...' : 'Preview'}
+                      </PreviewButton>
+                      <Button
+                        onClick={() => handleExport(c.id)}
+                        disabled={exporting === c.id || !period}
+                        style={{ padding: '6px 14px', fontSize: '12px' }}
+                      >
+                        {exporting === c.id ? 'Exporting...' : 'PDF'}
+                      </Button>
+                      <Button
+                        onClick={() => handleExportXlsx(c.id)}
+                        disabled={exportingXlsx === c.id || !period}
+                        style={{ padding: '6px 14px', fontSize: '12px', marginLeft: 4, background: '#217346' }}
+                      >
+                        {exportingXlsx === c.id ? 'Exporting...' : 'XLSX'}
+                      </Button>
+                    </td>
+                  </tr>
+                  {countryCorrections.map((corr, idx) => {
+                    const corrKey = `${c.id}-${corr.id}`;
+                    const versionLabel = countryCorrections.length === 1
+                      ? 'Corrected'
+                      : `Corrected v${idx + 1}`;
+                    const ts = new Date(corr.createdAt);
+                    const timeStr = `${ts.toLocaleDateString('de-DE')} ${ts.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}`;
+                    return (
+                      <tr key={corrKey} style={{ background: '#fff8e1' }}>
+                        <td>{c.fir}</td>
+                        <td>
+                          <strong>{c.name}</strong>
+                          <CorrectedBadge $color="#e65100">{versionLabel}</CorrectedBadge>
+                          <span style={{ fontSize: 10, color: '#999', marginLeft: 6 }}>{timeStr}</span>
+                        </td>
+                        <td>{c.iso}</td>
+                        <td style={{ fontSize: 12, color: a?.creator ? theme.colors.textPrimary : '#ccc' }}>
+                          {a?.creator || '–'}
+                        </td>
+                        <td style={{ fontSize: 12, color: a?.reviewer ? theme.colors.textPrimary : '#ccc' }}>
+                          {a?.reviewer || '–'}
+                        </td>
+                        <td>
+                          <Badge $color={theme.colors.success}>{c.partnerStatus}</Badge>
+                        </td>
+                        <td>
+                          <Button
+                            onClick={() => handleExportCorrectedPdf(corr.id, corr.data, c.id)}
+                            disabled={exportingCorrPdf === corrKey || !period}
+                            style={{ padding: '6px 14px', fontSize: '12px' }}
+                          >
+                            {exportingCorrPdf === corrKey ? 'Exporting...' : 'PDF'}
+                          </Button>
+                          <Button
+                            onClick={() => handleExportCorrectedXlsx(corr.id, corr.data, c.id)}
+                            disabled={exportingCorrXlsx === corrKey || !period}
+                            style={{ padding: '6px 14px', fontSize: '12px', marginLeft: 4, background: '#217346' }}
+                          >
+                            {exportingCorrXlsx === corrKey ? 'Exporting...' : 'XLSX'}
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </React.Fragment>
               );
             })}
           </tbody>

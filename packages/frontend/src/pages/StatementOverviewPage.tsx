@@ -23,10 +23,20 @@ const CompactTable = styled(Table)`
     font-size: 10px;
     position: sticky;
     top: 0;
-    z-index: 2;
+    z-index: 3;
     box-shadow: 0 1px 2px rgba(0,0,0,0.15);
   }
   td { padding: 3px 6px; font-size: 11px; }
+`;
+
+const StickyTotalRow = styled(SubtotalRow)`
+  td {
+    position: sticky;
+    top: 28px;
+    z-index: 2;
+    background: #f0f0f0 !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  }
 `;
 
 const SmallButton = styled(Button)`
@@ -416,6 +426,19 @@ export default function StatementOverviewPage() {
               </tr>
             </thead>
             <tbody>
+              <StickyTotalRow>
+                <td colSpan={3}><strong>TOTAL ({rows.length} countries)</strong></td>
+                <AmountCell><strong>{formatEur(totals.clearing)}</strong></AmountCell>
+                <AmountCell><strong>{formatEur(totals.billing)}</strong></AmountCell>
+                <AmountCell><strong>{formatEur(totals.total)}</strong></AmountCell>
+                <AmountCell><strong>{formatEur(totals.overdue)}</strong></AmountCell>
+                <AmountCell><strong>{formatEur(totals.due)}</strong></AmountCell>
+                <AmountCell><strong>{formatEur(totals.sixt)}</strong></AmountCell>
+                <AmountCell><strong>{formatEur(totals.partner)}</strong></AmountCell>
+                <AmountCell><strong>{formatEur(totals.balance)}</strong></AmountCell>
+                <td></td>
+                <td></td>
+              </StickyTotalRow>
               {rows.map((r) => (
                 <tr key={r.countryId}>
                   <td>{r.fir}</td>
@@ -460,19 +483,6 @@ export default function StatementOverviewPage() {
                   </td>
                 </tr>
               ))}
-              <SubtotalRow>
-                <td colSpan={3}><strong>TOTAL ({rows.length} countries)</strong></td>
-                <AmountCell><strong>{formatEur(totals.clearing)}</strong></AmountCell>
-                <AmountCell><strong>{formatEur(totals.billing)}</strong></AmountCell>
-                <AmountCell><strong>{formatEur(totals.total)}</strong></AmountCell>
-                <AmountCell><strong>{formatEur(totals.overdue)}</strong></AmountCell>
-                <AmountCell><strong>{formatEur(totals.due)}</strong></AmountCell>
-                <AmountCell><strong>{formatEur(totals.sixt)}</strong></AmountCell>
-                <AmountCell><strong>{formatEur(totals.partner)}</strong></AmountCell>
-                <AmountCell><strong>{formatEur(totals.balance)}</strong></AmountCell>
-                <td></td>
-                <td></td>
-              </SubtotalRow>
             </tbody>
           </CompactTable>
           </TableScroll>

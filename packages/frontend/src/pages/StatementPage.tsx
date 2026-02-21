@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import ReactSelect from 'react-select';
 import api from '../utils/api';
 import { formatEur, formatDateDE, generatePeriodOptions, getDefaultPeriod } from '../utils/format';
 import type { StatementData, StatementLine, Country } from '@sixt/shared';
@@ -64,7 +65,6 @@ export default function StatementPage() {
   const [statement, setStatement] = useState<StatementData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [autoLoaded, setAutoLoaded] = useState(false);
   const [dueUntilLabel, setDueUntilLabel] = useState('');
   const [balanceLabel, setBalanceLabel] = useState('');
   const [exportingPdf, setExportingPdf] = useState(false);
@@ -102,6 +102,14 @@ export default function StatementPage() {
 
   const periods = generatePeriodOptions();
 
+  const countryOptions = useMemo(() =>
+    countries.map(c => ({ value: String(c.id), label: `${c.fir} - ${c.name} (${c.iso})` })),
+  [countries]);
+
+  const selectedCountryOption = useMemo(() =>
+    countryOptions.find(o => o.value === countryId) || null,
+  [countryOptions, countryId]);
+
   useEffect(() => {
     if (!period) return;
     api.get(`/planning/${period}`)
@@ -120,42 +128,37 @@ export default function StatementPage() {
     api.get('/countries', { params: { status: statusFilter !== 'alle' ? statusFilter : undefined } })
       .then((res) => {
         setCountries(res.data.data);
-        if (!autoLoaded && countryId && period) {
-          setAutoLoaded(true);
-        }
       })
       .catch(() => {});
   }, [statusFilter]);
 
   useEffect(() => {
-    if (autoLoaded && countryId && period && !statement && !loading) {
-      loadStatement();
-    }
-  }, [autoLoaded]);
-
-  const loadStatement = async () => {
-    if (!countryId || !period) {
-      setError('Please select a country and accounting period.');
-      return;
-    }
+    if (!countryId || !period || !releaseDate) return;
+    let cancelled = false;
     setLoading(true);
     setError('');
     setStatement(null);
 
-    try {
-      const res = await api.get(`/statement/${countryId}`, {
-        params: { period, releaseDate, paymentTermDays },
+    api.get(`/statement/${countryId}`, {
+      params: { period, releaseDate, paymentTermDays },
+    })
+      .then(res => {
+        if (cancelled) return;
+        setStatement(res.data.data);
+        setDueUntilLabel(res.data.data.accountStatement.dueUntilDate);
+        const bal = res.data.data.accountStatement.balanceOpenItems;
+        setBalanceLabel(bal < 0 ? 'Payment is kindly requested' : 'Payment will be initiated by Sixt');
+      })
+      .catch((err: any) => {
+        if (cancelled) return;
+        setError(err.response?.data?.error || 'Error loading statement.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
-      setStatement(res.data.data);
-      setDueUntilLabel(res.data.data.accountStatement.dueUntilDate);
-      const bal = res.data.data.accountStatement.balanceOpenItems;
-      setBalanceLabel(bal < 0 ? 'Payment is kindly requested' : 'Payment will be initiated by Sixt');
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Error loading statement.');
-    } finally {
-      setLoading(false);
-    }
-  };
+
+    return () => { cancelled = true; };
+  }, [countryId, period, releaseDate]);
 
   const updateClearingLine = useCallback((index: number, field: keyof StatementLine, value: string) => {
     setStatement(prev => {
@@ -175,6 +178,14 @@ export default function StatementPage() {
       if (!prev) return prev;
       const clearing = prev.clearing.filter((_, i) => i !== index);
       return { ...prev, clearing };
+    });
+  }, []);
+
+  const addClearingLine = useCallback(() => {
+    setStatement(prev => {
+      if (!prev) return prev;
+      const newLine: StatementLine = { type: 'Clearing', description: '', reference: '', amount: 0 };
+      return { ...prev, clearing: [...prev.clearing, newLine] };
     });
   }, []);
 
@@ -199,6 +210,14 @@ export default function StatementPage() {
     });
   }, []);
 
+  const addBillingLine = useCallback(() => {
+    setStatement(prev => {
+      if (!prev) return prev;
+      const newLine: StatementLine = { type: 'Invoice', description: '', reference: '', date: '', amount: 0 };
+      return { ...prev, billing: [...prev.billing, newLine] };
+    });
+  }, []);
+
   const getExportData = useCallback((): any | null => {
     if (!statement) return null;
     return {
@@ -216,6 +235,19 @@ export default function StatementPage() {
       },
     };
   }, [statement, clearingSubtotal, billingSubtotal, totalInterfacingDue, computedAccount, balanceLabel]);
+
+  const saveCorrection = useCallback(async (data: any) => {
+    try {
+      const cid = data?.country?.id ?? Number(countryId);
+      await api.post('/export/corrections', {
+        countryId: cid,
+        period,
+        data,
+      });
+    } catch {
+      // non-blocking – correction save failure should not prevent export
+    }
+  }, [countryId, period]);
 
   const handleExportPdf = async () => {
     const data = getExportData();
@@ -235,6 +267,7 @@ export default function StatementPage() {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
+      await saveCorrection(data);
     } catch {
       setError('Error exporting PDF.');
     } finally {
@@ -260,6 +293,7 @@ export default function StatementPage() {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
+      await saveCorrection(data);
     } catch {
       setError('Error exporting XLSX.');
     } finally {
@@ -283,16 +317,21 @@ export default function StatementPage() {
               <option value="inaktiv">Inactive</option>
             </Select>
           </FormGroup>
-          <FormGroup>
+          <FormGroup style={{ minWidth: 300 }}>
             <Label>Country</Label>
-            <Select value={countryId} onChange={(e) => setCountryId(e.target.value)}>
-              <option value="">-- Select country --</option>
-              {countries.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.fir} - {c.name} ({c.iso})
-                </option>
-              ))}
-            </Select>
+            <ReactSelect
+              options={countryOptions}
+              value={selectedCountryOption}
+              onChange={(opt) => setCountryId(opt?.value || '')}
+              placeholder="Search country..."
+              isClearable
+              styles={{
+                control: (base) => ({ ...base, minHeight: 38, borderColor: '#ddd', '&:hover': { borderColor: theme.colors.primary } }),
+                option: (base, state) => ({ ...base, fontSize: 13, background: state.isSelected ? theme.colors.primary : state.isFocused ? '#fff3e0' : 'white', color: state.isSelected ? 'white' : '#333' }),
+                singleValue: (base) => ({ ...base, fontSize: 13 }),
+                input: (base) => ({ ...base, fontSize: 13 }),
+              }}
+            />
           </FormGroup>
           <FormGroup>
             <Label>Accounting Period</Label>
@@ -302,12 +341,6 @@ export default function StatementPage() {
                 <option key={p.value} value={p.value}>{p.label}</option>
               ))}
             </Select>
-          </FormGroup>
-          <FormGroup>
-            <Label>&nbsp;</Label>
-            <Button onClick={loadStatement} disabled={loading}>
-              {loading ? 'Loading...' : 'Load Statement'}
-            </Button>
           </FormGroup>
         </FormRow>
       </Card>
@@ -363,6 +396,13 @@ export default function StatementPage() {
                     </td>
                   </tr>
                 ))}
+                <tr>
+                  <td colSpan={5} style={{ padding: '4px 6px' }}>
+                    <Button onClick={addClearingLine} style={{ padding: '3px 12px', fontSize: 11, background: '#888' }}>
+                      + Add row
+                    </Button>
+                  </td>
+                </tr>
                 <SubtotalRow>
                   <td></td>
                   <td colSpan={3}><strong>SUBTOTAL</strong></td>
@@ -414,6 +454,13 @@ export default function StatementPage() {
                     </td>
                   </tr>
                 ))}
+                <tr>
+                  <td colSpan={6} style={{ padding: '4px 6px' }}>
+                    <Button onClick={addBillingLine} style={{ padding: '3px 12px', fontSize: 11, background: '#888' }}>
+                      + Add row
+                    </Button>
+                  </td>
+                </tr>
                 <SubtotalRow>
                   <td></td>
                   <td colSpan={4}><strong>SUBTOTAL</strong></td>

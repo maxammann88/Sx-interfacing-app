@@ -17,7 +17,7 @@ function getDefaultYear(): string {
 function generateYearOptions(): string[] {
   const now = new Date();
   const years: string[] = [];
-  for (let y = 2026; y <= now.getFullYear() + 1; y++) {
+  for (let y = 2025; y <= now.getFullYear() + 1; y++) {
     years.push(String(y));
   }
   return years;

@@ -134,3 +134,15 @@ model CountryPlanAssignment {
   @@index([countryId])
   @@map("country_plan_assignments")
 }
+
+model CorrectedStatement {
+  id        Int      @id @default(autoincrement())
+  countryId Int
+  period    String
+  data      Json
+  createdAt DateTime @default(now())
+
+  @@index([countryId, period])
+  @@index([period])
+  @@map("corrected_statements")
+}

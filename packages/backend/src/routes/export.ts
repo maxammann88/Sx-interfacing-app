@@ -81,6 +81,56 @@ router.get('/bulk/pdf', async (req: Request, res: Response, next: NextFunction) 
   }
 });
 
+router.post('/corrections', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { countryId, period, data } = req.body;
+    if (!countryId || !period || !data) {
+      return res.status(400).json({ success: false, error: 'countryId, period, and data are required' });
+    }
+    const result = await prisma.correctedStatement.create({
+      data: { countryId: Number(countryId), period, data },
+    });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/corrections', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const period = req.query.period as string;
+    if (!period) {
+      return res.status(400).json({ success: false, error: 'period is required' });
+    }
+    const corrections = await prisma.correctedStatement.findMany({
+      where: { period },
+      orderBy: { createdAt: 'asc' },
+    });
+    const map: Record<number, { id: number; data: any; createdAt: string }[]> = {};
+    for (const c of corrections) {
+      if (!map[c.countryId]) map[c.countryId] = [];
+      map[c.countryId].push({ id: c.id, data: c.data, createdAt: c.createdAt.toISOString() });
+    }
+    res.json({ success: true, data: map });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/corrections/:countryId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const countryId = parseInt(req.params.countryId, 10);
+    const period = req.query.period as string;
+    if (!period) {
+      return res.status(400).json({ success: false, error: 'period is required' });
+    }
+    await prisma.correctedStatement.deleteMany({ where: { countryId, period } });
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/:countryId/preview', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const countryId = parseInt(req.params.countryId as string, 10);
