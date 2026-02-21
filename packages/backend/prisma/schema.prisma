@@ -149,6 +149,8 @@ model CorrectedStatement {
 
 model FeedbackItem {
   id          Int              @id @default(autoincrement())
+  app         String           @default("Interfacing")
+  author      String?
   type        String
   title       String
   description String?
@@ -159,6 +161,7 @@ model FeedbackItem {
 
   @@index([status])
   @@index([type])
+  @@index([app])
   @@map("feedback_items")
 }
 

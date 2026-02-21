@@ -26,6 +26,7 @@ const HeaderRight = styled.div`
   font-size: 13px;
   color: ${theme.colors.primary};
   font-weight: 600;
+  gap: 16px;
 `;
 
 const Logo = styled(Link)`
@@ -94,7 +95,12 @@ export default function Layout() {
             </NavLink>
           ))}
         </Nav>
-        <HeaderRight>You rock today!</HeaderRight>
+        <HeaderRight>
+          <NavLink to="/feedback" $active={location.pathname === '/feedback'} style={{ fontSize: 12 }}>
+            App Requests &amp; Bugs
+          </NavLink>
+          <span>You rock today!</span>
+        </HeaderRight>
       </Header>
       <Main>
         <Outlet />

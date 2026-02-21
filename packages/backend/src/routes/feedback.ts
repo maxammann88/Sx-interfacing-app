@@ -16,12 +16,12 @@ router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
 
 router.post('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { type, title, description } = req.body;
+    const { app, author, type, title, description } = req.body;
     if (!type || !title) {
       return res.status(400).json({ error: 'type and title are required' });
     }
     const item = await prisma.feedbackItem.create({
-      data: { type, title, description: description || null },
+      data: { app: app || 'Interfacing', author: author || null, type, title, description: description || null },
       include: { comments: true },
     });
     res.status(201).json(item);

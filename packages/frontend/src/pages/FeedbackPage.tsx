@@ -13,6 +13,8 @@ interface FeedbackComment {
 
 interface FeedbackItem {
   id: number;
+  app: string;
+  author: string | null;
   type: string;
   title: string;
   description: string | null;
@@ -21,6 +23,8 @@ interface FeedbackItem {
   updatedAt: string;
   comments: FeedbackComment[];
 }
+
+const APP_OPTIONS = ['Interfacing', 'FSM', 'New App'] as const;
 
 const Page = styled.div`
   min-height: 100vh;
@@ -269,6 +273,17 @@ const CommentInput = styled.input`
   &:focus { outline: none; border-color: ${theme.colors.primary}; }
 `;
 
+const AppBadge = styled.span`
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: #e0e0e0;
+  color: #333;
+`;
+
 const ActionsRow = styled.div`
   display: flex;
   gap: 6px;
@@ -285,7 +300,10 @@ export default function FeedbackPage() {
   const [items, setItems] = useState<FeedbackItem[]>([]);
   const [filter, setFilter] = useState<'all' | 'open' | 'in_progress' | 'done'>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'feature' | 'bug'>('all');
+  const [appFilter, setAppFilter] = useState<string>('all');
 
+  const [newApp, setNewApp] = useState('Interfacing');
+  const [newAuthor, setNewAuthor] = useState('');
   const [newType, setNewType] = useState('feature');
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
@@ -307,7 +325,7 @@ export default function FeedbackPage() {
     if (!newTitle.trim()) return;
     setSaving(true);
     try {
-      await api.post('/feedback', { type: newType, title: newTitle.trim(), description: newDesc.trim() || null });
+      await api.post('/feedback', { app: newApp, author: newAuthor.trim() || null, type: newType, title: newTitle.trim(), description: newDesc.trim() || null });
       setNewTitle('');
       setNewDesc('');
       await loadItems();
@@ -345,6 +363,7 @@ export default function FeedbackPage() {
   const filtered = items.filter(i => {
     if (filter !== 'all' && i.status !== filter) return false;
     if (typeFilter !== 'all' && i.type !== typeFilter) return false;
+    if (appFilter !== 'all' && i.app !== appFilter) return false;
     return true;
   });
 
@@ -368,6 +387,21 @@ export default function FeedbackPage() {
         <NewItemCard>
           <Label style={{ marginBottom: 8, display: 'block' }}>New Request</Label>
           <FormRow>
+            <FormGroup>
+              <Label>App</Label>
+              <Select value={newApp} onChange={e => setNewApp(e.target.value)}>
+                {APP_OPTIONS.map(a => <option key={a} value={a}>{a}</option>)}
+              </Select>
+            </FormGroup>
+            <FormGroup>
+              <Label>Name</Label>
+              <Input
+                value={newAuthor}
+                onChange={e => setNewAuthor(e.target.value)}
+                placeholder="Your name..."
+                style={{ minWidth: 140 }}
+              />
+            </FormGroup>
             <FormGroup>
               <Label>Type</Label>
               <Select value={newType} onChange={e => setNewType(e.target.value)}>
@@ -409,6 +443,11 @@ export default function FeedbackPage() {
           <FilterChip $active={typeFilter === 'all'} onClick={() => setTypeFilter('all')}>All Types</FilterChip>
           <FilterChip $active={typeFilter === 'feature'} onClick={() => setTypeFilter('feature')}>Features</FilterChip>
           <FilterChip $active={typeFilter === 'bug'} onClick={() => setTypeFilter('bug')}>Bugs</FilterChip>
+          <span style={{ borderLeft: `1px solid ${theme.colors.border}`, margin: '0 4px' }} />
+          <FilterChip $active={appFilter === 'all'} onClick={() => setAppFilter('all')}>All Apps</FilterChip>
+          {APP_OPTIONS.map(a => (
+            <FilterChip key={a} $active={appFilter === a} onClick={() => setAppFilter(a)}>{a}</FilterChip>
+          ))}
         </Filters>
 
         {filtered.length === 0 && (
@@ -420,6 +459,7 @@ export default function FeedbackPage() {
         {filtered.map(item => (
           <ItemCard key={item.id} $status={item.status}>
             <ItemHeader>
+              <AppBadge>{item.app || 'Interfacing'}</AppBadge>
               <TypeBadge $type={item.type}>{item.type === 'feature' ? 'Feature' : 'Bug'}</TypeBadge>
               <ItemTitle $done={item.status === 'done'}>{item.title}</ItemTitle>
               <StatusBadge $status={item.status}>
@@ -428,7 +468,7 @@ export default function FeedbackPage() {
             </ItemHeader>
 
             {item.description && <ItemDesc>{item.description}</ItemDesc>}
-            <ItemMeta>Created: {formatDate(item.createdAt)}</ItemMeta>
+            <ItemMeta>{item.author ? `By ${item.author} \u00b7 ` : ''}Created: {formatDate(item.createdAt)}</ItemMeta>
 
             <ActionsRow>
               {item.status === 'open' && (
