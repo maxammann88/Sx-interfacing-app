@@ -9,23 +9,38 @@ import {
 } from '../components/ui';
 
 export default function StatementPage() {
+  const DEFAULT_COUNTRY_ID = '335';
+  const DEFAULT_PERIOD = '202601';
+
   const [countries, setCountries] = useState<Country[]>([]);
-  const [countryId, setCountryId] = useState('');
-  const [period, setPeriod] = useState('');
+  const [countryId, setCountryId] = useState(DEFAULT_COUNTRY_ID);
+  const [period, setPeriod] = useState(DEFAULT_PERIOD);
   const [releaseDate, setReleaseDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentTermDays] = useState(30);
   const [statusFilter, setStatusFilter] = useState('aktiv');
   const [statement, setStatement] = useState<StatementData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [autoLoaded, setAutoLoaded] = useState(false);
 
   const periods = generatePeriodOptions();
 
   useEffect(() => {
     api.get('/countries', { params: { status: statusFilter !== 'alle' ? statusFilter : undefined } })
-      .then((res) => setCountries(res.data.data))
+      .then((res) => {
+        setCountries(res.data.data);
+        if (!autoLoaded && countryId && period) {
+          setAutoLoaded(true);
+        }
+      })
       .catch(() => {});
   }, [statusFilter]);
+
+  useEffect(() => {
+    if (autoLoaded && countryId && period && !statement && !loading) {
+      loadStatement();
+    }
+  }, [autoLoaded]);
 
   const loadStatement = async () => {
     if (!countryId || !period) {
