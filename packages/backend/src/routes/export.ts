@@ -4,6 +4,7 @@ import prisma from '../prismaClient';
 import { generateStatement } from '../services/statementService';
 import { generateStatementHtml, generatePdf } from '../services/pdfService';
 import { generateStatementXlsx } from '../services/xlsxService';
+import { generateRawDataXlsx } from '../services/rawExportService';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -119,7 +120,7 @@ router.get('/corrections', async (req: Request, res: Response, next: NextFunctio
 
 router.delete('/corrections/:countryId', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const countryId = parseInt(req.params.countryId, 10);
+    const countryId = parseInt(req.params.countryId as string, 10);
     const period = req.query.period as string;
     if (!period) {
       return res.status(400).json({ success: false, error: 'period is required' });
@@ -215,6 +216,32 @@ router.get('/bulk/xlsx', async (req: Request, res: Response, next: NextFunction)
     console.log(`[Bulk XLSX] Fertig: ${countries.length} Länder verarbeitet`);
 
     await archive.finalize();
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/bulk/raw-data', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const period = req.query.period as string;
+    const releaseDate = (req.query.releaseDate as string) || new Date().toISOString().split('T')[0];
+    const paymentTermDays = parseInt((req.query.paymentTermDays as string) || '30', 10);
+
+    if (!period) {
+      return res.status(400).json({ success: false, error: 'period is required' });
+    }
+
+    console.log(`[Raw Data Export] Generating for period ${period}...`);
+    const xlsxBuffer = await generateRawDataXlsx(period, releaseDate, paymentTermDays);
+
+    const year = period.substring(0, 4);
+    const month = parseInt(period.substring(4, 6), 10);
+    const filename = `RawData_${MONTH_NAMES[month - 1]}_${year}.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(xlsxBuffer);
+    console.log(`[Raw Data Export] Done.`);
   } catch (err) {
     next(err);
   }

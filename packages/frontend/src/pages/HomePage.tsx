@@ -40,32 +40,32 @@ const CardLink = styled(Link)`
 
 const pages = [
   {
-    path: '/import',
+    path: '/interfacing/import',
     title: 'Monthly Data Import',
     desc: 'Upload SAP CSV files and import them into the database.',
   },
   {
-    path: '/stammdaten/upload',
-    title: 'Master Data Upload',
-    desc: 'Upload country list and master data CSV files.',
-  },
-  {
-    path: '/stammdaten/view',
+    path: '/interfacing/stammdaten/view',
     title: 'Master Data Overview',
     desc: 'View, filter and search all countries with master data.',
   },
   {
-    path: '/statement',
+    path: '/interfacing/statement',
     title: 'Interfacing Statement',
     desc: 'Generate and view monthly interfacing statements per country.',
   },
   {
-    path: '/uploads',
-    title: 'Upload History',
-    desc: 'View and manage all previous uploads.',
+    path: '/interfacing/overview',
+    title: 'Statement Overview',
+    desc: 'Overview of all country statements with deviation analysis.',
   },
   {
-    path: '/export',
+    path: '/interfacing/planning',
+    title: 'Interfacing Planning',
+    desc: 'Calendar, creator and reviewer assignments per country.',
+  },
+  {
+    path: '/interfacing/export',
     title: 'PDF Export',
     desc: 'Export interfacing statements as A4 PDF documents.',
   },

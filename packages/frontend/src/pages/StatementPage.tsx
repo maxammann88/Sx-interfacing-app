@@ -32,6 +32,8 @@ const EditInput = styled.input`
 const AmountInput = styled(EditInput)`
   text-align: right;
   width: 120px;
+  margin-left: auto;
+  display: block;
 `;
 
 const DeleteBtn = styled.button`

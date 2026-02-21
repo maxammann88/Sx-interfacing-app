@@ -19,6 +19,15 @@ const Header = styled.header`
   gap: 32px;
 `;
 
+const HeaderRight = styled.div`
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  color: ${theme.colors.primary};
+  font-weight: 600;
+`;
+
 const Logo = styled(Link)`
   display: flex;
   align-items: center;
@@ -58,12 +67,12 @@ const Main = styled.main`
 `;
 
 const navItems = [
-  { path: '/import', label: 'Data Import' },
-  { path: '/stammdaten/view', label: 'Master Data' },
-  { path: '/statement', label: 'Statement' },
-  { path: '/overview', label: 'Statement Overview' },
-  { path: '/planning', label: 'Interfacing Planning' },
-  { path: '/export', label: 'PDF Export' },
+  { path: '/interfacing/import', label: 'Data Import' },
+  { path: '/interfacing/stammdaten/view', label: 'Master Data' },
+  { path: '/interfacing/statement', label: 'Statement' },
+  { path: '/interfacing/overview', label: 'Statement Overview' },
+  { path: '/interfacing/planning', label: 'Interfacing Planning' },
+  { path: '/interfacing/export', label: 'PDF Export' },
 ];
 
 export default function Layout() {
@@ -72,8 +81,9 @@ export default function Layout() {
   return (
     <Wrapper>
       <Header>
-        <Logo to="/"><img src="/sixt-logo.png" alt="SIXT" /></Logo>
+        <Logo to="/interfacing"><img src="/sixt-logo.png" alt="SIXT" /></Logo>
         <Nav>
+          <NavLink to="/" $active={false} style={{ fontSize: 15 }} title="Back to Portal">&larr;</NavLink>
           {navItems.map((item) => (
             <NavLink
               key={item.path}
@@ -84,6 +94,7 @@ export default function Layout() {
             </NavLink>
           ))}
         </Nav>
+        <HeaderRight>You rock today!</HeaderRight>
       </Header>
       <Main>
         <Outlet />

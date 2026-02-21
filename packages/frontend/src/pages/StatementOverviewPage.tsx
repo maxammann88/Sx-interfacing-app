@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import styled from 'styled-components';
 import api from '../utils/api';
 import { formatEur, generatePeriodOptions, getDefaultPeriod, formatPeriodLabel } from '../utils/format';
@@ -231,7 +231,32 @@ export default function StatementOverviewPage() {
 
   useEffect(() => {
     if (period) loadOverview();
-  }, []);
+  }, [period, statusFilter]);
+
+  const navigatePeriod = useCallback((direction: -1 | 1) => {
+    const idx = periods.findIndex(p => p.value === period);
+    if (idx === -1) return;
+    const newIdx = idx + direction;
+    if (newIdx >= 0 && newIdx < periods.length) {
+      setPeriod(periods[newIdx].value);
+    }
+  }, [period, periods]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        navigatePeriod(1);
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        navigatePeriod(-1);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [navigatePeriod]);
 
   const handleDownloadPdf = async (countryId: number, fir: number, iso: string, dlPeriod: string) => {
     const key = `${countryId}-${dlPeriod}`;
@@ -352,11 +377,10 @@ export default function StatementOverviewPage() {
               ))}
             </Select>
           </FormGroup>
-          <FormGroup>
+          <FormGroup style={{ display: 'flex', alignItems: 'flex-end', gap: 4 }}>
             <Label>&nbsp;</Label>
-            <Button onClick={loadOverview} disabled={loading}>
-              {loading ? 'Loading...' : 'Load Overview'}
-            </Button>
+            <Button onClick={() => navigatePeriod(-1)} disabled={loading} style={{ padding: '8px 12px', fontSize: 16 }} title="Previous period (Arrow Left)">&#8592;</Button>
+            <Button onClick={() => navigatePeriod(1)} disabled={loading} style={{ padding: '8px 12px', fontSize: 16 }} title="Next period (Arrow Right)">&#8594;</Button>
           </FormGroup>
         </FormRow>
       </Card>
@@ -492,7 +516,7 @@ export default function StatementOverviewPage() {
       {!loading && rows.length === 0 && period && (
         <Card>
           <p style={{ textAlign: 'center', color: '#999' }}>
-            No data found. Click "Load Overview" to fetch data.
+            No data found. Select a period to load data.
           </p>
         </Card>
       )}

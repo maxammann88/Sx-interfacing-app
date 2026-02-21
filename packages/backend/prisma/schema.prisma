@@ -146,3 +146,30 @@ model CorrectedStatement {
   @@index([period])
   @@map("corrected_statements")
 }
+
+model FeedbackItem {
+  id          Int              @id @default(autoincrement())
+  type        String
+  title       String
+  description String?
+  status      String           @default("open")
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  comments    FeedbackComment[]
+
+  @@index([status])
+  @@index([type])
+  @@map("feedback_items")
+}
+
+model FeedbackComment {
+  id         Int          @id @default(autoincrement())
+  feedbackId Int
+  feedback   FeedbackItem @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  text       String
+  author     String       @default("User")
+  createdAt  DateTime     @default(now())
+
+  @@index([feedbackId])
+  @@map("feedback_comments")
+}

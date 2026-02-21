@@ -4,6 +4,8 @@ import { ThemeProvider } from 'styled-components';
 import { theme } from './styles/theme';
 import GlobalStyles from './styles/GlobalStyles';
 import Layout from './components/Layout';
+import PortalHomePage from './pages/PortalHomePage';
+import FeedbackPage from './pages/FeedbackPage';
 import HomePage from './pages/HomePage';
 import ImportPage from './pages/ImportPage';
 import StammdatenViewPage from './pages/StammdatenViewPage';
@@ -18,16 +20,20 @@ export default function App() {
       <GlobalStyles />
       <BrowserRouter>
         <Routes>
-          <Route element={<Layout />}>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/import" element={<ImportPage />} />
-            <Route path="/stammdaten/view" element={<StammdatenViewPage />} />
-            <Route path="/statement" element={<StatementPage />} />
-            <Route path="/overview" element={<StatementOverviewPage />} />
-            <Route path="/planning" element={<InterfacingPlanningPage />} />
-            <Route path="/export" element={<ExportPage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="/" element={<PortalHomePage />} />
+          <Route path="/feedback" element={<FeedbackPage />} />
+
+          <Route path="/interfacing" element={<Layout />}>
+            <Route index element={<HomePage />} />
+            <Route path="import" element={<ImportPage />} />
+            <Route path="stammdaten/view" element={<StammdatenViewPage />} />
+            <Route path="statement" element={<StatementPage />} />
+            <Route path="overview" element={<StatementOverviewPage />} />
+            <Route path="planning" element={<InterfacingPlanningPage />} />
+            <Route path="export" element={<ExportPage />} />
           </Route>
+
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </ThemeProvider>

@@ -120,6 +120,8 @@ export default function ExportPage() {
   const [corrections, setCorrections] = useState<Record<number, { id: number; data: any; createdAt: string }[]>>({});
   const [exportingCorrPdf, setExportingCorrPdf] = useState<string | null>(null);
   const [exportingCorrXlsx, setExportingCorrXlsx] = useState<string | null>(null);
+  const [rawDataExporting, setRawDataExporting] = useState(false);
+  const [rawDataProgress, setRawDataProgress] = useState(0);
 
   const periods = generatePeriodOptions();
 
@@ -289,6 +291,42 @@ export default function ExportPage() {
     }
   };
 
+  const handleRawDataExport = async () => {
+    if (!period) {
+      setError('Please select an accounting period first.');
+      return;
+    }
+    setRawDataExporting(true);
+    setRawDataProgress(10);
+    setError('');
+
+    try {
+      const progressTimer = setInterval(() => {
+        setRawDataProgress(prev => Math.min(prev + 2, 90));
+      }, 1000);
+
+      const res = await api.get('/export/bulk/raw-data', {
+        params: { period, releaseDate },
+        responseType: 'blob',
+        timeout: 600000,
+      });
+
+      clearInterval(progressTimer);
+      setRawDataProgress(100);
+
+      const disposition = res.headers['content-disposition'];
+      const filename = disposition
+        ? decodeURIComponent(disposition.split('filename=')[1]?.replace(/"/g, ''))
+        : `RawData_${period}.xlsx`;
+      downloadBlob(new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename);
+    } catch {
+      setError('Error during raw data export.');
+    } finally {
+      setRawDataExporting(false);
+      setRawDataProgress(0);
+    }
+  };
+
   const handlePreview = async (country: Country) => {
     if (!period) {
       setError('Please select an accounting period first.');
@@ -392,6 +430,16 @@ export default function ExportPage() {
               {bulkExportingXlsx ? 'Exporting all...' : 'Export all XLSX (ZIP)'}
             </BulkButton>
           </FormGroup>
+          <FormGroup>
+            <Label>&nbsp;</Label>
+            <BulkButton
+              onClick={handleRawDataExport}
+              disabled={rawDataExporting || !period}
+              style={{ background: '#1565c0' }}
+            >
+              {rawDataExporting ? 'Exporting...' : 'Export Raw Data (XLSX)'}
+            </BulkButton>
+          </FormGroup>
         </FormRow>
         {bulkExporting && (
           <>
@@ -407,6 +455,14 @@ export default function ExportPage() {
               Generating XLSX for {countries.length} countries... ({Math.round(bulkProgressXlsx)}%)
             </div>
             <ProgressBar $pct={bulkProgressXlsx} />
+          </>
+        )}
+        {rawDataExporting && (
+          <>
+            <div style={{ fontSize: 12, color: '#666', marginTop: 8 }}>
+              Generating raw data export... ({Math.round(rawDataProgress)}%)
+            </div>
+            <ProgressBar $pct={rawDataProgress} />
           </>
         )}
       </Card>
