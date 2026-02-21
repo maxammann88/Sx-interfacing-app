@@ -8,6 +8,7 @@ import HomePage from './pages/HomePage';
 import ImportPage from './pages/ImportPage';
 import StammdatenViewPage from './pages/StammdatenViewPage';
 import StatementPage from './pages/StatementPage';
+import InterfacingPlanningPage from './pages/InterfacingPlanningPage';
 import StatementOverviewPage from './pages/StatementOverviewPage';
 import ExportPage from './pages/ExportPage';
 
@@ -23,6 +24,7 @@ export default function App() {
             <Route path="/stammdaten/view" element={<StammdatenViewPage />} />
             <Route path="/statement" element={<StatementPage />} />
             <Route path="/overview" element={<StatementOverviewPage />} />
+            <Route path="/planning" element={<InterfacingPlanningPage />} />
             <Route path="/export" element={<ExportPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

@@ -110,3 +110,27 @@ model BillingRun {
 
   @@map("billing_runs")
 }
+
+model InterfacingPlan {
+  id               Int      @id @default(autoincrement())
+  period           String   @unique
+  releaseDate      String?
+  creator          String?
+  reviewer         String?
+  updatedAt        DateTime @default(now()) @updatedAt
+
+  @@map("interfacing_plans")
+}
+
+model CountryPlanAssignment {
+  id        Int    @id @default(autoincrement())
+  period    String
+  countryId Int
+  creator   String?
+  reviewer  String?
+
+  @@unique([period, countryId])
+  @@index([period])
+  @@index([countryId])
+  @@map("country_plan_assignments")
+}

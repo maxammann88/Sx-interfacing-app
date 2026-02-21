@@ -3,16 +3,17 @@ import archiver from 'archiver';
 import prisma from '../prismaClient';
 import { generateStatement } from '../services/statementService';
 import { generateStatementHtml, generatePdf } from '../services/pdfService';
+import { generateStatementXlsx } from '../services/xlsxService';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-function buildFilename(fir: number, iso: string, period: string): string {
+function buildFilename(fir: number, iso: string, period: string, ext: string = 'pdf'): string {
   const year = period.substring(0, 4);
   const month = parseInt(period.substring(4, 6), 10);
-  return `INT_${period}_${fir}_${iso}_Interfacing ${MONTH_NAMES[month - 1]} ${year}.pdf`;
+  return `INT_${period}_${fir}_${iso}_Interfacing ${MONTH_NAMES[month - 1]} ${year}.${ext}`;
 }
 
 const router = Router();
@@ -119,6 +120,101 @@ router.get('/:countryId/pdf', async (req: Request, res: Response, next: NextFunc
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(pdf);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/bulk/xlsx', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const period = req.query.period as string;
+    const releaseDate = (req.query.releaseDate as string) || new Date().toISOString().split('T')[0];
+    const paymentTermDays = parseInt((req.query.paymentTermDays as string) || '30', 10);
+
+    if (!period) {
+      return res.status(400).json({ success: false, error: 'Abrechnungsperiode (period) fehlt' });
+    }
+
+    const countries = await prisma.country.findMany({
+      where: { partnerStatus: { contains: 'aktiv', mode: 'insensitive' } },
+      orderBy: { fir: 'asc' },
+    });
+
+    const year = period.substring(0, 4);
+    const month = parseInt(period.substring(4, 6), 10);
+    const zipFilename = `Interfacing_${MONTH_NAMES[month - 1]}_${year}_XLSX.zip`;
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${zipFilename}"`);
+
+    const archive = archiver('zip', { zlib: { level: 5 } });
+    archive.pipe(res);
+
+    for (let i = 0; i < countries.length; i++) {
+      const country = countries[i];
+      try {
+        console.log(`[Bulk XLSX] ${i + 1}/${countries.length}: ${country.fir} ${country.name}`);
+        const statement = await generateStatement(country.id, period, releaseDate, paymentTermDays);
+        const xlsxBuffer = await generateStatementXlsx(statement);
+        const filename = buildFilename(country.fir, country.iso, period, 'xlsx');
+        archive.append(xlsxBuffer, { name: filename });
+      } catch (e) {
+        console.error(`[Bulk XLSX] Fehler bei ${country.fir} ${country.name}:`, e);
+      }
+    }
+    console.log(`[Bulk XLSX] Fertig: ${countries.length} Länder verarbeitet`);
+
+    await archive.finalize();
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/:countryId/xlsx', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const countryId = parseInt(req.params.countryId as string, 10);
+    const period = req.query.period as string;
+    const releaseDate = (req.query.releaseDate as string) || new Date().toISOString().split('T')[0];
+    const paymentTermDays = parseInt((req.query.paymentTermDays as string) || '30', 10);
+
+    if (!period) {
+      return res.status(400).json({ success: false, error: 'Abrechnungsperiode (period) fehlt' });
+    }
+
+    const statement = await generateStatement(countryId, period, releaseDate, paymentTermDays);
+    const xlsxBuffer = await generateStatementXlsx(statement);
+
+    const filename = buildFilename(statement.country.fir, statement.country.iso, period, 'xlsx');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(xlsxBuffer);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/render/pdf', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const data = req.body as import('@sixt/shared').StatementData;
+    const html = generateStatementHtml(data);
+    const pdf = await generatePdf(html);
+    const filename = buildFilename(data.country.fir, data.country.iso, data.accountingPeriod, 'pdf');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(pdf);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/render/xlsx', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const data = req.body as import('@sixt/shared').StatementData;
+    const xlsxBuffer = await generateStatementXlsx(data);
+    const filename = buildFilename(data.country.fir, data.country.iso, data.accountingPeriod, 'xlsx');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(xlsxBuffer);
   } catch (err) {
     next(err);
   }

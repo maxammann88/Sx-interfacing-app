@@ -9,14 +9,35 @@ import styled from 'styled-components';
 
 const ScrollWrapper = styled.div`
   overflow-x: auto;
+  overflow-y: auto;
   max-width: 100%;
+  max-height: 75vh;
+`;
+
+const HeaderRow1 = styled.tr`
+  th {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 5 !important;
+    padding: 6px 8px !important;
+    font-size: 11px !important;
+  }
+`;
+
+const HeaderRow2 = styled.tr`
+  th {
+    position: sticky !important;
+    top: 27px !important;
+    z-index: 4 !important;
+    padding: 6px 8px !important;
+    font-size: 11px !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+  }
 `;
 
 const SmallTable = styled(Table)`
   font-size: 11px;
   white-space: nowrap;
-
-  th { padding: 6px 8px; font-size: 11px; }
   td { padding: 4px 8px; }
 `;
 
@@ -81,7 +102,7 @@ export default function StammdatenViewPage() {
         setData(res.data.data);
         setFiltered(res.data.data);
       })
-      .catch((err) => setError(err.response?.data?.error || 'Fehler beim Laden'))
+      .catch((err) => setError(err.response?.data?.error || 'Error loading data'))
       .finally(() => setLoading(false));
   }, []);
 
@@ -113,22 +134,22 @@ export default function StammdatenViewPage() {
 
   return (
     <div>
-      <PageTitle>Stammdaten Übersicht ({filtered.length} Einträge)</PageTitle>
+      <PageTitle>Master Data Overview ({filtered.length} entries)</PageTitle>
 
       <Card>
         <FormRow>
           <FormGroup>
             <Label>Status</Label>
             <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-              <option value="alle">Alle</option>
-              <option value="aktiv">Aktiv</option>
-              <option value="inaktiv">Inaktiv</option>
+              <option value="alle">All</option>
+              <option value="aktiv">Active</option>
+              <option value="inaktiv">Inactive</option>
             </Select>
           </FormGroup>
           <FormGroup>
-            <Label>Suche</Label>
+            <Label>Search</Label>
             <Input
-              placeholder="Land, ISO, FIR, Debitor, Firma, Ort..."
+              placeholder="Country, ISO, FIR, Debitor, Company, City..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               style={{ minWidth: 300 }}
@@ -141,47 +162,45 @@ export default function StammdatenViewPage() {
         <ScrollWrapper>
           <SmallTable>
             <thead>
-              <tr>
-                <SectionHeader colSpan={14}>LÄNDERLISTE</SectionHeader>
-                <SectionHeader colSpan={9} style={{ background: theme.colors.secondary }}>STAMMDATEN</SectionHeader>
-              </tr>
-              <tr>
-                {/* Länderliste-Spalten */}
+              <HeaderRow1>
+                <SectionHeader colSpan={14}>COUNTRY LIST</SectionHeader>
+                <SectionHeader colSpan={9} style={{ background: theme.colors.secondary }}>MASTER DATA</SectionHeader>
+              </HeaderRow1>
+              <HeaderRow2>
                 <th>FIR</th>
                 <th>Debitor (1)</th>
                 <th>ISO</th>
                 <th>KST</th>
-                <th>Land</th>
-                <th>Kommentar</th>
+                <th>Country</th>
+                <th>Comment</th>
                 <th>VERRKTO</th>
                 <th>Kreditor</th>
                 <th>Debitor (760)</th>
                 <th>Kreditor (760)</th>
                 <th>Partner Status</th>
                 <th>Final Interfacing</th>
-                <th>Vertragsende</th>
+                <th>Contract End</th>
                 <th>Debitor (10)</th>
-                {/* Stammdaten-Spalten */}
                 <th style={{ background: '#444', color: 'white' }}>Konto (ktod)</th>
                 <th style={{ background: '#444', color: 'white' }}>Name 1</th>
                 <th style={{ background: '#444', color: 'white' }}>Name 2</th>
                 <th style={{ background: '#444', color: 'white' }}>Name 3</th>
-                <th style={{ background: '#444', color: 'white' }}>Straße</th>
-                <th style={{ background: '#444', color: 'white' }}>Ort</th>
+                <th style={{ background: '#444', color: 'white' }}>Street</th>
+                <th style={{ background: '#444', color: 'white' }}>City</th>
                 <th style={{ background: '#444', color: 'white' }}>PLZ</th>
-                <th style={{ background: '#444', color: 'white' }}>Land</th>
-                <th style={{ background: '#444', color: 'white' }}>Zahlungsziel</th>
-              </tr>
+                <th style={{ background: '#444', color: 'white' }}>Country</th>
+                <th style={{ background: '#444', color: 'white' }}>Payment Term</th>
+              </HeaderRow2>
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan={23} style={{ textAlign: 'center', color: '#999', padding: 20 }}>Keine Daten vorhanden</td></tr>
+                <tr><td colSpan={23} style={{ textAlign: 'center', color: '#999', padding: 20 }}>No data available</td></tr>
               )}
               {filtered.map((c) => {
                 const md = c.masterData;
                 return (
                   <tr key={c.id}>
-                    {/* Länderliste */}
+                    {/* Country List */}
                     <td><strong>{c.fir}</strong></td>
                     <td>{c.debitor1}</td>
                     <td>{c.iso}</td>
@@ -205,7 +224,7 @@ export default function StammdatenViewPage() {
                     <td>{c.finalInterfacing || ''}</td>
                     <td>{formatDate(c.vertragsende)}</td>
                     <td>{c.debitor10 || ''}</td>
-                    {/* Stammdaten */}
+                    {/* Master Data */}
                     <td style={{ background: md ? '#f8f8f0' : '#fff5f5' }}>{md?.ktod || '-'}</td>
                     <td style={{ background: md ? '#f8f8f0' : '#fff5f5' }}><strong>{md?.nam1 || ''}</strong></td>
                     <td style={{ background: md ? '#f8f8f0' : '#fff5f5' }}>{md?.nam2 || ''}</td>
@@ -214,7 +233,7 @@ export default function StammdatenViewPage() {
                     <td style={{ background: md ? '#f8f8f0' : '#fff5f5' }}>{md?.ort || ''}</td>
                     <td style={{ background: md ? '#f8f8f0' : '#fff5f5' }}>{md?.plz || ''}</td>
                     <td style={{ background: md ? '#f8f8f0' : '#fff5f5' }}>{md?.lanb || ''}</td>
-                    <td style={{ background: md ? '#f8f8f0' : '#fff5f5' }}>{md?.payt != null ? `${md.payt} Tage` : ''}</td>
+                    <td style={{ background: md ? '#f8f8f0' : '#fff5f5' }}>{md?.payt != null ? `${md.payt} days` : ''}</td>
                   </tr>
                 );
               })}

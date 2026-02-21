@@ -34,11 +34,11 @@ export default function StammdatenUploadPage() {
       const res = await api.post(endpoint, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      setMessage({ type: 'success', text: res.data.message || `${label} erfolgreich!` });
+      setMessage({ type: 'success', text: res.data.message || `${label} successful!` });
     } catch (err: any) {
       setMessage({
         type: 'error',
-        text: err.response?.data?.error || `Fehler beim ${label}.`,
+        text: err.response?.data?.error || `Error during ${label}.`,
       });
     } finally {
       setLoading(null);
@@ -47,15 +47,15 @@ export default function StammdatenUploadPage() {
 
   return (
     <div>
-      <PageTitle>Stammdaten Upload</PageTitle>
+      <PageTitle>Master Data Upload</PageTitle>
 
       {message && <Alert $type={message.type}>{message.text}</Alert>}
 
       <Card>
         <UploadSection>
-          <SectionLabel>Länderliste CSV</SectionLabel>
+          <SectionLabel>Country List CSV</SectionLabel>
           <FormGroup>
-            <Label>CSV-Datei mit Länderdaten (Semikolon-getrennt, überschreibt bestehende Daten)</Label>
+            <Label>CSV file with country data (semicolon-separated, overwrites existing data)</Label>
             <FileInput onClick={() => countryRef.current?.click()}>
               <input
                 ref={countryRef}
@@ -63,21 +63,21 @@ export default function StammdatenUploadPage() {
                 accept=".csv"
                 onChange={(e) => setCountryFile(e.target.files?.[0] || null)}
               />
-              <p>{countryFile ? countryFile.name : 'Länderliste CSV auswählen'}</p>
+              <p>{countryFile ? countryFile.name : 'Select Country List CSV'}</p>
             </FileInput>
           </FormGroup>
           <Button
-            onClick={() => countryFile && uploadFile('/uploads/countries', countryFile, 'Länderliste-Import')}
+            onClick={() => countryFile && uploadFile('/uploads/countries', countryFile, 'Country List Import')}
             disabled={!countryFile || loading !== null}
           >
-            {loading === 'Länderliste-Import' ? 'Importiere...' : 'Länderliste importieren'}
+            {loading === 'Country List Import' ? 'Importing...' : 'Import Country List'}
           </Button>
         </UploadSection>
 
         <UploadSection>
-          <SectionLabel>Stammdaten CSV</SectionLabel>
+          <SectionLabel>Master Data CSV</SectionLabel>
           <FormGroup>
-            <Label>CSV-Datei mit Stammdaten (Semikolon-getrennt, überschreibt bestehende Daten)</Label>
+            <Label>CSV file with master data (semicolon-separated, overwrites existing data)</Label>
             <FileInput onClick={() => masterRef.current?.click()}>
               <input
                 ref={masterRef}
@@ -85,14 +85,14 @@ export default function StammdatenUploadPage() {
                 accept=".csv"
                 onChange={(e) => setMasterFile(e.target.files?.[0] || null)}
               />
-              <p>{masterFile ? masterFile.name : 'Stammdaten CSV auswählen'}</p>
+              <p>{masterFile ? masterFile.name : 'Select Master Data CSV'}</p>
             </FileInput>
           </FormGroup>
           <Button
-            onClick={() => masterFile && uploadFile('/uploads/master-data', masterFile, 'Stammdaten-Import')}
+            onClick={() => masterFile && uploadFile('/uploads/master-data', masterFile, 'Master Data Import')}
             disabled={!masterFile || loading !== null}
           >
-            {loading === 'Stammdaten-Import' ? 'Importiere...' : 'Stammdaten importieren'}
+            {loading === 'Master Data Import' ? 'Importing...' : 'Import Master Data'}
           </Button>
         </UploadSection>
 

@@ -149,6 +149,15 @@ export interface OverviewRow {
   balanceOpenItems: number;
 }
 
+export interface InterfacingPlan {
+  id: number;
+  period: string;
+  releaseDate: string | null;
+  creator: string | null;
+  reviewer: string | null;
+  updatedAt: string;
+}
+
 export type UploadType = 'sap' | 'countries' | 'master-data';
 
 export interface ApiResponse<T> {

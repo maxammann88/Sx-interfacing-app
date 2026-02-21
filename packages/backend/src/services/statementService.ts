@@ -38,6 +38,16 @@ export async function generateStatement(
   const releaseDateObj = new Date(releaseDate);
   const dueDate = addDays(releaseDateObj, paymentTermDays);
 
+  const prevYear = parseInt(period.substring(0, 4), 10);
+  const prevMonth = parseInt(period.substring(4, 6), 10);
+  const pm = prevMonth === 1 ? 12 : prevMonth - 1;
+  const py = prevMonth === 1 ? prevYear - 1 : prevYear;
+  const prevPeriod = `${py}${String(pm).padStart(2, '0')}`;
+  const prevPlan = await prisma.interfacingPlan.findUnique({ where: { period: prevPeriod } });
+  const prevDueDate = prevPlan?.releaseDate
+    ? addDays(new Date(prevPlan.releaseDate), paymentTermDays)
+    : dueDate;
+
   const allSapData = await prisma.sapImport.findMany({
     where: { konto: debitorKonto },
     orderBy: { buchungsdatum: 'asc' },
@@ -55,15 +65,43 @@ export async function generateStatement(
     row => row.type === 'Clearing'
   );
   const cleanText = (t: string) => t.startsWith('*') ? t.substring(1).trim() : t;
+
+  const clearingDescriptionMap: Record<string, string> = {
+    'CC': 'Corporate Cards',
+    'PP': 'Prepaid',
+    'VO': 'Voucher',
+    'PR': 'Franchise Agent Commission',
+  };
+
+  function clearingDescription(text: string): string {
+    const cleaned = cleanText(text);
+    const upper = cleaned.toUpperCase();
+    for (const [prefix, label] of Object.entries(clearingDescriptionMap)) {
+      if (upper.startsWith(prefix + ' CLEARING') || upper.startsWith(prefix + ' ')) {
+        return label;
+      }
+    }
+    return cleaned;
+  }
+
+  const knownClearingOrder = ['Prepaid', 'Corporate Cards', 'Voucher', 'Franchise Agent Commission'];
+
   const clearingLines: StatementLine[] = clearingRows
     .map(row => ({
-      type: row.type || '',
+      type: 'Clearing',
       reference: row.referenz || '',
       documentType: row.belegart || '',
-      description: cleanText(row.text || ''),
+      description: clearingDescription(row.text || ''),
       amount: inv(row.betragHauswaehrung),
     }))
-    .sort((a, b) => b.amount - a.amount);
+    .sort((a, b) => {
+      const ai = knownClearingOrder.indexOf(a.description);
+      const bi = knownClearingOrder.indexOf(b.description);
+      if (ai !== -1 && bi !== -1) return ai - bi;
+      if (ai !== -1) return -1;
+      if (bi !== -1) return 1;
+      return b.amount - a.amount;
+    });
   const clearingSubtotal = clearingLines.reduce((sum, r) => sum + r.amount, 0);
 
   // --- BILLING STATEMENT ---
@@ -74,11 +112,20 @@ export async function generateStatement(
     .map(row => ({
       type: row.type || '',
       reference: `${row.referenzschluessel3 || ''}${row.referenz ? ' ' + row.referenz : ''}`.trim(),
+      documentType: row.belegart || '',
       date: row.belegdatum ? formatDate(row.belegdatum) : '',
       description: cleanText(row.text || ''),
       amount: inv(row.betragHauswaehrung),
     }))
-    .sort((a, b) => b.amount - a.amount);
+    .sort((a, b) => {
+      const knownBilling = ['Operational costs billing', 'Contractual costs billing'];
+      const ai = knownBilling.findIndex(k => a.description.toLowerCase().includes(k.toLowerCase()));
+      const bi = knownBilling.findIndex(k => b.description.toLowerCase().includes(k.toLowerCase()));
+      if (ai !== -1 && bi !== -1) return ai - bi;
+      if (ai !== -1) return -1;
+      if (bi !== -1) return 1;
+      return b.amount - a.amount;
+    });
   const billingSubtotal = billingLines.reduce((sum, r) => sum + r.amount, 0);
 
   const totalInterfacingDue = clearingSubtotal + billingSubtotal;
@@ -132,7 +179,7 @@ export async function generateStatement(
   const accountStatement: AccountStatement = {
     overdueBalance,
     dueBalance,
-    dueUntilDate: formatDate(dueDate),
+    dueUntilDate: formatDate(prevDueDate),
     paymentBySixt,
     paymentByPartner,
     paymentBySixtItems,

@@ -24,14 +24,16 @@ const UploadRow = styled.div`
 
 const typeLabels: Record<string, string> = {
   sap: 'SAP Import',
-  countries: 'Länderliste',
-  'master-data': 'Stammdaten',
+  countries: 'Country List',
+  'master-data': 'Master Data',
+  deposit: 'Deposit',
 };
 
 const typeColors: Record<string, string> = {
   sap: theme.colors.primary,
   countries: theme.colors.info,
   'master-data': theme.colors.success,
+  deposit: '#6f42c1',
 };
 
 export default function ImportPage() {
@@ -39,6 +41,7 @@ export default function ImportPage() {
   const [period, setPeriod] = useState('');
   const [countryFile, setCountryFile] = useState<File | null>(null);
   const [masterFile, setMasterFile] = useState<File | null>(null);
+  const [depositFile, setDepositFile] = useState<File | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [uploads, setUploads] = useState<Upload[]>([]);
@@ -48,6 +51,7 @@ export default function ImportPage() {
   const sapRef = useRef<HTMLInputElement>(null);
   const countryRef = useRef<HTMLInputElement>(null);
   const masterRef = useRef<HTMLInputElement>(null);
+  const depositRef = useRef<HTMLInputElement>(null);
 
   const periods = generatePeriodOptions();
 
@@ -62,13 +66,13 @@ export default function ImportPage() {
   useEffect(() => { loadUploads(); }, [loadUploads]);
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Upload wirklich löschen? Alle zugehörigen Daten werden entfernt.')) return;
+    if (!confirm('Delete this upload? All associated data will be removed.')) return;
     setDeleting(id);
     try {
       await api.delete(`/uploads/${id}`);
       loadUploads();
     } catch (err: any) {
-      setMessage({ type: 'error', text: err.response?.data?.error || 'Fehler beim Löschen' });
+      setMessage({ type: 'error', text: err.response?.data?.error || 'Error deleting upload' });
     } finally {
       setDeleting(null);
     }
@@ -76,7 +80,7 @@ export default function ImportPage() {
 
   const handleSapUpload = async () => {
     if (!sapFile || !period) {
-      setMessage({ type: 'error', text: 'Bitte SAP-Datei und Abrechnungsmonat auswählen.' });
+      setMessage({ type: 'error', text: 'Please select a SAP file and accounting period.' });
       return;
     }
     setLoading('sap');
@@ -88,12 +92,12 @@ export default function ImportPage() {
       const res = await api.post('/uploads/sap', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      setMessage({ type: 'success', text: res.data.message || 'SAP Import erfolgreich!' });
+      setMessage({ type: 'success', text: res.data.message || 'SAP import successful!' });
       setSapFile(null);
       if (sapRef.current) sapRef.current.value = '';
       loadUploads();
     } catch (err: any) {
-      setMessage({ type: 'error', text: err.response?.data?.error || 'Fehler beim SAP Import.' });
+      setMessage({ type: 'error', text: err.response?.data?.error || 'Error during SAP import.' });
     } finally {
       setLoading(null);
     }
@@ -108,10 +112,10 @@ export default function ImportPage() {
       const res = await api.post(endpoint, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      setMessage({ type: 'success', text: res.data.message || `${label} erfolgreich!` });
+      setMessage({ type: 'success', text: res.data.message || `${label} successful!` });
       loadUploads();
     } catch (err: any) {
-      setMessage({ type: 'error', text: err.response?.data?.error || `Fehler beim ${label}.` });
+      setMessage({ type: 'error', text: err.response?.data?.error || `Error during ${label}.` });
     } finally {
       setLoading(null);
     }
@@ -119,25 +123,25 @@ export default function ImportPage() {
 
   return (
     <div>
-      <PageTitle>Datenimport</PageTitle>
+      <PageTitle>Data Import</PageTitle>
 
       {message && <Alert $type={message.type}>{message.text}</Alert>}
 
       {/* SAP Import */}
-      <SectionTitle>SAP Daten (monatlich)</SectionTitle>
+      <SectionTitle>SAP Data (Monthly)</SectionTitle>
       <UploadCard>
         <UploadRow>
           <FormGroup style={{ marginBottom: 0 }}>
-            <Label>Abrechnungsmonat</Label>
+            <Label>Accounting Period</Label>
             <Select value={period} onChange={(e) => setPeriod(e.target.value)}>
-              <option value="">-- Monat wählen --</option>
+              <option value="">-- Select period --</option>
               {periods.map((p) => (
                 <option key={p.value} value={p.value}>{p.label}</option>
               ))}
             </Select>
           </FormGroup>
           <FormGroup style={{ flex: 1, marginBottom: 0 }}>
-            <Label>SAP Export CSV (Semikolon-getrennt)</Label>
+            <Label>SAP Export CSV (semicolon-separated)</Label>
             <FileInput onClick={() => sapRef.current?.click()} style={{ padding: 16 }}>
               <input
                 ref={sapRef}
@@ -145,21 +149,21 @@ export default function ImportPage() {
                 accept=".csv"
                 onChange={(e) => setSapFile(e.target.files?.[0] || null)}
               />
-              <p style={{ margin: 0 }}>{sapFile ? sapFile.name : 'CSV auswählen'}</p>
+              <p style={{ margin: 0 }}>{sapFile ? sapFile.name : 'Select CSV'}</p>
             </FileInput>
           </FormGroup>
           <Button onClick={handleSapUpload} disabled={loading !== null || !sapFile || !period}>
-            {loading === 'sap' ? 'Importiere...' : 'SAP importieren'}
+            {loading === 'sap' ? 'Importing...' : 'Import SAP'}
           </Button>
         </UploadRow>
       </UploadCard>
 
-      {/* Länderliste */}
-      <SectionTitle style={{ marginTop: 28 }}>Länderliste</SectionTitle>
+      {/* Country List */}
+      <SectionTitle style={{ marginTop: 28 }}>Country List</SectionTitle>
       <UploadCard>
         <UploadRow>
           <FormGroup style={{ flex: 1, marginBottom: 0 }}>
-            <Label>Länderliste CSV (Semikolon-getrennt, überschreibt bestehende Daten)</Label>
+            <Label>Country List CSV (semicolon-separated, overwrites existing data)</Label>
             <FileInput onClick={() => countryRef.current?.click()} style={{ padding: 16 }}>
               <input
                 ref={countryRef}
@@ -167,24 +171,24 @@ export default function ImportPage() {
                 accept=".csv"
                 onChange={(e) => setCountryFile(e.target.files?.[0] || null)}
               />
-              <p style={{ margin: 0 }}>{countryFile ? countryFile.name : 'CSV auswählen'}</p>
+              <p style={{ margin: 0 }}>{countryFile ? countryFile.name : 'Select CSV'}</p>
             </FileInput>
           </FormGroup>
           <Button
-            onClick={() => countryFile && handleFileUpload('/uploads/countries', countryFile, 'Länderliste-Import')}
+            onClick={() => countryFile && handleFileUpload('/uploads/countries', countryFile, 'Country List Import')}
             disabled={loading !== null || !countryFile}
           >
-            {loading === 'Länderliste-Import' ? 'Importiere...' : 'Länderliste importieren'}
+            {loading === 'Country List Import' ? 'Importing...' : 'Import Country List'}
           </Button>
         </UploadRow>
       </UploadCard>
 
-      {/* Stammdaten */}
-      <SectionTitle style={{ marginTop: 28 }}>Stammdaten</SectionTitle>
+      {/* Master Data */}
+      <SectionTitle style={{ marginTop: 28 }}>Master Data</SectionTitle>
       <UploadCard>
         <UploadRow>
           <FormGroup style={{ flex: 1, marginBottom: 0 }}>
-            <Label>Stammdaten CSV (Semikolon-getrennt, überschreibt bestehende Daten)</Label>
+            <Label>Master Data CSV (semicolon-separated, overwrites existing data)</Label>
             <FileInput onClick={() => masterRef.current?.click()} style={{ padding: 16 }}>
               <input
                 ref={masterRef}
@@ -192,39 +196,64 @@ export default function ImportPage() {
                 accept=".csv"
                 onChange={(e) => setMasterFile(e.target.files?.[0] || null)}
               />
-              <p style={{ margin: 0 }}>{masterFile ? masterFile.name : 'CSV auswählen'}</p>
+              <p style={{ margin: 0 }}>{masterFile ? masterFile.name : 'Select CSV'}</p>
             </FileInput>
           </FormGroup>
           <Button
-            onClick={() => masterFile && handleFileUpload('/uploads/master-data', masterFile, 'Stammdaten-Import')}
+            onClick={() => masterFile && handleFileUpload('/uploads/master-data', masterFile, 'Master Data Import')}
             disabled={loading !== null || !masterFile}
           >
-            {loading === 'Stammdaten-Import' ? 'Importiere...' : 'Stammdaten importieren'}
+            {loading === 'Master Data Import' ? 'Importing...' : 'Import Master Data'}
+          </Button>
+        </UploadRow>
+      </UploadCard>
+
+      {/* Deposit */}
+      <SectionTitle style={{ marginTop: 28 }}>Deposit</SectionTitle>
+      <UploadCard>
+        <UploadRow>
+          <FormGroup style={{ flex: 1, marginBottom: 0 }}>
+            <Label>Deposit CSV (semicolon-separated, overwrites existing data)</Label>
+            <FileInput onClick={() => depositRef.current?.click()} style={{ padding: 16 }}>
+              <input
+                ref={depositRef}
+                type="file"
+                accept=".csv"
+                onChange={(e) => setDepositFile(e.target.files?.[0] || null)}
+              />
+              <p style={{ margin: 0 }}>{depositFile ? depositFile.name : 'Select CSV'}</p>
+            </FileInput>
+          </FormGroup>
+          <Button
+            onClick={() => depositFile && handleFileUpload('/uploads/deposit', depositFile, 'Deposit Import')}
+            disabled={loading !== null || !depositFile}
+          >
+            {loading === 'Deposit Import' ? 'Importing...' : 'Import Deposit'}
           </Button>
         </UploadRow>
       </UploadCard>
 
       {loading && <Spinner />}
 
-      {/* Upload Historie */}
-      <SectionTitle style={{ marginTop: 28 }}>Upload Historie ({uploads.length})</SectionTitle>
+      {/* Upload History */}
+      <SectionTitle style={{ marginTop: 28 }}>Upload History ({uploads.length})</SectionTitle>
       <UploadCard style={{ overflowX: 'auto' }}>
         {uploadsLoading ? <Spinner /> : (
           <Table>
             <thead>
               <tr>
                 <th>ID</th>
-                <th>Datum</th>
-                <th>Dateiname</th>
-                <th>Typ</th>
-                <th>Periode</th>
-                <th>Datensätze</th>
-                <th>Aktion</th>
+                <th>Date</th>
+                <th>Filename</th>
+                <th>Type</th>
+                <th>Period</th>
+                <th>Records</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
               {uploads.length === 0 && (
-                <tr><td colSpan={7} style={{ textAlign: 'center', color: '#999' }}>Keine Uploads vorhanden</td></tr>
+                <tr><td colSpan={7} style={{ textAlign: 'center', color: '#999' }}>No uploads found</td></tr>
               )}
               {uploads.map((u) => (
                 <tr key={u.id}>
@@ -237,7 +266,7 @@ export default function ImportPage() {
                     </Badge>
                   </td>
                   <td>{u.accountingPeriod || '-'}</td>
-                  <td>{u.recordCount.toLocaleString('de-DE')}</td>
+                  <td>{u.recordCount.toLocaleString('en-US')}</td>
                   <td>
                     <Button
                       $variant="danger"
@@ -245,7 +274,7 @@ export default function ImportPage() {
                       disabled={deleting === u.id}
                       style={{ padding: '6px 12px', fontSize: '12px' }}
                     >
-                      {deleting === u.id ? '...' : 'Löschen'}
+                      {deleting === u.id ? '...' : 'Delete'}
                     </Button>
                   </td>
                 </tr>

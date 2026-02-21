@@ -1,10 +1,24 @@
 import type { StatementData } from '@sixt/shared';
+import fs from 'fs';
+import path from 'path';
+
+const logoPath = path.resolve(__dirname, '../../assets/sixt-logo.png');
+const logoBase64 = fs.existsSync(logoPath)
+  ? 'data:image/png;base64,' + fs.readFileSync(logoPath).toString('base64')
+  : null;
 
 function formatEur(amount: number): string {
   return new Intl.NumberFormat('de-DE', {
     style: 'currency',
     currency: 'EUR',
   }).format(amount);
+}
+
+function formatDateDE(dateStr: string): string {
+  if (!dateStr) return '-';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  return `${parts[2]}.${parts[1]}.${parts[0]}`;
 }
 
 function formatPeriod(period: string): string {
@@ -33,9 +47,8 @@ export function generateStatementHtml(data: StatementData): string {
       (line) => `
       <tr>
         <td>${line.type}</td>
-        <td>${line.reference}</td>
-        <td>${line.documentType || ''}</td>
         <td>${line.description}</td>
+        <td>${line.reference}</td>
         <td class="amount">${formatEur(line.amount)}</td>
       </tr>`
     )
@@ -46,9 +59,9 @@ export function generateStatementHtml(data: StatementData): string {
       (line) => `
       <tr>
         <td>${line.type}</td>
+        <td>${line.description}</td>
         <td>${line.reference}</td>
         <td>${line.date || ''}</td>
-        <td>${line.description}</td>
         <td class="amount">${formatEur(line.amount)}</td>
       </tr>`
     )
@@ -61,10 +74,16 @@ export function generateStatementHtml(data: StatementData): string {
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 10px; color: #333; padding: 30px; }
-    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 3px solid #FF5F00; padding-bottom: 15px; }
-    .logo img { height: 40px; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 3px solid #FF5F00; padding-bottom: 15px; }
+    .header-left { display: flex; align-items: center; gap: 20px; }
+    .logo img { height: 60px; }
+    .country-name { font-size: 22px; font-weight: 700; color: #333; }
     .address { text-align: right; font-size: 9px; line-height: 1.5; }
     .title { background: #FF5F00; color: white; padding: 8px 15px; font-size: 14px; font-weight: 700; margin: 15px 0 5px; }
+    .title-clearing { background: #4a4a4a; color: white; padding: 8px 15px; font-size: 11px; font-weight: 700; margin: 15px 0 5px; }
+    .title-billing { background: #5a5a5a; color: white; padding: 8px 15px; font-size: 11px; font-weight: 700; margin: 15px 0 5px; }
+    .title-account { background: #6a6a6a; color: white; padding: 8px 15px; font-size: 11px; font-weight: 700; margin: 15px 0 5px; }
+    .title-deposit { background: #7a7a7a; color: white; padding: 8px 15px; font-size: 11px; font-weight: 700; margin: 15px 0 5px; }
     .main-title { display: flex; align-items: center; justify-content: space-between; }
     .main-title .period { font-size: 14px; font-weight: 700; }
     .meta { display: flex; gap: 30px; margin: 10px 0 15px; font-size: 9px; }
@@ -75,7 +94,7 @@ export function generateStatementHtml(data: StatementData): string {
     tr:nth-child(even) { background: #f9f9f9; }
     .amount { text-align: right; font-variant-numeric: tabular-nums; }
     .subtotal { background: #f0f0f0; font-weight: 700; }
-    .total-row { background: #FF5F00; color: white; font-weight: 700; font-size: 11px; }
+    .total-row { background: #333; color: white; font-weight: 700; font-size: 11px; }
     .section { margin: 15px 0; }
     .account-table td:first-child { width: 70%; }
     .footer { margin-top: 30px; padding-top: 10px; border-top: 1px solid #ddd; font-size: 8px; color: #999; text-align: center; }
@@ -83,13 +102,16 @@ export function generateStatementHtml(data: StatementData): string {
 </head>
 <body>
   <div class="header">
-    <div class="logo"><img src="${SIXT_LOGO_BASE64}" alt="SIXT"/></div>
+    <div class="header-left">
+      <div class="logo"><img src="${logoBase64 || SIXT_LOGO_BASE64}" alt="SIXT"/></div>
+      <div class="country-name">${data.country.name} (${data.country.iso})</div>
+    </div>
     <div class="address">${address}</div>
   </div>
 
   <div class="title main-title">
     <span>MONTHLY INTERFACING STATEMENT – ${formatPeriod(data.accountingPeriod)}</span>
-    <img src="${SIXT_LOGO_BASE64}" alt="SIXT" style="height:22px;"/>
+    <span>${data.country.name}</span>
   </div>
   <div class="meta">
     <div>Accounting Period: <span>${formatPeriod(data.accountingPeriod)}</span></div>
@@ -100,20 +122,20 @@ export function generateStatementHtml(data: StatementData): string {
   </div>
 
   <div class="section">
-    <div class="title" style="font-size:11px;">CLEARING STATEMENT</div>
+    <div class="title-clearing">CLEARING STATEMENT</div>
     <table>
-      <thead><tr><th>Type</th><th>Reference</th><th>Document Type</th><th>Description</th><th class="amount">EUR Amount</th></tr></thead>
+      <thead><tr><th>Type</th><th>Description</th><th>Reference</th><th class="amount">EUR Amount</th></tr></thead>
       <tbody>
-        ${clearingRows || '<tr><td colspan="5" style="text-align:center;color:#999;">No clearing items</td></tr>'}
-        <tr class="subtotal"><td colspan="4">SUBTOTAL</td><td class="amount">${formatEur(data.clearingSubtotal)}</td></tr>
+        ${clearingRows || '<tr><td colspan="4" style="text-align:center;color:#999;">No clearing items</td></tr>'}
+        <tr class="subtotal"><td colspan="3">SUBTOTAL</td><td class="amount">${formatEur(data.clearingSubtotal)}</td></tr>
       </tbody>
     </table>
   </div>
 
   <div class="section">
-    <div class="title" style="font-size:11px;">BILLING STATEMENT</div>
+    <div class="title-billing">BILLING STATEMENT</div>
     <table>
-      <thead><tr><th>Type</th><th>Reference</th><th>Date</th><th>Description</th><th class="amount">EUR Amount</th></tr></thead>
+      <thead><tr><th>Type</th><th>Description</th><th>Reference</th><th>Date</th><th class="amount">EUR Amount</th></tr></thead>
       <tbody>
         ${billingRows || '<tr><td colspan="5" style="text-align:center;color:#999;">No billing items</td></tr>'}
         <tr class="subtotal"><td colspan="4">SUBTOTAL</td><td class="amount">${formatEur(data.billingSubtotal)}</td></tr>
@@ -133,28 +155,38 @@ export function generateStatementHtml(data: StatementData): string {
     <div class="title" style="font-size:11px;">ACCOUNT STATEMENT</div>
     <table class="account-table">
       <tbody>
-        <tr><td>Account Balance Previous Month - Overdue</td><td class="amount">${formatEur(data.accountStatement.overdueBalance)}</td></tr>
-        <tr><td>Account Balance Previous Month - due until ${data.accountStatement.dueUntilDate}</td><td class="amount">${formatEur(data.accountStatement.dueBalance)}</td></tr>
+        <tr><td>Account Balance Previous Month - Overdue (excl. Interest Amount)</td><td class="amount">${formatEur(data.accountStatement.overdueBalance)}</td></tr>
+        <tr><td>Account Balance Previous Month - due until <span style="color:#c00;font-weight:600">${formatDateDE(data.accountStatement.dueUntilDate)}</span></td><td class="amount">${formatEur(data.accountStatement.dueBalance)}</td></tr>
         ${(data.accountStatement.paymentBySixtItems || []).length > 0
           ? data.accountStatement.paymentBySixtItems.map(item =>
-              `<tr><td>Payment by Sixt – ${item.date}</td><td class="amount">${formatEur(item.amount)}</td></tr>`
+              `<tr><td>Payment by Sixt – ${formatDateDE(item.date)}</td><td class="amount">${formatEur(item.amount)}</td></tr>`
             ).join('')
-          : `<tr><td>Payment by Sixt</td><td class="amount">${formatEur(0)}</td></tr>`
+          : `<tr><td>Payment by Sixt – ${formatDateDE(data.accountStatement.dueUntilDate)}</td><td class="amount">${formatEur(0)}</td></tr>`
         }
         ${(data.accountStatement.paymentByPartnerItems || []).length > 0
           ? data.accountStatement.paymentByPartnerItems.map(item =>
-              `<tr><td>Payment by you – ${item.date}</td><td class="amount">${formatEur(item.amount)}</td></tr>`
+              `<tr><td>Payment by you – ${formatDateDE(item.date)}</td><td class="amount">${formatEur(item.amount)}</td></tr>`
             ).join('')
-          : `<tr><td>Payment by you</td><td class="amount">${formatEur(0)}</td></tr>`
+          : `<tr><td>Payment by you – ${formatDateDE(data.accountStatement.dueUntilDate)}</td><td class="amount">${formatEur(0)}</td></tr>`
         }
-        <tr><td>Total Interfacing Amount – due ${data.accountStatement.totalInterfacingDueDate}</td><td class="amount">${formatEur(data.accountStatement.totalInterfacingAmount)}</td></tr>
-        <tr class="subtotal"><td>Balance (Open Items)</td><td class="amount">${formatEur(data.accountStatement.balanceOpenItems)}</td></tr>
+        <tr><td>Total Interfacing Amount – due <span style="color:#c00;font-weight:600">${formatDateDE(data.accountStatement.totalInterfacingDueDate)}</span></td><td class="amount">${formatEur(data.accountStatement.totalInterfacingAmount)}</td></tr>
+        <tr class="subtotal"><td>Balance (Open Items) – ${(data as any).balanceLabel || (data.accountStatement.balanceOpenItems < 0 ? 'Payment is kindly requested' : 'Payment will be initiated by Sixt')}</td><td class="amount">${formatEur(data.accountStatement.balanceOpenItems)}</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="title-deposit">DEPOSIT</div>
+    <table class="account-table">
+      <tbody>
+        <tr><td>Deposit held</td><td class="amount">XXX EUR</td></tr>
+        <tr><td>Deposit due</td><td class="amount">XXX EUR</td></tr>
       </tbody>
     </table>
   </div>
 
   <div class="footer">
-    Sixt GmbH & Co. Autovermietung KG &bull; International Franchise Controlling &bull; Generated ${new Date().toISOString().split('T')[0]}
+    Sixt GmbH &bull; International Franchise Controlling &bull; Generated ${new Date().toISOString().split('T')[0]}
   </div>
 </body>
 </html>`;

@@ -52,16 +52,17 @@ const NavLink = styled(Link)<{ $active?: boolean }>`
 const Main = styled.main`
   flex: 1;
   padding: 24px;
-  max-width: 1400px;
+  max-width: 1800px;
   width: 100%;
   margin: 0 auto;
 `;
 
 const navItems = [
-  { path: '/import', label: 'Datenimport' },
-  { path: '/stammdaten/view', label: 'Stammdaten' },
+  { path: '/import', label: 'Data Import' },
+  { path: '/stammdaten/view', label: 'Master Data' },
   { path: '/statement', label: 'Statement' },
   { path: '/overview', label: 'Statement Overview' },
+  { path: '/planning', label: 'Interfacing Planning' },
   { path: '/export', label: 'PDF Export' },
 ];
 

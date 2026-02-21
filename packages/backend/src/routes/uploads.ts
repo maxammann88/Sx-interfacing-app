@@ -189,6 +189,39 @@ router.post('/master-data', upload.single('file'), async (req: Request, res: Res
   }
 });
 
+router.post('/deposit', upload.single('file'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
+
+    let content = req.file.buffer.toString('utf-8');
+    if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
+    const { parse } = require('csv-parse/sync');
+    const records = parse(content, {
+      delimiter: ';',
+      columns: true,
+      skip_empty_lines: true,
+      trim: true,
+      relax_column_count: true,
+    });
+
+    const uploadRecord = await prisma.upload.create({
+      data: {
+        filename: req.file.originalname,
+        uploadType: 'deposit',
+        recordCount: records.length,
+      },
+    });
+
+    res.json({
+      success: true,
+      data: uploadRecord,
+      message: `${records.length} deposit records imported`,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const uploads = await prisma.upload.findMany({

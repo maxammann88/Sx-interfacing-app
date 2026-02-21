@@ -41,33 +41,33 @@ const CardLink = styled(Link)`
 const pages = [
   {
     path: '/import',
-    title: 'Monatlicher Datenimport',
-    desc: 'SAP CSV-Dateien hochladen und in die Datenbank importieren.',
+    title: 'Monthly Data Import',
+    desc: 'Upload SAP CSV files and import them into the database.',
   },
   {
     path: '/stammdaten/upload',
-    title: 'Stammdaten Upload',
-    desc: 'Länderliste und Stammdaten-CSV hochladen.',
+    title: 'Master Data Upload',
+    desc: 'Upload country list and master data CSV files.',
   },
   {
     path: '/stammdaten/view',
-    title: 'Stammdaten Übersicht',
-    desc: 'Alle Länder mit Stammdaten anzeigen, filtern und durchsuchen.',
+    title: 'Master Data Overview',
+    desc: 'View, filter and search all countries with master data.',
   },
   {
     path: '/statement',
     title: 'Interfacing Statement',
-    desc: 'Monthly Interfacing Statement pro Land generieren und anzeigen.',
+    desc: 'Generate and view monthly interfacing statements per country.',
   },
   {
     path: '/uploads',
     title: 'Upload History',
-    desc: 'Alle bisherigen Uploads einsehen und verwalten.',
+    desc: 'View and manage all previous uploads.',
   },
   {
     path: '/export',
     title: 'PDF Export',
-    desc: 'Interfacing Statements als PDF im DIN-A4-Format exportieren.',
+    desc: 'Export interfacing statements as A4 PDF documents.',
   },
 ];
 

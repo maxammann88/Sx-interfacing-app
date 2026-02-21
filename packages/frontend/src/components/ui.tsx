@@ -107,6 +107,8 @@ export const FormRow = styled.div`
 export const Table = styled.table`
   width: 100%;
   font-size: 13px;
+  border-collapse: separate;
+  border-spacing: 0;
 
   th {
     background: ${theme.colors.secondary};

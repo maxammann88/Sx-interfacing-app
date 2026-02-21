@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import styled from 'styled-components';
 import api from '../utils/api';
 import { generatePeriodOptions, getDefaultPeriod } from '../utils/format';
@@ -90,22 +90,48 @@ const CloseButton = styled.button`
 export default function ExportPage() {
   const [countries, setCountries] = useState<Country[]>([]);
   const [period, setPeriod] = useState(getDefaultPeriod());
-  const [releaseDate, setReleaseDate] = useState(new Date().toISOString().split('T')[0]);
+  const [releaseDate, setReleaseDate] = useState('');
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState<number | null>(null);
+  const [exportingXlsx, setExportingXlsx] = useState<number | null>(null);
   const [bulkExporting, setBulkExporting] = useState(false);
+  const [bulkExportingXlsx, setBulkExportingXlsx] = useState(false);
   const [bulkProgress, setBulkProgress] = useState(0);
+  const [bulkProgressXlsx, setBulkProgressXlsx] = useState(0);
   const [previewing, setPreviewing] = useState<number | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewTitle, setPreviewTitle] = useState('');
   const [error, setError] = useState('');
+  const [assignments, setAssignments] = useState<Record<number, { creator: string | null; reviewer: string | null }>>({});
 
   const periods = generatePeriodOptions();
 
   useEffect(() => {
+    if (!period) return;
+    api.get(`/planning/${period}`)
+      .then(res => {
+        const plan = res.data.data;
+        setReleaseDate(plan?.releaseDate || new Date().toISOString().split('T')[0]);
+      })
+      .catch(() => {
+        setReleaseDate(new Date().toISOString().split('T')[0]);
+      });
+
+    api.get('/planning/assignments', { params: { period } })
+      .then(res => {
+        const map: Record<number, { creator: string | null; reviewer: string | null }> = {};
+        (res.data.data as { countryId: number; creator: string | null; reviewer: string | null }[]).forEach(a => {
+          map[a.countryId] = { creator: a.creator, reviewer: a.reviewer };
+        });
+        setAssignments(map);
+      })
+      .catch(() => setAssignments({}));
+  }, [period]);
+
+  useEffect(() => {
     api.get('/countries', { params: { status: 'aktiv' } })
       .then((res) => setCountries(res.data.data))
-      .catch((err) => setError(err.response?.data?.error || 'Fehler beim Laden'))
+      .catch((err) => setError(err.response?.data?.error || 'Error loading data'))
       .finally(() => setLoading(false));
   }, []);
 
@@ -122,7 +148,7 @@ export default function ExportPage() {
 
   const handleExport = async (countryId: number) => {
     if (!period) {
-      setError('Bitte zuerst einen Abrechnungsmonat auswählen.');
+      setError('Please select an accounting period first.');
       return;
     }
     setExporting(countryId);
@@ -139,15 +165,40 @@ export default function ExportPage() {
         : `Interfacing_${countryId}_${period}.pdf`;
       downloadBlob(new Blob([res.data]), filename);
     } catch {
-      setError('Fehler beim PDF-Export. Bitte prüfen Sie, ob Puppeteer installiert ist.');
+      setError('Error during PDF export. Please check if Puppeteer is installed.');
     } finally {
       setExporting(null);
     }
   };
 
+  const handleExportXlsx = async (countryId: number) => {
+    if (!period) {
+      setError('Please select an accounting period first.');
+      return;
+    }
+    setExportingXlsx(countryId);
+    setError('');
+
+    try {
+      const res = await api.get(`/export/${countryId}/xlsx`, {
+        params: { period, releaseDate },
+        responseType: 'blob',
+      });
+      const disposition = res.headers['content-disposition'];
+      const filename = disposition
+        ? decodeURIComponent(disposition.split('filename=')[1]?.replace(/"/g, ''))
+        : `Interfacing_${countryId}_${period}.xlsx`;
+      downloadBlob(new Blob([res.data]), filename);
+    } catch {
+      setError('Error during XLSX export.');
+    } finally {
+      setExportingXlsx(null);
+    }
+  };
+
   const handleBulkExport = async () => {
     if (!period) {
-      setError('Bitte zuerst einen Abrechnungsmonat auswählen.');
+      setError('Please select an accounting period first.');
       return;
     }
     setBulkExporting(true);
@@ -174,16 +225,52 @@ export default function ExportPage() {
         : `Interfacing_${period}.zip`;
       downloadBlob(new Blob([res.data], { type: 'application/zip' }), filename);
     } catch {
-      setError('Fehler beim Bulk-Export. Der Vorgang kann einige Minuten dauern.');
+      setError('Error during bulk export. This process may take a few minutes.');
     } finally {
       setBulkExporting(false);
       setBulkProgress(0);
     }
   };
 
+  const handleBulkExportXlsx = async () => {
+    if (!period) {
+      setError('Please select an accounting period first.');
+      return;
+    }
+    setBulkExportingXlsx(true);
+    setBulkProgressXlsx(10);
+    setError('');
+
+    try {
+      const progressTimer = setInterval(() => {
+        setBulkProgressXlsx(prev => Math.min(prev + 3, 90));
+      }, 800);
+
+      const res = await api.get('/export/bulk/xlsx', {
+        params: { period, releaseDate },
+        responseType: 'blob',
+        timeout: 600000,
+      });
+
+      clearInterval(progressTimer);
+      setBulkProgressXlsx(100);
+
+      const disposition = res.headers['content-disposition'];
+      const filename = disposition
+        ? decodeURIComponent(disposition.split('filename=')[1]?.replace(/"/g, ''))
+        : `Interfacing_${period}_XLSX.zip`;
+      downloadBlob(new Blob([res.data], { type: 'application/zip' }), filename);
+    } catch {
+      setError('Error during bulk XLSX export.');
+    } finally {
+      setBulkExportingXlsx(false);
+      setBulkProgressXlsx(0);
+    }
+  };
+
   const handlePreview = async (country: Country) => {
     if (!period) {
-      setError('Bitte zuerst einen Abrechnungsmonat auswählen.');
+      setError('Please select an accounting period first.');
       return;
     }
     setPreviewing(country.id);
@@ -198,7 +285,7 @@ export default function ExportPage() {
       setPreviewUrl(url);
       setPreviewTitle(`${country.fir} – ${country.name} (${country.iso})`);
     } catch {
-      setError('Fehler beim Laden der Vorschau.');
+      setError('Error loading preview.');
     } finally {
       setPreviewing(null);
     }
@@ -216,7 +303,7 @@ export default function ExportPage() {
 
   return (
     <div>
-      <PageTitle>PDF Export</PageTitle>
+      <PageTitle>Export</PageTitle>
 
       {error && <Alert $type="error">{error}</Alert>}
 
@@ -225,15 +312,11 @@ export default function ExportPage() {
           <FormGroup>
             <Label>Accounting Period</Label>
             <Select value={period} onChange={(e) => setPeriod(e.target.value)}>
-              <option value="">-- Monat wählen --</option>
+              <option value="">-- Select period --</option>
               {periods.map((p) => (
                 <option key={p.value} value={p.value}>{p.label}</option>
               ))}
             </Select>
-          </FormGroup>
-          <FormGroup>
-            <Label>Release Date</Label>
-            <Input type="date" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)} />
           </FormGroup>
           <FormGroup>
             <Label>&nbsp;</Label>
@@ -241,16 +324,34 @@ export default function ExportPage() {
               onClick={handleBulkExport}
               disabled={bulkExporting || !period}
             >
-              {bulkExporting ? 'Exportiere alle...' : 'Alle PDFs exportieren (ZIP)'}
+              {bulkExporting ? 'Exporting all...' : 'Export all PDFs (ZIP)'}
+            </BulkButton>
+          </FormGroup>
+          <FormGroup>
+            <Label>&nbsp;</Label>
+            <BulkButton
+              onClick={handleBulkExportXlsx}
+              disabled={bulkExportingXlsx || !period}
+              style={{ background: '#217346' }}
+            >
+              {bulkExportingXlsx ? 'Exporting all...' : 'Export all XLSX (ZIP)'}
             </BulkButton>
           </FormGroup>
         </FormRow>
         {bulkExporting && (
           <>
             <div style={{ fontSize: 12, color: '#666', marginTop: 8 }}>
-              Generiere PDFs für {countries.length} Länder... ({Math.round(bulkProgress)}%)
+              Generating PDFs for {countries.length} countries... ({Math.round(bulkProgress)}%)
             </div>
             <ProgressBar $pct={bulkProgress} />
+          </>
+        )}
+        {bulkExportingXlsx && (
+          <>
+            <div style={{ fontSize: 12, color: '#666', marginTop: 8 }}>
+              Generating XLSX for {countries.length} countries... ({Math.round(bulkProgressXlsx)}%)
+            </div>
+            <ProgressBar $pct={bulkProgressXlsx} />
           </>
         )}
       </Card>
@@ -260,18 +361,28 @@ export default function ExportPage() {
           <thead>
             <tr>
               <th>FIR</th>
-              <th>Land</th>
+              <th>Country</th>
               <th>ISO</th>
+              <th>Creator</th>
+              <th>Reviewer</th>
               <th>Status</th>
-              <th>Aktion</th>
+              <th>Action</th>
             </tr>
           </thead>
           <tbody>
-            {countries.map((c) => (
+            {countries.map((c) => {
+              const a = assignments[c.id];
+              return (
               <tr key={c.id}>
                 <td>{c.fir}</td>
                 <td><strong>{c.name}</strong></td>
                 <td>{c.iso}</td>
+                <td style={{ fontSize: 12, color: a?.creator ? theme.colors.textPrimary : '#ccc' }}>
+                  {a?.creator || '–'}
+                </td>
+                <td style={{ fontSize: 12, color: a?.reviewer ? theme.colors.textPrimary : '#ccc' }}>
+                  {a?.reviewer || '–'}
+                </td>
                 <td>
                   <Badge $color={theme.colors.success}>{c.partnerStatus}</Badge>
                 </td>
@@ -287,11 +398,19 @@ export default function ExportPage() {
                     disabled={exporting === c.id || !period}
                     style={{ padding: '6px 14px', fontSize: '12px' }}
                   >
-                    {exporting === c.id ? 'Exportiere...' : 'PDF'}
+                    {exporting === c.id ? 'Exporting...' : 'PDF'}
+                  </Button>
+                  <Button
+                    onClick={() => handleExportXlsx(c.id)}
+                    disabled={exportingXlsx === c.id || !period}
+                    style={{ padding: '6px 14px', fontSize: '12px', marginLeft: 4, background: '#217346' }}
+                  >
+                    {exportingXlsx === c.id ? 'Exporting...' : 'XLSX'}
                   </Button>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </Table>
       </Card>
