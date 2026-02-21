@@ -6,10 +6,9 @@ import GlobalStyles from './styles/GlobalStyles';
 import Layout from './components/Layout';
 import HomePage from './pages/HomePage';
 import ImportPage from './pages/ImportPage';
-import StammdatenUploadPage from './pages/StammdatenUploadPage';
 import StammdatenViewPage from './pages/StammdatenViewPage';
 import StatementPage from './pages/StatementPage';
-import UploadHistoryPage from './pages/UploadHistoryPage';
+import StatementOverviewPage from './pages/StatementOverviewPage';
 import ExportPage from './pages/ExportPage';
 
 export default function App() {
@@ -21,10 +20,9 @@ export default function App() {
           <Route element={<Layout />}>
             <Route path="/" element={<HomePage />} />
             <Route path="/import" element={<ImportPage />} />
-            <Route path="/stammdaten/upload" element={<StammdatenUploadPage />} />
             <Route path="/stammdaten/view" element={<StammdatenViewPage />} />
             <Route path="/statement" element={<StatementPage />} />
-            <Route path="/uploads" element={<UploadHistoryPage />} />
+            <Route path="/overview" element={<StatementOverviewPage />} />
             <Route path="/export" element={<ExportPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

@@ -91,21 +91,40 @@ export async function generateStatement(
     return row.buchungsdatum < monthEnd;
   });
 
-  const overdueBalance = previousMonthData
-    .filter(row => row.nettofaelligkeit && row.nettofaelligkeit < monthStart)
-    .reduce((sum, r) => sum + inv(r.betragHauswaehrung), 0);
+  const releaseDateStart = new Date(Date.UTC(
+    releaseDateObj.getFullYear(), releaseDateObj.getMonth(), releaseDateObj.getDate()
+  ));
 
-  const dueBalance = previousMonthData
-    .filter(row => row.nettofaelligkeit && row.nettofaelligkeit >= monthStart)
-    .reduce((sum, r) => sum + inv(r.betragHauswaehrung), 0);
+  const previousMonthItems = previousMonthData.map(row => ({
+    nettofaelligkeit: row.nettofaelligkeit ? formatDate(row.nettofaelligkeit) : null,
+    amount: inv(row.betragHauswaehrung),
+  }));
 
-  const paymentBySixt = currentMonthData
+  const overdueBalance = previousMonthItems
+    .filter(item => item.nettofaelligkeit && item.nettofaelligkeit < releaseDate)
+    .reduce((sum, item) => sum + item.amount, 0);
+
+  const dueBalance = previousMonthItems
+    .filter(item => item.nettofaelligkeit && item.nettofaelligkeit >= releaseDate)
+    .reduce((sum, item) => sum + item.amount, 0);
+
+  const paymentBySixtItems = currentMonthData
     .filter(row => row.type === 'Payment' && (row.text || '').toLowerCase().includes('sixt'))
-    .reduce((sum, r) => sum + inv(r.betragHauswaehrung), 0);
+    .map(row => ({
+      date: row.buchungsdatum ? formatDate(row.buchungsdatum) : '',
+      description: cleanText(row.text || ''),
+      amount: inv(row.betragHauswaehrung),
+    }));
+  const paymentBySixt = paymentBySixtItems.reduce((sum, item) => sum + item.amount, 0);
 
-  const paymentByPartner = currentMonthData
+  const paymentByPartnerItems = currentMonthData
     .filter(row => row.type === 'Payment' && !(row.text || '').toLowerCase().includes('sixt'))
-    .reduce((sum, r) => sum + inv(r.betragHauswaehrung), 0);
+    .map(row => ({
+      date: row.buchungsdatum ? formatDate(row.buchungsdatum) : '',
+      description: cleanText(row.text || ''),
+      amount: inv(row.betragHauswaehrung),
+    }));
+  const paymentByPartner = paymentByPartnerItems.reduce((sum, item) => sum + item.amount, 0);
 
   const balanceOpenItems =
     overdueBalance + dueBalance + paymentBySixt + paymentByPartner + totalInterfacingDue;
@@ -116,8 +135,12 @@ export async function generateStatement(
     dueUntilDate: formatDate(dueDate),
     paymentBySixt,
     paymentByPartner,
+    paymentBySixtItems,
+    paymentByPartnerItems,
     totalInterfacingAmount: totalInterfacingDue,
+    totalInterfacingDueDate: formatDate(dueDate),
     balanceOpenItems,
+    previousMonthItems,
   };
 
   return {

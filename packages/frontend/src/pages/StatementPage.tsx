@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import api from '../utils/api';
-import { formatEur, generatePeriodOptions } from '../utils/format';
+import { formatEur, generatePeriodOptions, getDefaultPeriod } from '../utils/format';
 import type { StatementData, Country } from '@sixt/shared';
 import {
   PageTitle, Card, Button, Select, Input, Label, FormGroup, FormRow,
@@ -10,7 +10,7 @@ import {
 
 export default function StatementPage() {
   const DEFAULT_COUNTRY_ID = '335';
-  const DEFAULT_PERIOD = '202601';
+  const DEFAULT_PERIOD = getDefaultPeriod();
 
   const [countries, setCountries] = useState<Country[]>([]);
   const [countryId, setCountryId] = useState(DEFAULT_COUNTRY_ID);
@@ -22,6 +22,25 @@ export default function StatementPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [autoLoaded, setAutoLoaded] = useState(false);
+  const [dueUntilLabel, setDueUntilLabel] = useState('');
+
+  const computedAccount = useMemo(() => {
+    if (!statement || !dueUntilLabel) return null;
+    const items = statement.accountStatement.previousMonthItems || [];
+    const cutoff = dueUntilLabel;
+    const overdueBalance = items
+      .filter(i => i.nettofaelligkeit && i.nettofaelligkeit < cutoff)
+      .reduce((s, i) => s + i.amount, 0);
+    const dueBalance = items
+      .filter(i => i.nettofaelligkeit && i.nettofaelligkeit >= cutoff)
+      .reduce((s, i) => s + i.amount, 0);
+    const balanceOpenItems =
+      overdueBalance + dueBalance +
+      statement.accountStatement.paymentBySixt +
+      statement.accountStatement.paymentByPartner +
+      statement.accountStatement.totalInterfacingAmount;
+    return { overdueBalance, dueBalance, balanceOpenItems };
+  }, [statement, dueUntilLabel]);
 
   const periods = generatePeriodOptions();
 
@@ -56,6 +75,7 @@ export default function StatementPage() {
         params: { period, releaseDate, paymentTermDays },
       });
       setStatement(res.data.data);
+      setDueUntilLabel(res.data.data.accountStatement.dueUntilDate);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Fehler beim Laden des Statements.');
     } finally {
@@ -201,27 +221,53 @@ export default function StatementPage() {
               <tbody>
                 <tr>
                   <td>Account Balance Previous Month - Overdue</td>
-                  <AmountCell>{formatEur(statement.accountStatement.overdueBalance)}</AmountCell>
+                  <AmountCell>{formatEur(computedAccount?.overdueBalance ?? 0)}</AmountCell>
                 </tr>
                 <tr>
-                  <td>Account Balance Previous Month - due until {statement.accountStatement.dueUntilDate}</td>
-                  <AmountCell>{formatEur(statement.accountStatement.dueBalance)}</AmountCell>
+                  <td>
+                    Account Balance Previous Month - due until{' '}
+                    <Input
+                      type="date"
+                      value={dueUntilLabel}
+                      onChange={(e) => setDueUntilLabel(e.target.value)}
+                      style={{ display: 'inline-block', width: 160, padding: '2px 6px', fontSize: 13 }}
+                    />
+                  </td>
+                  <AmountCell>{formatEur(computedAccount?.dueBalance ?? 0)}</AmountCell>
                 </tr>
+                {(statement.accountStatement.paymentBySixtItems || []).length > 0 ? (
+                  statement.accountStatement.paymentBySixtItems.map((item, i) => (
+                    <tr key={`sixt-${i}`}>
+                      <td>Payment by Sixt – {item.date}</td>
+                      <AmountCell>{formatEur(item.amount)}</AmountCell>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td>Payment by Sixt</td>
+                    <AmountCell>{formatEur(0)}</AmountCell>
+                  </tr>
+                )}
+                {(statement.accountStatement.paymentByPartnerItems || []).length > 0 ? (
+                  statement.accountStatement.paymentByPartnerItems.map((item, i) => (
+                    <tr key={`partner-${i}`}>
+                      <td>Payment by you – {item.date}</td>
+                      <AmountCell>{formatEur(item.amount)}</AmountCell>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td>Payment by you</td>
+                    <AmountCell>{formatEur(0)}</AmountCell>
+                  </tr>
+                )}
                 <tr>
-                  <td>Payment by Sixt</td>
-                  <AmountCell>{formatEur(statement.accountStatement.paymentBySixt)}</AmountCell>
-                </tr>
-                <tr>
-                  <td>Payment by you</td>
-                  <AmountCell>{formatEur(statement.accountStatement.paymentByPartner)}</AmountCell>
-                </tr>
-                <tr>
-                  <td>Total Interfacing Amount</td>
+                  <td>Total Interfacing Amount – due {statement.accountStatement.totalInterfacingDueDate}</td>
                   <AmountCell>{formatEur(statement.accountStatement.totalInterfacingAmount)}</AmountCell>
                 </tr>
                 <SubtotalRow>
                   <td><strong>Balance (Open Items)</strong></td>
-                  <AmountCell><strong>{formatEur(statement.accountStatement.balanceOpenItems)}</strong></AmountCell>
+                  <AmountCell><strong>{formatEur(computedAccount?.balanceOpenItems ?? 0)}</strong></AmountCell>
                 </SubtotalRow>
               </tbody>
             </Table>

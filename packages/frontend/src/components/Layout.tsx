@@ -20,11 +20,12 @@ const Header = styled.header`
 `;
 
 const Logo = styled(Link)`
-  font-size: 24px;
-  font-weight: 900;
-  color: ${theme.colors.primary};
-  letter-spacing: 3px;
-  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  img {
+    height: 36px;
+    border-radius: 6px;
+  }
 `;
 
 const Nav = styled.nav`
@@ -58,10 +59,9 @@ const Main = styled.main`
 
 const navItems = [
   { path: '/import', label: 'Datenimport' },
-  { path: '/stammdaten/upload', label: 'Stammdaten Upload' },
   { path: '/stammdaten/view', label: 'Stammdaten' },
   { path: '/statement', label: 'Statement' },
-  { path: '/uploads', label: 'Upload History' },
+  { path: '/overview', label: 'Statement Overview' },
   { path: '/export', label: 'PDF Export' },
 ];
 
@@ -71,7 +71,7 @@ export default function Layout() {
   return (
     <Wrapper>
       <Header>
-        <Logo to="/">SIXT</Logo>
+        <Logo to="/"><img src="/sixt-logo.png" alt="SIXT" /></Logo>
         <Nav>
           {navItems.map((item) => (
             <NavLink

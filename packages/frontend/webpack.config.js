@@ -48,6 +48,9 @@ module.exports = {
     port: 3000,
     historyApiFallback: true,
     hot: true,
+    static: {
+      directory: path.join(__dirname, 'public'),
+    },
     proxy: [
       {
         context: ['/api'],

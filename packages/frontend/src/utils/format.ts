@@ -23,6 +23,12 @@ export function formatPeriodLabel(period: string): string {
   return `${months[month - 1]} ${year}`;
 }
 
+export function getDefaultPeriod(): string {
+  const now = new Date();
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  return `${prev.getFullYear()}${String(prev.getMonth() + 1).padStart(2, '0')}`;
+}
+
 export function generatePeriodOptions(): { value: string; label: string }[] {
   const options: { value: string; label: string }[] = [];
   const now = new Date();

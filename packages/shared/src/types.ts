@@ -104,18 +104,49 @@ export interface StatementLine {
   amount: number;
 }
 
+export interface PreviousMonthItem {
+  nettofaelligkeit: string | null;
+  amount: number;
+}
+
+export interface PaymentItem {
+  date: string;
+  description: string;
+  amount: number;
+}
+
 export interface AccountStatement {
   overdueBalance: number;
   dueBalance: number;
   dueUntilDate: string;
   paymentBySixt: number;
   paymentByPartner: number;
+  paymentBySixtItems: PaymentItem[];
+  paymentByPartnerItems: PaymentItem[];
   totalInterfacingAmount: number;
+  totalInterfacingDueDate: string;
   balanceOpenItems: number;
+  previousMonthItems: PreviousMonthItem[];
 }
 
 export interface CountryWithMasterData extends Country {
   masterData?: MasterData | null;
+}
+
+export interface OverviewRow {
+  countryId: number;
+  fir: number;
+  iso: string;
+  name: string;
+  status: string | null;
+  clearingSubtotal: number;
+  billingSubtotal: number;
+  totalInterfacingDue: number;
+  overdueBalance: number;
+  dueBalance: number;
+  paymentBySixt: number;
+  paymentByPartner: number;
+  balanceOpenItems: number;
 }
 
 export type UploadType = 'sap' | 'countries' | 'master-data';
