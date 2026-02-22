@@ -44,14 +44,14 @@ import { getSubAppRegistry } from './ApiManagementPage';
 
 function exportTicketsToXlsx(items: FeedbackItem[]) {
   const registry = getSubAppRegistry();
-  const streamMap: Record<string, string> = {};
-  registry.forEach(r => {
-    const norm = (s: string) => s.toLowerCase().replace(/[-–—\s]+/g, '');
-    streamMap[norm(r.app)] = r.stream;
-  });
+  const norm = (s: string) => s.toLowerCase().replace(/[-–—\s]+/g, '');
   const getStream = (app: string) => {
-    const n = app.toLowerCase().replace(/[-–—\s]+/g, '');
-    return streamMap[n] || '';
+    const n = norm(app);
+    const exact = registry.find(r => norm(r.app) === n);
+    if (exact) return exact.stream;
+    const partial = registry.find(r => norm(r.app).includes(n) || n.includes(norm(r.app)));
+    if (partial) return partial.stream;
+    return '';
   };
 
   const headers = [
@@ -90,20 +90,21 @@ function exportTicketsToXlsx(items: FeedbackItem[]) {
   });
 
   const BOM = '\uFEFF';
-  const csv = BOM + [headers, ...rows].map(row =>
+  const sep = 'sep=;\n';
+  const csv = BOM + sep + [headers, ...rows].map(row =>
     row.map(cell => {
       const str = String(cell ?? '');
-      return str.includes('\t') || str.includes('"') || str.includes('\n')
+      return str.includes(';') || str.includes('"') || str.includes('\n')
         ? '"' + str.replace(/"/g, '""') + '"' : str;
-    }).join('\t')
+    }).join(';')
   ).join('\r\n');
 
-  const blob = new Blob([csv], { type: 'application/vnd.ms-excel;charset=utf-8' });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   const now = new Date();
-  a.download = `Tickets_Export_${now.toISOString().split('T')[0]}.xlsx`;
+  a.download = `Tickets_Export_${now.toISOString().split('T')[0]}.csv`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -721,10 +722,14 @@ export default function FeedbackPage() {
   }, [registry]);
 
   const getStreamForApp = (appName: string): string => {
-    const norm = (s: string) => s.toLowerCase().replace(/[-–—\s]+/g, '');
-    const n = norm(appName);
-    if (n === 'core') return 'Core';
-    return appToStream[n] || '';
+    const n = (s: string) => s.toLowerCase().replace(/[-–—\s]+/g, '');
+    const nApp = n(appName);
+    if (nApp === 'core') return 'Core';
+    if (appToStream[nApp]) return appToStream[nApp];
+    for (const [key, stream] of Object.entries(appToStream)) {
+      if (key.includes(nApp) || nApp.includes(key)) return stream;
+    }
+    return '';
   };
 
   const filteredAppsForStream = useMemo(() => {
@@ -1118,9 +1123,9 @@ export default function FeedbackPage() {
               alignItems: 'center',
               gap: 4,
             }}
-            title="Download all tickets as XLSX (pivot-ready)"
+            title="Download all tickets as CSV (pivot-ready for Excel)"
           >
-            ↓ XLSX Export
+            ↓ Excel Export
           </button>
         </Filters>
         <Filters style={{ paddingTop: 0, marginTop: -4 }}>

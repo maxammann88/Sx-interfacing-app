@@ -1,8 +1,52 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ThemeProvider } from 'styled-components';
+import styled, { keyframes } from 'styled-components';
 import { theme } from './styles/theme';
 import GlobalStyles from './styles/GlobalStyles';
+
+const pulse = keyframes`
+  0%, 100% { box-shadow: 0 4px 20px rgba(255,95,0,0.25); }
+  50% { box-shadow: 0 4px 28px rgba(255,95,0,0.45); }
+`;
+
+const FloatingBtn = styled.button`
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 9999;
+  background: ${theme.colors.primary};
+  color: white;
+  border: none;
+  border-radius: 16px;
+  padding: 14px 22px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 20px rgba(255,95,0,0.25);
+  transition: all 0.2s;
+  animation: ${pulse} 3s ease-in-out infinite;
+  &:hover {
+    transform: translateY(-2px) scale(1.04);
+    box-shadow: 0 6px 28px rgba(255,95,0,0.45);
+    background: #e05500;
+  }
+  &:active { transform: translateY(0) scale(0.98); }
+`;
+
+function FloatingFeedbackButton() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  if (location.pathname === '/feedback') return null;
+  return (
+    <FloatingBtn onClick={() => navigate('/feedback')}>
+      <span style={{ fontSize: 18 }}>✦</span> Features &amp; Bugs
+    </FloatingBtn>
+  );
+}
 import Layout from './components/Layout';
 import FsmLayout from './components/FsmLayout';
 import ParameterMaintenanceLayout from './components/ParameterMaintenanceLayout';
@@ -35,6 +79,7 @@ export default function App() {
     <ThemeProvider theme={theme}>
       <GlobalStyles />
       <BrowserRouter>
+        <FloatingFeedbackButton />
         <Routes>
           <Route path="/" element={<PortalHomePage />} />
           <Route path="/feedback" element={<FeedbackPage />} />

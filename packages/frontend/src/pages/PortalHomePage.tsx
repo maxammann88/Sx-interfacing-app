@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { theme } from '../styles/theme';
 import api from '../utils/api';
-import { getSubAppPath } from './ApiManagementPage';
+import { getSubAppPath, getSubAppRegistry } from './ApiManagementPage';
 
 const fadeIn = keyframes`
   from { opacity: 0; transform: translateY(12px); }
@@ -691,140 +691,79 @@ const GuidanceLink = styled(Link)`
   &:hover { text-decoration: underline; }
 `;
 
-const initialProcesses: ProcessRow[] = [
-  {
-    title: 'Franchise Controlling',
-    progress: 1,
-    steps: [
-      {
-        label: 'Partner Requests',
-        desc: 'Person 1',
-        path: null,
-        badge: 'Planned',
-        badgeColor: '#bbb',
-        active: false,
-        deadline: null,
-        env: null,
-      },
-      {
-        label: 'Parameter Maintenance',
-        desc: 'Person 2',
-        path: '/parameter-maintenance',
-        badge: 'Live',
-        badgeColor: theme.colors.success,
-        active: true,
-        deadline: null,
-        env: 'DEV',
-      },
-      {
-        label: 'FSM – Calculation',
-        desc: 'Person 3',
-        path: '/fsm',
-        badge: 'Dev',
-        badgeColor: '#ff5f00',
-        active: true,
-        deadline: 'KW12 2026',
-        env: 'DEV',
-      },
-      {
-        label: 'Bookings & Invoicing',
-        desc: 'Person 4',
-        path: null,
-        badge: 'Planned',
-        badgeColor: '#bbb',
-        active: false,
-        deadline: null,
-        env: null,
-      },
-      {
-        label: 'Interfacing',
-        desc: 'Person 5',
-        path: '/interfacing',
-        badge: 'Live',
-        badgeColor: theme.colors.success,
-        active: true,
-        deadline: null,
-        env: 'TEST',
-      },
-      {
-        label: 'Controlling',
-        desc: 'Person 6',
-        path: null,
-        badge: 'Planned',
-        badgeColor: '#bbb',
-        active: false,
-        deadline: null,
-        env: null,
-      },
-    ],
-  },
-  {
-    title: 'B2P Controlling',
-    progress: 0,
-    steps: [
-      {
-        label: 'Partner Requests & Reconciliation',
-        desc: 'Person 1',
-        path: null,
-        badge: 'Planned',
-        badgeColor: '#bbb',
-        active: false,
-        deadline: null,
-        env: null,
-      },
-      {
-        label: 'Parameter Maintenance',
-        desc: 'Person 2',
-        path: null,
-        badge: 'Planned',
-        badgeColor: '#bbb',
-        active: false,
-        deadline: null,
-        env: null,
-      },
-      {
-        label: 'VPF',
-        desc: 'Person 3',
-        path: null,
-        badge: 'Planned',
-        badgeColor: '#bbb',
-        active: false,
-        deadline: null,
-        env: null,
-      },
-      {
-        label: 'Bonus & Accruals',
-        desc: 'Person 4',
-        path: null,
-        badge: 'Planned',
-        badgeColor: '#bbb',
-        active: false,
-        deadline: null,
-        env: null,
-      },
-      {
-        label: 'Month End Processes',
-        desc: 'Person 5',
-        path: null,
-        badge: 'Planned',
-        badgeColor: '#bbb',
-        active: false,
-        deadline: null,
-        env: null,
-      },
-      {
-        label: 'Reporting & Controlling',
-        desc: 'Person 6',
-        path: null,
-        badge: 'Planned',
-        badgeColor: '#bbb',
-        active: false,
-        deadline: null,
-        env: null,
-      },
-    ],
-  },
-];
+const BUILTIN_PATHS: Record<string, string> = {
+  'interfacing': '/interfacing',
+  'parameter maintenance': '/parameter-maintenance',
+  'fsm-calculation': '/fsm',
+  'fsm – calculation': '/fsm',
+  'fsm calculation': '/fsm',
+};
+
+const STATUS_BADGE_MAP: Record<string, { badge: string; badgeColor: string; active: boolean }> = {
+  Live: { badge: 'Live', badgeColor: '#28a745', active: true },
+  Dev: { badge: 'Dev', badgeColor: '#ff5f00', active: true },
+  Planned: { badge: 'Planned', badgeColor: '#bbb', active: false },
+  Blocked: { badge: 'Blocked', badgeColor: '#dc3545', active: false },
+};
+
+function buildProcessesFromRegistry(): ProcessRow[] {
+  const registry = getSubAppRegistry();
+  const streamOrder: string[] = [];
+  const streamMap: Record<string, typeof registry> = {};
+
+  registry.forEach(entry => {
+    if (!streamMap[entry.stream]) {
+      streamMap[entry.stream] = [];
+      streamOrder.push(entry.stream);
+    }
+    streamMap[entry.stream].push(entry);
+  });
+
+  return streamOrder.map(stream => {
+    const entries = streamMap[stream];
+    const steps: Step[] = entries.map((e, i) => {
+      const statusInfo = STATUS_BADGE_MAP[e.status] || STATUS_BADGE_MAP.Planned;
+      const normLabel = e.app.toLowerCase().replace(/[-–—]/g, ' ').replace(/\s+/g, ' ');
+      const path = BUILTIN_PATHS[normLabel] || BUILTIN_PATHS[e.app.toLowerCase()] || null;
+      return {
+        label: e.app,
+        desc: e.owner || `Person ${i + 1}`,
+        path,
+        badge: statusInfo.badge,
+        badgeColor: statusInfo.badgeColor,
+        active: statusInfo.active,
+        deadline: e.deadlineTarget || null,
+        env: (e.status === 'Live' || e.status === 'Dev') ? 'DEV' as const : null,
+      };
+    });
+    return { title: stream, progress: 0, steps };
+  });
+}
+
+function syncProcessToRegistry(streamTitle: string, steps: Step[]) {
+  try {
+    const raw = localStorage.getItem('subAppOwners_v2');
+    const registry: any[] = raw ? JSON.parse(raw) : [];
+    const existing = registry.filter(r => r.stream === streamTitle);
+    const streamOwner = existing.length > 0 ? existing[0].streamOwner || '' : '';
+
+    const otherEntries = registry.filter(r => r.stream !== streamTitle);
+    const newEntries = steps.map(s => {
+      const prev = existing.find(e => e.app === s.label);
+      return {
+        stream: streamTitle,
+        streamOwner: prev?.streamOwner || streamOwner,
+        app: s.label,
+        owner: prev?.owner || '',
+        status: prev?.status || 'Planned',
+        description: prev?.description || '',
+        deadlineTarget: prev?.deadlineTarget || '',
+      };
+    });
+
+    localStorage.setItem('subAppOwners_v2', JSON.stringify([...otherEntries, ...newEntries]));
+  } catch { /* ignore */ }
+}
 
 function makeDefaultStep(idx: number): Step {
   return {
@@ -841,7 +780,7 @@ function makeDefaultStep(idx: number): Step {
 
 export default function PortalHomePage() {
   const navigate = useNavigate();
-  const [processes, setProcesses] = useState<ProcessRow[]>(initialProcesses);
+  const [processes, setProcesses] = useState<ProcessRow[]>(() => buildProcessesFromRegistry());
   const [showAddModal, setShowAddModal] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newStepCount, setNewStepCount] = useState(6);
@@ -886,34 +825,41 @@ export default function PortalHomePage() {
       })
       .catch(() => {});
 
-    try {
-      const raw = localStorage.getItem('subAppOwners_v2');
-      if (raw) {
-        const list: { stream: string; streamOwner: string; app: string; owner: string; deadlineTarget?: string }[] = JSON.parse(raw);
-        const sMap: Record<string, string> = {};
-        const aMap: Record<string, string> = {};
-        const dMap: Record<string, string> = {};
-        list.forEach(e => {
-          if (e.stream && e.streamOwner) sMap[e.stream] = e.streamOwner;
-          if (e.app && e.owner) {
-            aMap[e.app] = e.owner;
-            aMap[e.app.replace(/-/g, ' – ')] = e.owner;
-            aMap[e.app.replace(/–/g, '-')] = e.owner;
-            aMap[e.app.replace(/[-–]/g, ' ')] = e.owner;
-          }
-          if (e.app && e.deadlineTarget) {
-            dMap[e.app] = e.deadlineTarget;
-            dMap[e.app.replace(/-/g, ' – ')] = e.deadlineTarget;
-            dMap[e.app.replace(/–/g, '-')] = e.deadlineTarget;
-            dMap[e.app.replace(/[-–]/g, ' ')] = e.deadlineTarget;
-          }
-        });
-        setStreamOwners(sMap);
-        setSubAppOwners(aMap);
-        setSubAppDeadlines(dMap);
-      }
-    } catch {}
+    refreshRegistryMaps();
   }, []);
+
+  const refreshRegistryMaps = () => {
+    try {
+      const list = getSubAppRegistry();
+      const sMap: Record<string, string> = {};
+      const aMap: Record<string, string> = {};
+      const dMap: Record<string, string> = {};
+      list.forEach(e => {
+        if (e.stream && e.streamOwner) sMap[e.stream] = e.streamOwner;
+        if (e.app && e.owner) {
+          aMap[e.app] = e.owner;
+          const variants = [
+            e.app.replace(/-/g, ' – '),
+            e.app.replace(/–/g, '-'),
+            e.app.replace(/[-–]/g, ' '),
+          ];
+          variants.forEach(v => { aMap[v] = e.owner; });
+        }
+        if (e.app && e.deadlineTarget) {
+          dMap[e.app] = e.deadlineTarget;
+          const variants = [
+            e.app.replace(/-/g, ' – '),
+            e.app.replace(/–/g, '-'),
+            e.app.replace(/[-–]/g, ' '),
+          ];
+          variants.forEach(v => { dMap[v] = e.deadlineTarget!; });
+        }
+      });
+      setStreamOwners(sMap);
+      setSubAppOwners(aMap);
+      setSubAppDeadlines(dMap);
+    } catch {}
+  };
 
 
   const findOwner = (label: string): string => {
@@ -991,28 +937,8 @@ export default function PortalHomePage() {
     }));
     const newProc: ProcessRow = { title: streamTitle, progress: 0, steps: stepDefs };
     setProcesses(prev => [...prev, newProc]);
-
-    try {
-      const raw = localStorage.getItem('subAppOwners_v2');
-      const registry: any[] = raw ? JSON.parse(raw) : [];
-      const existingApps = new Set(registry.filter(r => r.stream === streamTitle).map(r => r.app));
-      const toAdd = stepDefs
-        .filter(s => !existingApps.has(s.label))
-        .map(s => ({
-          stream: streamTitle,
-          streamOwner: '',
-          app: s.label,
-          owner: '',
-          status: 'Planned',
-          description: '',
-          deadlineTarget: '',
-        }));
-      if (toAdd.length > 0) {
-        const updated = [...registry, ...toAdd];
-        localStorage.setItem('subAppOwners_v2', JSON.stringify(updated));
-      }
-    } catch { /* ignore */ }
-
+    syncProcessToRegistry(streamTitle, stepDefs);
+    refreshRegistryMaps();
     setShowAddModal(false);
   };
 
@@ -1022,46 +948,77 @@ export default function PortalHomePage() {
       const raw = localStorage.getItem('subAppOwners_v2');
       if (raw) {
         const registry: any[] = JSON.parse(raw);
-        const updated = registry.filter(r => r.stream !== title);
-        localStorage.setItem('subAppOwners_v2', JSON.stringify(updated));
+        localStorage.setItem('subAppOwners_v2', JSON.stringify(registry.filter(r => r.stream !== title)));
       }
     } catch { /* ignore */ }
+    refreshRegistryMaps();
   };
 
   const addStepToProcess = (title: string) => {
     setProcesses(prev => prev.map(p => {
       if (p.title !== title) return p;
-      const idx = p.steps.length;
-      const newStep = makeDefaultStep(idx);
-      try {
-        const raw = localStorage.getItem('subAppOwners_v2');
-        const registry: any[] = raw ? JSON.parse(raw) : [];
-        registry.push({
-          stream: title,
-          streamOwner: streamOwners[title] || '',
-          app: newStep.label,
-          owner: '',
-          status: 'Planned',
-          description: '',
-          deadlineTarget: '',
-        });
-        localStorage.setItem('subAppOwners_v2', JSON.stringify(registry));
-      } catch { /* ignore */ }
-      return { ...p, steps: [...p.steps, newStep] };
+      const newStep = makeDefaultStep(p.steps.length);
+      const updatedSteps = [...p.steps, newStep];
+      syncProcessToRegistry(title, updatedSteps);
+      return { ...p, steps: updatedSteps };
     }));
+    refreshRegistryMaps();
   };
 
   const removeStepFromProcess = (title: string, stepIdx: number) => {
     setProcesses(prev => prev.map(p => {
       if (p.title !== title || p.steps.length <= 1) return p;
-      return { ...p, steps: p.steps.filter((_, i) => i !== stepIdx) };
+      const removedLabel = p.steps[stepIdx].label;
+      const updatedSteps = p.steps.filter((_, i) => i !== stepIdx);
+      try {
+        const raw = localStorage.getItem('subAppOwners_v2');
+        if (raw) {
+          const registry: any[] = JSON.parse(raw);
+          localStorage.setItem('subAppOwners_v2', JSON.stringify(
+            registry.filter(r => !(r.stream === title && r.app === removedLabel))
+          ));
+        }
+      } catch { /* ignore */ }
+      return { ...p, steps: updatedSteps };
     }));
+    refreshRegistryMaps();
   };
 
   const renameStepInProcess = (title: string, stepIdx: number, field: 'label' | 'desc', value: string) => {
     setProcesses(prev => prev.map(p => {
       if (p.title !== title) return p;
+      const oldLabel = p.steps[stepIdx].label;
       const steps = p.steps.map((s, i) => i === stepIdx ? { ...s, [field]: value } : s);
+
+      if (field === 'label' && value !== oldLabel) {
+        try {
+          const raw = localStorage.getItem('subAppOwners_v2');
+          if (raw) {
+            const registry: any[] = JSON.parse(raw);
+            const updated = registry.map(r =>
+              r.stream === title && r.app === oldLabel ? { ...r, app: value } : r
+            );
+            localStorage.setItem('subAppOwners_v2', JSON.stringify(updated));
+          }
+        } catch { /* ignore */ }
+        refreshRegistryMaps();
+      }
+
+      if (field === 'desc') {
+        try {
+          const raw = localStorage.getItem('subAppOwners_v2');
+          if (raw) {
+            const registry: any[] = JSON.parse(raw);
+            const stepLabel = p.steps[stepIdx].label;
+            const updated = registry.map(r =>
+              r.stream === title && r.app === stepLabel ? { ...r, owner: value } : r
+            );
+            localStorage.setItem('subAppOwners_v2', JSON.stringify(updated));
+          }
+        } catch { /* ignore */ }
+        refreshRegistryMaps();
+      }
+
       return { ...p, steps };
     }));
   };
@@ -1094,6 +1051,7 @@ export default function PortalHomePage() {
       const steps = [...p.steps];
       const [moved] = steps.splice(fromIdx, 1);
       steps.splice(dropIdx, 0, moved);
+      syncProcessToRegistry(procTitle, steps);
       return { ...p, steps };
     }));
     setDragOverTarget(null);
