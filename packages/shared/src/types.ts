@@ -106,6 +106,7 @@ export interface StatementLine {
 
 export interface PreviousMonthItem {
   nettofaelligkeit: string | null;
+  description: string;
   amount: number;
 }
 

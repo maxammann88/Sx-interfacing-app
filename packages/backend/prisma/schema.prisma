@@ -30,6 +30,7 @@ model Country {
   finalInterfacing String?
   vertragsende     DateTime?
   debitor10        String?
+  paymentBlock     Boolean          @default(false)
 
   @@index([debitor1])
   @@index([fir])
@@ -154,7 +155,14 @@ model FeedbackItem {
   type        String
   title       String
   description String?
-  status      String           @default("open")
+  notes         String?
+  jiraUrl       String?
+  confluenceUrl String?
+  deadlineWeek    String?
+  deadlineDate    DateTime?
+  deadlineHistory Json?
+  automationFTE   Float            @default(0)
+  status          String           @default("open")
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
   comments    FeedbackComment[]

@@ -1,0 +1,704 @@
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
+import styled from 'styled-components';
+import { theme } from '../styles/theme';
+import api from '../utils/api';
+
+const Page = styled.div`
+  min-height: 100vh;
+  background: ${theme.colors.background};
+`;
+
+const Header = styled.header`
+  background: ${theme.colors.secondary};
+  color: ${theme.colors.white};
+  padding: 0 32px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+`;
+
+const LogoImg = styled.img`
+  height: 36px;
+  border-radius: 6px;
+`;
+
+const BackLink = styled(Link)`
+  color: ${theme.colors.white};
+  font-size: 15px;
+  padding: 6px 10px;
+  border-radius: ${theme.borderRadius};
+  &:hover { color: ${theme.colors.primary}; background: rgba(255,95,0,0.08); }
+`;
+
+const HeaderTitle = styled.span`
+  font-size: 15px;
+  font-weight: 700;
+  color: ${theme.colors.white};
+`;
+
+const Content = styled.div`
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 32px;
+`;
+
+const PageTitle = styled.h1`
+  font-size: 24px;
+  font-weight: 800;
+  color: ${theme.colors.textPrimary};
+  margin-bottom: 24px;
+`;
+
+const SectionGrid = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 32px;
+`;
+
+const Card = styled.div`
+  background: ${theme.colors.surface};
+  border-radius: 12px;
+  box-shadow: ${theme.shadow};
+  padding: 24px;
+`;
+
+const CardTitle = styled.h2`
+  font-size: 16px;
+  font-weight: 700;
+  color: ${theme.colors.textPrimary};
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const Table = styled.table`
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+
+  th, td {
+    padding: 10px 12px;
+    border-bottom: 1px solid ${theme.colors.border};
+    text-align: left;
+  }
+
+  th {
+    font-weight: 600;
+    color: ${theme.colors.textSecondary};
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: #fafafa;
+    position: sticky;
+    top: 0;
+  }
+
+  tbody tr:hover {
+    background: #f8f9fa;
+  }
+`;
+
+const NumberInput = styled.input`
+  width: 70px;
+  padding: 4px 8px;
+  border: 1px solid ${theme.colors.border};
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: right;
+  &:focus { outline: none; border-color: ${theme.colors.primary}; }
+`;
+
+const SliderCell = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const Slider = styled.input`
+  width: 100px;
+  accent-color: ${theme.colors.primary};
+`;
+
+const ScoreBar = styled.div`
+  width: 100%;
+  height: 8px;
+  background: #eee;
+  border-radius: 4px;
+  overflow: hidden;
+`;
+
+const ScoreFill = styled.div<{ $pct: number; $color: string }>`
+  height: 100%;
+  width: ${p => p.$pct}%;
+  background: ${p => p.$color};
+  border-radius: 4px;
+  transition: width 0.3s;
+`;
+
+const Badge = styled.span<{ $color: string }>`
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 10px;
+  background: ${p => p.$color};
+  color: white;
+`;
+
+const SummaryRow = styled.div`
+  display: flex;
+  gap: 20px;
+  margin-bottom: 28px;
+`;
+
+const SummaryCard = styled.div<{ $color: string }>`
+  flex: 1;
+  background: ${theme.colors.surface};
+  border-radius: 12px;
+  box-shadow: ${theme.shadow};
+  padding: 20px 24px;
+  border-top: 4px solid ${p => p.$color};
+  text-align: center;
+`;
+
+const SummaryValue = styled.div`
+  font-size: 28px;
+  font-weight: 800;
+  color: ${theme.colors.textPrimary};
+`;
+
+const SummaryLabel = styled.div`
+  font-size: 12px;
+  color: ${theme.colors.textSecondary};
+  margin-top: 4px;
+`;
+
+const FullWidthCard = styled(Card)`
+  grid-column: 1 / -1;
+`;
+
+interface ProjectFTE {
+  id: string;
+  name: string;
+  totalFTE: number;
+  automatedFTE: number;
+  progress: number;
+}
+
+interface KPIWeight {
+  id: string;
+  name: string;
+  description: string;
+  weight: number;
+  unit: string;
+}
+
+interface TicketFTE {
+  id: number;
+  app: string;
+  title: string;
+  automationFTE: number;
+  status: string;
+  type: string;
+  deadlineDate: string | null;
+}
+
+const PROJECT_TOTAL_FTE: Record<string, number> = {
+  'Parameter Maintenance': 1.5,
+  'FSM': 3.0,
+  'Bookings & Invoicing': 2.0,
+  'Interfacing': 2.5,
+  'Controlling': 1.0,
+  'B2P': 4.0,
+};
+
+const APP_DISPLAY: Record<string, string> = {
+  'Interfacing': 'Interfacing',
+  'FSM': 'FSM',
+  'New App': 'New App',
+};
+
+const initialKPIs: KPIWeight[] = [
+  { id: 'time-saved', name: 'Time Saved', description: 'Hours saved per month through automation', weight: 30, unit: 'hrs/month' },
+  { id: 'error-reduction', name: 'Error Reduction', description: 'Reduction in manual errors', weight: 25, unit: '%' },
+  { id: 'process-coverage', name: 'Process Coverage', description: 'Percentage of process steps automated', weight: 20, unit: '%' },
+  { id: 'data-quality', name: 'Data Quality', description: 'Automated data validation score', weight: 15, unit: 'score' },
+  { id: 'user-adoption', name: 'User Adoption', description: 'Active usage rate of automated tools', weight: 10, unit: '%' },
+];
+
+const scoreRules = [
+  { range: '0 – 20%', label: 'Not Started', color: '#ccc', description: 'No significant automation implemented' },
+  { range: '21 – 40%', label: 'Initial', color: theme.colors.danger, description: 'Basic automation, mostly manual processes' },
+  { range: '41 – 60%', label: 'Developing', color: '#e05c00', description: 'Key processes partially automated' },
+  { range: '61 – 80%', label: 'Advanced', color: theme.colors.warning, description: 'Most processes automated, manual oversight' },
+  { range: '81 – 100%', label: 'Fully Automated', color: theme.colors.success, description: 'End-to-end automation achieved' },
+];
+
+const CalendarWrapper = styled.div`
+  margin-top: 8px;
+`;
+
+const CalendarNav = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+`;
+
+const CalendarNavBtn = styled.button`
+  background: none;
+  border: 1px solid ${theme.colors.border};
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 14px;
+  cursor: pointer;
+  color: ${theme.colors.textPrimary};
+  &:hover { background: #f0f0f0; }
+`;
+
+const MonthLabel = styled.span`
+  font-size: 15px;
+  font-weight: 700;
+  color: ${theme.colors.textPrimary};
+  min-width: 160px;
+  text-align: center;
+`;
+
+const CalGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+`;
+
+const DayHeader = styled.div`
+  font-size: 10px;
+  font-weight: 700;
+  color: ${theme.colors.textLight};
+  text-transform: uppercase;
+  text-align: center;
+  padding: 6px 0;
+`;
+
+const DayCell = styled.div<{ $isToday: boolean; $isCurrentMonth: boolean }>`
+  min-height: 80px;
+  background: ${p => p.$isToday ? 'rgba(255,95,0,0.06)' : p.$isCurrentMonth ? theme.colors.surface : '#fafafa'};
+  border: 1px solid ${p => p.$isToday ? theme.colors.primary : theme.colors.border};
+  border-radius: 4px;
+  padding: 4px;
+  opacity: ${p => p.$isCurrentMonth ? 1 : 0.4};
+`;
+
+const DayNum = styled.div<{ $isToday: boolean }>`
+  font-size: 11px;
+  font-weight: ${p => p.$isToday ? 800 : 600};
+  color: ${p => p.$isToday ? theme.colors.primary : theme.colors.textSecondary};
+  margin-bottom: 2px;
+`;
+
+const CalTicket = styled.div<{ $color: string }>`
+  font-size: 9px;
+  font-weight: 600;
+  padding: 2px 4px;
+  margin-bottom: 1px;
+  border-radius: 3px;
+  background: ${p => p.$color};
+  color: white;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+`;
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+function getStatusColor(status: string): string {
+  if (status === 'done') return theme.colors.success;
+  if (status === 'in_progress') return theme.colors.info;
+  if (status === 'review') return '#6f42c1';
+  if (status === 'testing') return theme.colors.warning;
+  return '#bbb';
+}
+
+function getScoreColor(pct: number): string {
+  if (pct <= 20) return '#ccc';
+  if (pct <= 40) return theme.colors.danger;
+  if (pct <= 60) return '#e05c00';
+  if (pct <= 80) return theme.colors.warning;
+  return theme.colors.success;
+}
+
+export default function AutomationControllingPage() {
+  const [tickets, setTickets] = useState<TicketFTE[]>([]);
+  const [projectTotalFTE, setProjectTotalFTE] = useState<Record<string, number>>({ ...PROJECT_TOTAL_FTE });
+  const [kpis, setKpis] = useState(initialKPIs);
+  const [loading, setLoading] = useState(true);
+  const [calMonth, setCalMonth] = useState(() => new Date().getMonth());
+  const [calYear, setCalYear] = useState(() => new Date().getFullYear());
+
+  const loadTickets = useCallback(async () => {
+    try {
+      const res = await api.get('/feedback');
+      setTickets(res.data.map((t: any) => ({
+        id: t.id,
+        app: t.app || 'Interfacing',
+        title: t.title,
+        automationFTE: t.automationFTE || 0,
+        status: t.status,
+        type: t.type,
+        deadlineDate: t.deadlineDate || null,
+      })));
+    } catch { /* ignore */ }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadTickets(); }, [loadTickets]);
+
+  const projects: ProjectFTE[] = useMemo(() => {
+    const appFTE: Record<string, number> = {};
+    const appDoneFTE: Record<string, number> = {};
+    tickets.forEach(t => {
+      const app = t.app;
+      appFTE[app] = (appFTE[app] || 0) + t.automationFTE;
+      if (t.status === 'done') appDoneFTE[app] = (appDoneFTE[app] || 0) + t.automationFTE;
+    });
+    const allApps = new Set([...Object.keys(projectTotalFTE), ...Object.keys(appFTE)]);
+    return Array.from(allApps).map(app => {
+      const total = projectTotalFTE[app] ?? 0;
+      const automated = appDoneFTE[app] ?? 0;
+      const planned = appFTE[app] ?? 0;
+      const progress = total > 0 ? Math.round((automated / total) * 100) : 0;
+      return { id: app, name: APP_DISPLAY[app] || app, totalFTE: total, automatedFTE: automated, progress, plannedFTE: planned };
+    });
+  }, [tickets, projectTotalFTE]);
+
+  const updateProjectTotalFTE = (app: string, value: number) => {
+    setProjectTotalFTE(prev => ({ ...prev, [app]: value }));
+  };
+
+  const updateKPIWeight = (id: string, weight: number) => {
+    setKpis(prev => prev.map(k => k.id === id ? { ...k, weight } : k));
+  };
+
+  const calendarDays = useMemo(() => {
+    const firstDay = new Date(calYear, calMonth, 1);
+    const startDow = (firstDay.getDay() + 6) % 7;
+    const startDate = new Date(firstDay);
+    startDate.setDate(startDate.getDate() - startDow);
+
+    const days: Date[] = [];
+    const d = new Date(startDate);
+    for (let i = 0; i < 42; i++) {
+      days.push(new Date(d));
+      d.setDate(d.getDate() + 1);
+    }
+    return days;
+  }, [calMonth, calYear]);
+
+  const ticketsByDate = useMemo(() => {
+    const map: Record<string, TicketFTE[]> = {};
+    tickets.forEach(t => {
+      if (!t.deadlineDate) return;
+      const key = t.deadlineDate.split('T')[0];
+      if (!map[key]) map[key] = [];
+      map[key].push(t);
+    });
+    return map;
+  }, [tickets]);
+
+  const navigateMonth = (dir: number) => {
+    let m = calMonth + dir;
+    let y = calYear;
+    if (m < 0) { m = 11; y--; }
+    if (m > 11) { m = 0; y++; }
+    setCalMonth(m);
+    setCalYear(y);
+  };
+
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  const totalWeight = useMemo(() => kpis.reduce((s, k) => s + k.weight, 0), [kpis]);
+
+  const totals = useMemo(() => {
+    const totalFTE = projects.reduce((s, p) => s + p.totalFTE, 0);
+    const automatedFTE = projects.reduce((s, p) => s + p.automatedFTE, 0);
+    const plannedFTE = projects.reduce((s, p) => s + ((p as any).plannedFTE || 0), 0);
+    const avgProgress = totalFTE > 0 ? Math.round((automatedFTE / totalFTE) * 100) : 0;
+    return { totalFTE, automatedFTE, plannedFTE, avgProgress };
+  }, [projects]);
+
+  return (
+    <Page>
+      <Header>
+        <Link to="/"><LogoImg src="/sixt-logo.png" alt="SIXT" /></Link>
+        <BackLink to="/">&larr;</BackLink>
+        <HeaderTitle>Automation Controlling</HeaderTitle>
+      </Header>
+
+      <Content>
+        <PageTitle>Automation Controlling</PageTitle>
+
+        {loading && <p style={{ color: theme.colors.textLight }}>Loading ticket data...</p>}
+
+        <SummaryRow>
+          <SummaryCard $color={theme.colors.primary}>
+            <SummaryValue>{totals.totalFTE.toFixed(1)}</SummaryValue>
+            <SummaryLabel>Total FTE (Budget)</SummaryLabel>
+          </SummaryCard>
+          <SummaryCard $color={theme.colors.warning}>
+            <SummaryValue>{totals.plannedFTE.toFixed(1)}</SummaryValue>
+            <SummaryLabel>Planned FTE (from Tickets)</SummaryLabel>
+          </SummaryCard>
+          <SummaryCard $color={theme.colors.success}>
+            <SummaryValue>{totals.automatedFTE.toFixed(1)}</SummaryValue>
+            <SummaryLabel>Automated FTE (Done)</SummaryLabel>
+          </SummaryCard>
+          <SummaryCard $color={getScoreColor(totals.avgProgress)}>
+            <SummaryValue>{totals.avgProgress}%</SummaryValue>
+            <SummaryLabel>Overall Automation</SummaryLabel>
+          </SummaryCard>
+          <SummaryCard $color={theme.colors.info}>
+            <SummaryValue>{(totals.totalFTE - totals.automatedFTE).toFixed(1)}</SummaryValue>
+            <SummaryLabel>Remaining Manual FTE</SummaryLabel>
+          </SummaryCard>
+        </SummaryRow>
+
+        <Card style={{ marginBottom: 28 }}>
+          <CardTitle>Release Schedule</CardTitle>
+          <CalendarWrapper>
+            <CalendarNav>
+              <CalendarNavBtn onClick={() => navigateMonth(-1)}>&larr;</CalendarNavBtn>
+              <MonthLabel>{MONTHS[calMonth]} {calYear}</MonthLabel>
+              <CalendarNavBtn onClick={() => navigateMonth(1)}>&rarr;</CalendarNavBtn>
+              <CalendarNavBtn onClick={() => { setCalMonth(new Date().getMonth()); setCalYear(new Date().getFullYear()); }}>
+                Today
+              </CalendarNavBtn>
+              <span style={{ marginLeft: 'auto', fontSize: 11, color: theme.colors.textLight }}>
+                {tickets.filter(t => t.deadlineDate).length} tickets with deadline
+              </span>
+            </CalendarNav>
+            <CalGrid>
+              {WEEKDAYS.map(d => <DayHeader key={d}>{d}</DayHeader>)}
+              {calendarDays.map((day, i) => {
+                const dateStr = day.toISOString().split('T')[0];
+                const isCurrentMonth = day.getMonth() === calMonth;
+                const isToday = dateStr === todayStr;
+                const dayTickets = ticketsByDate[dateStr] || [];
+                return (
+                  <DayCell key={i} $isToday={isToday} $isCurrentMonth={isCurrentMonth}>
+                    <DayNum $isToday={isToday}>{day.getDate()}</DayNum>
+                    {dayTickets.slice(0, 3).map(t => (
+                      <CalTicket key={t.id} $color={getStatusColor(t.status)} title={`[${t.app}] ${t.title} (${t.status})`}>
+                        <span style={{ opacity: 0.8 }}>{t.app.substring(0, 3)}</span> {t.title}
+                      </CalTicket>
+                    ))}
+                    {dayTickets.length > 3 && (
+                      <span style={{ fontSize: 9, color: theme.colors.textLight }}>+{dayTickets.length - 3} more</span>
+                    )}
+                  </DayCell>
+                );
+              })}
+            </CalGrid>
+            <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 10, color: theme.colors.textLight }}>
+              <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: '#bbb', marginRight: 4 }} />Open</span>
+              <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: theme.colors.info, marginRight: 4 }} />In Progress</span>
+              <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: '#6f42c1', marginRight: 4 }} />Review</span>
+              <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: theme.colors.warning, marginRight: 4 }} />Testing</span>
+              <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: theme.colors.success, marginRight: 4 }} />Done</span>
+            </div>
+          </CalendarWrapper>
+        </Card>
+
+        <SectionGrid>
+          <Card>
+            <CardTitle>FTE per Project (from Tickets)</CardTitle>
+            <Table>
+              <thead>
+                <tr>
+                  <th>Project</th>
+                  <th style={{ textAlign: 'right' }}>Total FTE (Budget)</th>
+                  <th style={{ textAlign: 'right' }}>Planned FTE</th>
+                  <th style={{ textAlign: 'right' }}>Automated (Done)</th>
+                  <th style={{ textAlign: 'right' }}>Progress</th>
+                  <th style={{ width: 140 }}>Visual</th>
+                </tr>
+              </thead>
+              <tbody>
+                {projects.map(p => (
+                  <tr key={p.id}>
+                    <td style={{ fontWeight: 600 }}>{p.name}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      <NumberInput
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        value={p.totalFTE}
+                        onChange={e => updateProjectTotalFTE(p.id, parseFloat(e.target.value) || 0)}
+                      />
+                    </td>
+                    <td style={{ textAlign: 'right', fontWeight: 600, color: theme.colors.warning }}>
+                      {(p as any).plannedFTE?.toFixed(1) ?? '0.0'}
+                    </td>
+                    <td style={{ textAlign: 'right', fontWeight: 600, color: theme.colors.success }}>
+                      {p.automatedFTE.toFixed(1)}
+                    </td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, color: getScoreColor(p.progress) }}>
+                      {p.progress}%
+                    </td>
+                    <td>
+                      <ScoreBar>
+                        <ScoreFill $pct={p.progress} $color={getScoreColor(p.progress)} />
+                      </ScoreBar>
+                    </td>
+                  </tr>
+                ))}
+                <tr style={{ fontWeight: 700, borderTop: `2px solid ${theme.colors.textPrimary}` }}>
+                  <td>Total</td>
+                  <td style={{ textAlign: 'right' }}>{totals.totalFTE.toFixed(1)}</td>
+                  <td style={{ textAlign: 'right', color: theme.colors.warning }}>{totals.plannedFTE.toFixed(1)}</td>
+                  <td style={{ textAlign: 'right', color: theme.colors.success }}>{totals.automatedFTE.toFixed(1)}</td>
+                  <td style={{ textAlign: 'right', color: getScoreColor(totals.avgProgress) }}>
+                    {totals.avgProgress}%
+                  </td>
+                  <td>
+                    <ScoreBar>
+                      <ScoreFill $pct={totals.avgProgress} $color={getScoreColor(totals.avgProgress)} />
+                    </ScoreBar>
+                  </td>
+                </tr>
+              </tbody>
+            </Table>
+          </Card>
+
+          <Card>
+            <CardTitle>
+              KPI Weights
+              {totalWeight !== 100 && (
+                <Badge $color={theme.colors.danger}>
+                  Sum: {totalWeight}% (should be 100%)
+                </Badge>
+              )}
+              {totalWeight === 100 && (
+                <Badge $color={theme.colors.success}>100%</Badge>
+              )}
+            </CardTitle>
+            <Table>
+              <thead>
+                <tr>
+                  <th>KPI</th>
+                  <th>Description</th>
+                  <th style={{ textAlign: 'right' }}>Weight</th>
+                  <th style={{ width: 140 }}>Adjust</th>
+                </tr>
+              </thead>
+              <tbody>
+                {kpis.map(k => (
+                  <tr key={k.id}>
+                    <td style={{ fontWeight: 600 }}>{k.name}</td>
+                    <td style={{ color: theme.colors.textSecondary, fontSize: 12 }}>{k.description}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700 }}>{k.weight}%</td>
+                    <td>
+                      <SliderCell>
+                        <Slider
+                          type="range"
+                          min={0}
+                          max={100}
+                          value={k.weight}
+                          onChange={e => updateKPIWeight(k.id, parseInt(e.target.value))}
+                        />
+                      </SliderCell>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          </Card>
+
+          <FullWidthCard>
+            <CardTitle>Score Logic & Maturity Levels</CardTitle>
+            <Table>
+              <thead>
+                <tr>
+                  <th>Automation Range</th>
+                  <th>Maturity Level</th>
+                  <th>Color</th>
+                  <th>Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                {scoreRules.map(r => (
+                  <tr key={r.range}>
+                    <td style={{ fontWeight: 600 }}>{r.range}</td>
+                    <td>
+                      <Badge $color={r.color}>{r.label}</Badge>
+                    </td>
+                    <td>
+                      <div style={{ width: 24, height: 24, borderRadius: 6, background: r.color }} />
+                    </td>
+                    <td style={{ color: theme.colors.textSecondary, fontSize: 12 }}>{r.description}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          </FullWidthCard>
+
+          <FullWidthCard>
+            <CardTitle>Ticket FTE Breakdown ({tickets.filter(t => t.automationFTE > 0).length} tickets with FTE)</CardTitle>
+            <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+              <Table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>App</th>
+                    <th>Title</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th style={{ textAlign: 'right' }}>Automation FTE</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tickets.filter(t => t.automationFTE > 0).map((t, i) => (
+                    <tr key={t.id}>
+                      <td style={{ color: theme.colors.textLight }}>{i + 1}</td>
+                      <td>{t.app}</td>
+                      <td style={{ fontWeight: 600 }}>{t.title}</td>
+                      <td>
+                        <Badge $color={t.type === 'bug' ? theme.colors.danger : '#6f42c1'}>
+                          {t.type === 'bug' ? 'Bug' : 'Feature'}
+                        </Badge>
+                      </td>
+                      <td>
+                        <Badge $color={
+                          t.status === 'done' ? theme.colors.success :
+                          t.status === 'in_progress' ? theme.colors.info :
+                          t.status === 'review' ? '#6f42c1' :
+                          t.status === 'testing' ? theme.colors.warning : '#ccc'
+                        }>
+                          {t.status === 'in_progress' ? 'In Progress' :
+                           t.status.charAt(0).toUpperCase() + t.status.slice(1)}
+                        </Badge>
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 700 }}>{t.automationFTE.toFixed(1)}</td>
+                    </tr>
+                  ))}
+                  {tickets.filter(t => t.automationFTE > 0).length === 0 && (
+                    <tr>
+                      <td colSpan={6} style={{ textAlign: 'center', color: theme.colors.textLight, padding: 24 }}>
+                        No tickets with Automation FTE set yet. Go to "App Requests & Bugs" and set FTE values on feature tickets.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </Table>
+            </div>
+          </FullWidthCard>
+        </SectionGrid>
+      </Content>
+    </Page>
+  );
+}

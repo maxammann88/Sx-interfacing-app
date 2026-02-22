@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import styled from 'styled-components';
 import api from '../utils/api';
 import { formatEur, generatePeriodOptions, getDefaultPeriod, formatPeriodLabel } from '../utils/format';
-import type { OverviewRow } from '@sixt/shared';
+import type { OverviewRow, StatementData, StatementLine, PaymentItem } from '@sixt/shared';
 import {
   PageTitle, Card, Button, Select, Label, FormGroup, FormRow,
   Table, Spinner, Alert, AmountCell, SubtotalRow, Input, SectionTitle,
@@ -70,6 +70,96 @@ const ThresholdInput = styled(Input)`
   padding: 3px 6px;
   font-size: 11px;
   text-align: right;
+`;
+
+const ModalOverlay = styled.div`
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+`;
+
+const ModalBox = styled.div`
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+  max-width: 680px;
+  width: 95%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+`;
+
+const ModalHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid ${theme.colors.border};
+`;
+
+const ModalTitle = styled.h3`
+  font-size: 15px;
+  font-weight: 700;
+  color: ${theme.colors.textPrimary};
+`;
+
+const ModalClose = styled.button`
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: ${theme.colors.textSecondary};
+  padding: 0 4px;
+  line-height: 1;
+  &:hover { color: ${theme.colors.textPrimary}; }
+`;
+
+const ModalBody = styled.div`
+  padding: 16px 20px 20px;
+  overflow-y: auto;
+`;
+
+const BreakdownTable = styled.table`
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  th {
+    text-align: left;
+    padding: 6px 8px;
+    background: ${theme.colors.secondary};
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  td {
+    padding: 5px 8px;
+    border-bottom: 1px solid ${theme.colors.border};
+  }
+  tr:hover td {
+    background: #f9f9f9;
+  }
+`;
+
+const BreakdownTotal = styled.tr`
+  td {
+    font-weight: 700;
+    background: #f0f0f0 !important;
+    border-top: 2px solid ${theme.colors.secondary};
+  }
+`;
+
+const ClickableAmount = styled.span`
+  cursor: pointer;
+  border-bottom: 1px dashed ${theme.colors.textSecondary};
+  transition: all 0.15s;
+  &:hover {
+    color: ${theme.colors.primary};
+    border-color: ${theme.colors.primary};
+  }
 `;
 
 const DeltaSpan = styled.span<{ $level: 'normal' | 'warning' | 'danger' }>`
@@ -176,6 +266,11 @@ export default function StatementOverviewPage() {
   const [error, setError] = useState('');
   const [thresholds, setThresholds] = useState(DEFAULT_THRESHOLDS);
   const [showThresholds, setShowThresholds] = useState(false);
+
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
+  const [breakdownLoading, setBreakdownLoading] = useState(false);
+  const [breakdownData, setBreakdownData] = useState<{ lines: { desc: string; ref: string; amount: number; date?: string }[]; total: number } | null>(null);
+  const [breakdownTitle, setBreakdownTitle] = useState('');
 
   const periods = generatePeriodOptions();
   const last3 = getPreviousPeriods(period, 3);
@@ -312,6 +407,112 @@ export default function StatementOverviewPage() {
     }
   };
 
+  const openBreakdown = useCallback(async (countryId: number, countryName: string, catKey: CategoryKey) => {
+    setBreakdownLoading(true);
+    setBreakdownOpen(true);
+    setBreakdownData(null);
+
+    const catLabels: Record<CategoryKey, string> = {
+      clearing: 'Clearing Statement',
+      billing: 'Billing Statement',
+      total: 'Total Interfacing Due',
+      overdue: 'Overdue Balance',
+      due: 'Due Balance',
+      sixt: 'Payment by Sixt',
+      partner: 'Payment by Partner',
+      balance: 'Balance (Open Items)',
+    };
+    setBreakdownTitle(`${countryName} – ${catLabels[catKey]}`);
+
+    try {
+      const res = await api.get(`/statement/${countryId}`, {
+        params: { period, releaseDate },
+      });
+      const st: StatementData = res.data.data;
+
+      let lines: { desc: string; ref: string; amount: number; date?: string }[] = [];
+      let total = 0;
+
+      switch (catKey) {
+        case 'clearing':
+          lines = st.clearing.map((l: StatementLine) => ({ desc: l.description, ref: l.reference, amount: l.amount }));
+          total = st.clearingSubtotal;
+          break;
+        case 'billing':
+          lines = st.billing.map((l: StatementLine) => ({ desc: l.description, ref: l.reference, amount: l.amount, date: l.date }));
+          total = st.billingSubtotal;
+          break;
+        case 'total':
+          lines = [
+            { desc: 'Clearing Subtotal', ref: '', amount: st.clearingSubtotal },
+            { desc: 'Billing Subtotal', ref: '', amount: st.billingSubtotal },
+          ];
+          total = st.totalInterfacingDue;
+          break;
+        case 'overdue': {
+          const overdueItems = (st.accountStatement.previousMonthItems || [])
+            .filter((item: any) => item.nettofaelligkeit && item.nettofaelligkeit < st.releaseDate);
+          lines = overdueItems.map((item: any) => ({
+            desc: item.description || item.nettofaelligkeit || 'Overdue item',
+            ref: item.nettofaelligkeit || '',
+            amount: item.amount,
+          }));
+          total = st.accountStatement.overdueBalance;
+          if (lines.length === 0) lines = [{ desc: 'Overdue balance', ref: '', amount: total }];
+          break;
+        }
+        case 'due': {
+          const dueItems = (st.accountStatement.previousMonthItems || [])
+            .filter((item: any) => item.nettofaelligkeit && item.nettofaelligkeit >= st.releaseDate);
+          lines = dueItems.map((item: any) => ({
+            desc: item.description || item.nettofaelligkeit || 'Due item',
+            ref: item.nettofaelligkeit || '',
+            amount: item.amount,
+          }));
+          total = st.accountStatement.dueBalance;
+          if (lines.length === 0) lines = [{ desc: `Due until ${st.accountStatement.dueUntilDate}`, ref: '', amount: total }];
+          break;
+        }
+        case 'sixt':
+          lines = (st.accountStatement.paymentBySixtItems || []).map((p: PaymentItem) => ({
+            desc: p.description || 'Payment by Sixt',
+            ref: '',
+            amount: p.amount,
+            date: p.date,
+          }));
+          total = st.accountStatement.paymentBySixt;
+          if (lines.length === 0) lines = [{ desc: 'Payment by Sixt', ref: '', amount: total }];
+          break;
+        case 'partner':
+          lines = (st.accountStatement.paymentByPartnerItems || []).map((p: PaymentItem) => ({
+            desc: p.description || 'Payment by Partner',
+            ref: '',
+            amount: p.amount,
+            date: p.date,
+          }));
+          total = st.accountStatement.paymentByPartner;
+          if (lines.length === 0) lines = [{ desc: 'Payment by Partner', ref: '', amount: total }];
+          break;
+        case 'balance':
+          lines = [
+            { desc: 'Overdue Balance', ref: '', amount: st.accountStatement.overdueBalance },
+            { desc: 'Due Balance', ref: '', amount: st.accountStatement.dueBalance },
+            { desc: 'Payment by Sixt', ref: '', amount: st.accountStatement.paymentBySixt },
+            { desc: 'Payment by Partner', ref: '', amount: st.accountStatement.paymentByPartner },
+            { desc: 'Total Interfacing Due', ref: '', amount: st.totalInterfacingDue },
+          ];
+          total = st.accountStatement.balanceOpenItems;
+          break;
+      }
+
+      setBreakdownData({ lines, total });
+    } catch {
+      setBreakdownData({ lines: [{ desc: 'Error loading breakdown', ref: '', amount: 0 }], total: 0 });
+    } finally {
+      setBreakdownLoading(false);
+    }
+  }, [period, releaseDate]);
+
   const updateThreshold = (key: CategoryKey, field: 'warn' | 'danger', value: string) => {
     const num = parseInt(value, 10);
     if (isNaN(num) || num < 0) return;
@@ -332,7 +533,7 @@ export default function StatementOverviewPage() {
     { clearing: 0, billing: 0, total: 0, overdue: 0, due: 0, sixt: 0, partner: 0, balance: 0 },
   );
 
-  function renderAmountWithDelta(currentVal: number, countryId: number, catKey: CategoryKey, bold?: boolean) {
+  function renderAmountWithDelta(currentVal: number, countryId: number, catKey: CategoryKey, bold?: boolean, countryName?: string) {
     const prev = prevMap[countryId];
     const prevVal = prev ? rowValue(prev, catKey) : null;
     const pct = prevVal !== null ? pctChange(currentVal, prevVal) : null;
@@ -341,7 +542,9 @@ export default function StatementOverviewPage() {
 
     return (
       <AmountCell style={bold ? { fontWeight: 600 } : undefined}>
-        {formatEur(currentVal)}
+        <ClickableAmount onClick={() => openBreakdown(countryId, countryName || '', catKey)}>
+          {formatEur(currentVal)}
+        </ClickableAmount>
         {prevVal !== null && pct !== null && pct !== 0 && (
           <DeltaSpan $level={level}>{formatPct(pct)}</DeltaSpan>
         )}
@@ -468,14 +671,14 @@ export default function StatementOverviewPage() {
                   <td>{r.fir}</td>
                   <td><strong>{r.name}</strong></td>
                   <td>{r.iso}</td>
-                  {renderAmountWithDelta(r.clearingSubtotal, r.countryId, 'clearing')}
-                  {renderAmountWithDelta(r.billingSubtotal, r.countryId, 'billing')}
-                  {renderAmountWithDelta(r.totalInterfacingDue, r.countryId, 'total', true)}
-                  {renderAmountWithDelta(r.overdueBalance, r.countryId, 'overdue')}
-                  {renderAmountWithDelta(r.dueBalance, r.countryId, 'due')}
-                  {renderAmountWithDelta(r.paymentBySixt, r.countryId, 'sixt')}
-                  {renderAmountWithDelta(r.paymentByPartner, r.countryId, 'partner')}
-                  {renderAmountWithDelta(r.balanceOpenItems, r.countryId, 'balance', true)}
+                  {renderAmountWithDelta(r.clearingSubtotal, r.countryId, 'clearing', false, r.name)}
+                  {renderAmountWithDelta(r.billingSubtotal, r.countryId, 'billing', false, r.name)}
+                  {renderAmountWithDelta(r.totalInterfacingDue, r.countryId, 'total', true, r.name)}
+                  {renderAmountWithDelta(r.overdueBalance, r.countryId, 'overdue', false, r.name)}
+                  {renderAmountWithDelta(r.dueBalance, r.countryId, 'due', false, r.name)}
+                  {renderAmountWithDelta(r.paymentBySixt, r.countryId, 'sixt', false, r.name)}
+                  {renderAmountWithDelta(r.paymentByPartner, r.countryId, 'partner', false, r.name)}
+                  {renderAmountWithDelta(r.balanceOpenItems, r.countryId, 'balance', true, r.name)}
                   <td>
                     <DownloadGroup>
                       {last3.map((p) => (
@@ -519,6 +722,46 @@ export default function StatementOverviewPage() {
             No data found. Select a period to load data.
           </p>
         </Card>
+      )}
+
+      {breakdownOpen && (
+        <ModalOverlay onClick={() => setBreakdownOpen(false)}>
+          <ModalBox onClick={e => e.stopPropagation()}>
+            <ModalHeader>
+              <ModalTitle>{breakdownTitle}</ModalTitle>
+              <ModalClose onClick={() => setBreakdownOpen(false)}>&times;</ModalClose>
+            </ModalHeader>
+            <ModalBody>
+              {breakdownLoading && <Spinner />}
+              {!breakdownLoading && breakdownData && (
+                <BreakdownTable>
+                  <thead>
+                    <tr>
+                      <th>Description</th>
+                      <th>Reference</th>
+                      {breakdownData.lines.some(l => l.date) && <th>Date</th>}
+                      <th style={{ textAlign: 'right' }}>EUR Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {breakdownData.lines.map((line, i) => (
+                      <tr key={i}>
+                        <td>{line.desc}</td>
+                        <td>{line.ref}</td>
+                        {breakdownData.lines.some(l => l.date) && <td>{line.date || ''}</td>}
+                        <td style={{ textAlign: 'right' }}>{formatEur(line.amount)}</td>
+                      </tr>
+                    ))}
+                    <BreakdownTotal>
+                      <td colSpan={breakdownData.lines.some(l => l.date) ? 3 : 2}><strong>TOTAL</strong></td>
+                      <td style={{ textAlign: 'right' }}><strong>{formatEur(breakdownData.total)}</strong></td>
+                    </BreakdownTotal>
+                  </tbody>
+                </BreakdownTable>
+              )}
+            </ModalBody>
+          </ModalBox>
+        </ModalOverlay>
       )}
     </div>
   );

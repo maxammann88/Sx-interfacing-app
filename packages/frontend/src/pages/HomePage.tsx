@@ -45,11 +45,6 @@ const pages = [
     desc: 'Upload SAP CSV files and import them into the database.',
   },
   {
-    path: '/interfacing/stammdaten/view',
-    title: 'Master Data Overview',
-    desc: 'View, filter and search all countries with master data.',
-  },
-  {
     path: '/interfacing/statement',
     title: 'Interfacing Statement',
     desc: 'Generate and view monthly interfacing statements per country.',

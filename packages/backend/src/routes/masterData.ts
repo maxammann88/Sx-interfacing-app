@@ -29,4 +29,18 @@ router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
   }
 });
 
+router.patch('/:id/payment-block', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = parseInt(req.params.id as string, 10);
+    const { paymentBlock } = req.body;
+    const country = await prisma.country.update({
+      where: { id },
+      data: { paymentBlock: !!paymentBlock },
+    });
+    res.json({ success: true, data: country });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

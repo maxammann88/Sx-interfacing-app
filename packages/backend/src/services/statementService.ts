@@ -144,6 +144,7 @@ export async function generateStatement(
 
   const previousMonthItems = previousMonthData.map(row => ({
     nettofaelligkeit: row.nettofaelligkeit ? formatDate(row.nettofaelligkeit) : null,
+    description: row.text || row.belegkopftext || row.belegnummer || '',
     amount: inv(row.betragHauswaehrung),
   }));
 

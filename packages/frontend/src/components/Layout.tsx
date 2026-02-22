@@ -69,11 +69,12 @@ const Main = styled.main`
 
 const navItems = [
   { path: '/interfacing/import', label: 'Data Import' },
-  { path: '/interfacing/stammdaten/view', label: 'Master Data' },
   { path: '/interfacing/statement', label: 'Statement' },
   { path: '/interfacing/overview', label: 'Statement Overview' },
   { path: '/interfacing/planning', label: 'Interfacing Planning' },
   { path: '/interfacing/export', label: 'PDF Export' },
+  { path: '/interfacing/approval', label: 'Approval Flow' },
+  { path: '/interfacing/data-quality', label: 'Data Quality Check' },
 ];
 
 export default function Layout() {
