@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import { PageTitle } from '../../components/ui';
 import { theme } from '../../styles/theme';
 import api from '../../utils/api';
+import { getSubAppRegistry } from '../ApiManagementPage';
 
 interface FeedbackComment {
   id: number;
@@ -28,11 +29,25 @@ interface FeedbackItem {
   deadlineWeek: string | null;
   deadlineDate: string | null;
   deadlineHistory: DeadlineHistoryEntry[] | null;
+  assignee: string | null;
   automationFTE: number;
   status: string;
   createdAt: string;
   updatedAt: string;
   comments: FeedbackComment[];
+}
+
+function getTeamMembers() {
+  const reg = getSubAppRegistry();
+  const names = new Set<string>();
+  reg.forEach(r => { if (r.owner) names.add(r.owner); if (r.streamOwner) names.add(r.streamOwner); });
+  return Array.from(names).sort();
+}
+
+function getFsmDefaultAssignee() {
+  const reg = getSubAppRegistry();
+  const fsm = reg.find(r => r.app.toLowerCase().includes('fsm'));
+  return fsm?.owner || fsm?.streamOwner || '';
 }
 
 const STATUS_FLOW: Record<string, { next: string; label: string }> = {
@@ -318,6 +333,39 @@ const FTELabel = styled.span`
   color: ${theme.colors.textSecondary};
 `;
 
+const AssigneeRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+`;
+
+const AssigneeSelect = styled.select`
+  padding: 4px 8px;
+  border: 1px solid ${theme.colors.border};
+  border-radius: ${theme.borderRadius};
+  font-size: 12px;
+  color: ${theme.colors.textPrimary};
+  background: white;
+  &:focus { outline: none; border-color: ${theme.colors.primary}; }
+`;
+
+const CursorBtn = styled.button`
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  border: none;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  letter-spacing: 0.3px;
+  &:hover { filter: brightness(1.1); }
+`;
+
 const DeadlineSection = styled.div`
   margin-top: 16px;
   padding: 14px 16px;
@@ -454,6 +502,8 @@ export default function FsmFeatureRequestsPage() {
   const [items, setItems] = useState<FeedbackItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('all');
+  const TEAM_MEMBERS = useMemo(() => getTeamMembers(), []);
+  const fsmDefaultAssignee = useMemo(() => getFsmDefaultAssignee(), []);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [notesEdits, setNotesEdits] = useState<Record<number, string>>({});
   const [notesSaving, setNotesSaving] = useState<Record<number, boolean>>({});
@@ -521,6 +571,27 @@ export default function FsmFeatureRequestsPage() {
       await api.patch(`/feedback/${item.id}/automation-fte`, { automationFTE: val });
       await loadItems();
     } catch { /* ignore */ }
+  };
+
+  const handleAssigneeChange = async (item: FeedbackItem, assignee: string) => {
+    try {
+      await api.patch(`/feedback/${item.id}/assignee`, { assignee: assignee || null });
+      await loadItems();
+    } catch { /* ignore */ }
+  };
+
+  const handleSendToCursor = (item: FeedbackItem) => {
+    const lines = [
+      `Task: ${item.title}`,
+      item.description ? `Description: ${item.description}` : '',
+      `App: ${item.app}`,
+      `Type: ${item.type}`,
+      item.notes ? `Notes: ${item.notes}` : '',
+      item.deadlineDate ? `Deadline: ${item.deadlineDate}` : '',
+    ].filter(Boolean).join('\n');
+    navigator.clipboard.writeText(lines).then(() => {
+      alert('Ticket prompt copied to clipboard!\\n\\nOpen Cursor → Plan Mode (Cmd+L) → Paste (Cmd+V)');
+    });
   };
 
   const handleAddComment = async (id: number) => {
@@ -677,6 +748,25 @@ export default function FsmFeatureRequestsPage() {
                     <span style={{ fontSize: 10, color: theme.colors.textLight }}>~45% &middot; 5th–15th of month</span>
                   </FTERow>
                 )}
+
+                <AssigneeRow>
+                  <FTELabel>Assignee:</FTELabel>
+                  <AssigneeSelect
+                    value={item.assignee || fsmDefaultAssignee}
+                    onChange={e => handleAssigneeChange(item, e.target.value)}
+                  >
+                    <option value="">– Unassigned –</option>
+                    {TEAM_MEMBERS.map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </AssigneeSelect>
+                  {!item.assignee && fsmDefaultAssignee && (
+                    <span style={{ fontSize: 9, color: theme.colors.textLight }}>default: {fsmDefaultAssignee} (from registry)</span>
+                  )}
+                  <CursorBtn onClick={() => handleSendToCursor(item)} title="Copy ticket as prompt for Cursor Plan Mode">
+                    ▶ Send to Cursor
+                  </CursorBtn>
+                </AssigneeRow>
 
                 <Section>
                   <SectionLabel>Working Notes &amp; Implementation Plan</SectionLabel>

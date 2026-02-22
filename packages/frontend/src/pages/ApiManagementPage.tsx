@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import styled from 'styled-components';
 import { theme } from '../styles/theme';
+import api from '../utils/api';
 import DbDocumentationPage from './DbDocumentationPage';
 
 const Page = styled.div`
@@ -332,8 +333,393 @@ function ApiRegistryTab() {
   );
 }
 
+interface SubAppOwnerEntry {
+  stream: string;
+  streamOwner: string;
+  app: string;
+  owner: string;
+  status: 'Live' | 'Dev' | 'Planned' | 'Blocked';
+  description: string;
+  deadlineTarget?: string;
+}
+
+const DEFAULT_OWNERS: SubAppOwnerEntry[] = [
+  { stream: 'Franchise Controlling', streamOwner: 'Inês Boavida Couto', app: 'Partner Requests', owner: '', status: 'Planned', description: 'Partner onboarding and request handling' },
+  { stream: 'Franchise Controlling', streamOwner: 'Inês Boavida Couto', app: 'Parameter Maintenance', owner: 'Herbert Krenn', status: 'Live', description: 'Country parameters, account mapping, payment terms' },
+  { stream: 'Franchise Controlling', streamOwner: 'Inês Boavida Couto', app: 'FSM-Calculation', owner: 'Max Ammann', status: 'Dev', description: 'Franchise Statement Modernization calculation engine' },
+  { stream: 'Franchise Controlling', streamOwner: 'Inês Boavida Couto', app: 'Bookings & Invoicing', owner: '', status: 'Planned', description: 'Booking data and invoicing workflows' },
+  { stream: 'Franchise Controlling', streamOwner: 'Inês Boavida Couto', app: 'Interfacing', owner: 'Henning Seidel', status: 'Live', description: 'Monthly interfacing statements, SAP imports, exports' },
+  { stream: 'Franchise Controlling', streamOwner: 'Inês Boavida Couto', app: 'Controlling', owner: '', status: 'Planned', description: 'Franchise controlling dashboards & reporting' },
+  { stream: 'B2P Controlling', streamOwner: '', app: 'Partner Requests & Reconciliation', owner: '', status: 'Planned', description: 'Partner inquiries and reconciliation workflows' },
+  { stream: 'B2P Controlling', streamOwner: '', app: 'Parameter Maintenance', owner: '', status: 'Planned', description: 'B2P-specific parameter management' },
+  { stream: 'B2P Controlling', streamOwner: '', app: 'VPF', owner: '', status: 'Planned', description: 'Variable Performance Fee calculation' },
+  { stream: 'B2P Controlling', streamOwner: '', app: 'Bonus & Accruals', owner: '', status: 'Planned', description: 'Bonus tracking and accrual management' },
+  { stream: 'B2P Controlling', streamOwner: '', app: 'Month End Processes', owner: '', status: 'Planned', description: 'Month-end closing activities' },
+  { stream: 'B2P Controlling', streamOwner: '', app: 'Reporting & Controlling', owner: '', status: 'Planned', description: 'B2P dashboards and KPIs' },
+];
+
+const STATUS_OPTIONS: SubAppOwnerEntry['status'][] = ['Live', 'Dev', 'Planned', 'Blocked'];
+
+const STATUS_COLORS: Record<string, string> = {
+  Live: '#28a745',
+  Dev: '#ff5f00',
+  Planned: '#999',
+  Blocked: '#dc3545',
+};
+
+function loadOwners(): SubAppOwnerEntry[] {
+  try {
+    const raw = localStorage.getItem('subAppOwners_v2');
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return DEFAULT_OWNERS;
+}
+
+function saveOwners(owners: SubAppOwnerEntry[]) {
+  localStorage.setItem('subAppOwners_v2', JSON.stringify(owners));
+}
+
+export function getSubAppRegistry(): SubAppOwnerEntry[] {
+  return loadOwners();
+}
+
+export function slugify(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+}
+
+const BUILTIN_ROUTES: Record<string, string> = {
+  'fsm-calculation': '/fsm',
+  'interfacing': '/interfacing',
+  'parameter-maintenance': '/parameter-maintenance',
+};
+
+export function getSubAppPath(appName: string): string | null {
+  const slug = slugify(appName);
+  if (BUILTIN_ROUTES[slug]) return BUILTIN_ROUTES[slug];
+  const started = getStartedApps();
+  if (started.includes(slug)) return `/sub-app/${slug}`;
+  return null;
+}
+
+export function getStartedApps(): string[] {
+  try {
+    const raw = localStorage.getItem('startedSubApps_v1');
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return [];
+}
+
+export function startSubApp(slug: string) {
+  const apps = getStartedApps();
+  if (!apps.includes(slug)) {
+    apps.push(slug);
+    localStorage.setItem('startedSubApps_v1', JSON.stringify(apps));
+  }
+}
+
+export function isSubAppStarted(appName: string): boolean {
+  const slug = slugify(appName);
+  if (BUILTIN_ROUTES[slug]) return true;
+  return getStartedApps().includes(slug);
+}
+
+const OwnerContent = styled.div`
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 32px;
+`;
+
+const OwnerTable = styled.table`
+  width: 100%;
+  border-collapse: collapse;
+  th, td {
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid ${theme.colors.border};
+    font-size: 13px;
+  }
+  th {
+    background: ${theme.colors.secondary};
+    color: white;
+    font-weight: 700;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  tr:hover td { background: #f8f8f8; }
+`;
+
+const OwnerInput = styled.input`
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid ${theme.colors.border};
+  border-radius: 6px;
+  font-size: 13px;
+  &:focus { outline: none; border-color: ${theme.colors.primary}; }
+`;
+
+const AddRowBtn = styled.button`
+  margin-top: 16px;
+  padding: 8px 18px;
+  background: ${theme.colors.primary};
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  &:hover { filter: brightness(1.1); }
+`;
+
+const DeleteRowBtn = styled.button`
+  background: none;
+  border: none;
+  color: ${theme.colors.danger};
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  &:hover { background: rgba(220,53,69,0.08); }
+`;
+
+const StatusBadge = styled.span<{ $color: string }>`
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: white;
+  background: ${p => p.$color};
+`;
+
+const StartAppBtn = styled.button`
+  padding: 4px 12px;
+  background: ${theme.colors.success};
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  &:hover { filter: brightness(1.1); }
+`;
+
+const OpenAppLink = styled(Link)`
+  padding: 4px 12px;
+  background: ${theme.colors.info};
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-decoration: none;
+  &:hover { filter: brightness(1.1); }
+`;
+
+const StatusSelect = styled.select`
+  padding: 4px 8px;
+  border: 1px solid ${theme.colors.border};
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  background: white;
+  &:focus { outline: none; border-color: ${theme.colors.primary}; }
+`;
+
+const StreamHeader = styled.tr`
+  td {
+    background: ${theme.colors.secondary} !important;
+    color: white !important;
+    font-weight: 700 !important;
+    font-size: 13px !important;
+    padding: 12px 14px !important;
+  }
+`;
+
+function SubAppOwnersTab() {
+  const [owners, setOwners] = useState<SubAppOwnerEntry[]>(loadOwners);
+  const [ticketDeadlines, setTicketDeadlines] = useState<Record<string, string>>({});
+  const [startedApps, setStartedApps] = useState<string[]>(getStartedApps());
+
+  useEffect(() => {
+    api.get('/feedback')
+      .then(res => {
+        const items: any[] = res.data || [];
+        const byApp: Record<string, string[]> = {};
+        items.forEach(it => {
+          if (!it.app || !it.deadlineDate) return;
+          const key = (it.app as string).toLowerCase();
+          if (!byApp[key]) byApp[key] = [];
+          byApp[key].push(it.deadlineDate);
+        });
+        const latest: Record<string, string> = {};
+        Object.entries(byApp).forEach(([app, dates]) => {
+          dates.sort();
+          latest[app] = dates[dates.length - 1].slice(0, 10);
+        });
+        setTicketDeadlines(latest);
+      })
+      .catch(() => {});
+  }, []);
+
+  const getTicketDeadline = (appName: string): string => {
+    const norm = (s: string) => s.toLowerCase().replace(/[-–—\s]+/g, '');
+    const direct = ticketDeadlines[appName.toLowerCase()];
+    if (direct) return direct;
+    for (const [key, val] of Object.entries(ticketDeadlines)) {
+      if (norm(key) === norm(appName)) return val;
+      if (norm(key).includes(norm(appName)) || norm(appName).includes(norm(key))) return val;
+    }
+    return '';
+  };
+
+  const update = (idx: number, field: keyof SubAppOwnerEntry, value: string) => {
+    setOwners(prev => {
+      const next = prev.map((o, i) => i === idx ? { ...o, [field]: value } : o);
+      saveOwners(next);
+      return next;
+    });
+  };
+
+  const addRow = (stream: string, streamOwner: string) => {
+    setOwners(prev => {
+      const next = [...prev, { stream, streamOwner, app: '', owner: '', status: 'Planned' as const, description: '', deadlineTarget: '' }];
+      saveOwners(next);
+      return next;
+    });
+  };
+
+  const removeRow = (idx: number) => {
+    setOwners(prev => {
+      const next = prev.filter((_, i) => i !== idx);
+      saveOwners(next);
+      return next;
+    });
+  };
+
+  const streams = Array.from(new Set(owners.map(o => o.stream)));
+
+  return (
+    <OwnerContent>
+      <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 6, color: theme.colors.textPrimary }}>Stream &amp; Sub-App Registry</h2>
+      <p style={{ fontSize: 12, color: theme.colors.textSecondary, marginBottom: 20 }}>
+        Each Stream (e.g. Franchise Controlling) has a Stream Owner and contains multiple Sub-Apps. Each Sub-App has its own Owner and Status.
+      </p>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+        {STATUS_OPTIONS.map(s => (
+          <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <StatusBadge $color={STATUS_COLORS[s]}>{s}</StatusBadge>
+            <span style={{ fontSize: 11, color: theme.colors.textSecondary }}>
+              {owners.filter(o => o.status === s).length}
+            </span>
+          </div>
+        ))}
+      </div>
+      <OwnerTable>
+        <thead>
+          <tr>
+            <th style={{ width: '16%' }}>Sub-App</th>
+            <th style={{ width: '12%' }}>Owner</th>
+            <th style={{ width: '8%' }}>Status</th>
+            <th style={{ width: '12%' }}>Deadline Target</th>
+            <th>Description</th>
+            <th style={{ width: 100 }}>Actions</th>
+            <th style={{ width: 30 }}></th>
+          </tr>
+        </thead>
+        <tbody>
+          {streams.map(stream => {
+            const streamEntries = owners.map((o, origIdx) => ({ ...o, origIdx })).filter(o => o.stream === stream);
+            const streamOwner = streamEntries[0]?.streamOwner || '';
+            return (
+              <React.Fragment key={stream}>
+                <StreamHeader>
+                  <td colSpan={2}>
+                    Stream: {stream || '(unnamed)'}
+                  </td>
+                  <td colSpan={4}>
+                    <span style={{ fontSize: 11, opacity: 0.8 }}>Stream Owner: </span>
+                    <OwnerInput
+                      value={streamOwner}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setOwners(prev => {
+                          const next = prev.map(o => o.stream === stream ? { ...o, streamOwner: val } : o);
+                          saveOwners(next);
+                          return next;
+                        });
+                      }}
+                      placeholder="Stream owner..."
+                      style={{ width: 180, background: 'rgba(255,255,255,0.15)', color: 'white', border: '1px solid rgba(255,255,255,0.3)' }}
+                    />
+                  </td>
+                  <td>
+                    <AddRowBtn
+                      onClick={() => addRow(stream, streamOwner)}
+                      style={{ margin: 0, padding: '4px 10px', fontSize: 10 }}
+                    >+</AddRowBtn>
+                  </td>
+                </StreamHeader>
+                {streamEntries.map(o => {
+                  const ticketDl = getTicketDeadline(o.app);
+                  const appSlug = slugify(o.app);
+                  const appPath = getSubAppPath(o.app);
+                  const hasBuiltin = !!BUILTIN_ROUTES[appSlug];
+                  const isStarted = isSubAppStarted(o.app);
+                  return (
+                    <tr key={o.origIdx}>
+                      <td><OwnerInput value={o.app} onChange={e => update(o.origIdx, 'app', e.target.value)} placeholder="Sub-App name..." /></td>
+                      <td><OwnerInput value={o.owner} onChange={e => update(o.origIdx, 'owner', e.target.value)} placeholder="Owner name..." /></td>
+                      <td>
+                        <StatusSelect value={o.status} onChange={e => update(o.origIdx, 'status', e.target.value)}>
+                          {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                        </StatusSelect>
+                      </td>
+                      <td>
+                        <OwnerInput
+                          type="date"
+                          value={o.deadlineTarget || ''}
+                          onChange={e => update(o.origIdx, 'deadlineTarget', e.target.value)}
+                          style={{ width: '100%' }}
+                        />
+                        {!o.deadlineTarget && ticketDl && (
+                          <span style={{ fontSize: 9, color: theme.colors.textLight, display: 'block', marginTop: 2 }}>
+                            from tickets: {ticketDl}
+                          </span>
+                        )}
+                      </td>
+                      <td><OwnerInput value={o.description} onChange={e => update(o.origIdx, 'description', e.target.value)} placeholder="Description..." /></td>
+                      <td>
+                        {o.app && !isStarted && !hasBuiltin && (
+                          <StartAppBtn onClick={() => { startSubApp(appSlug); setStartedApps(getStartedApps()); }}>
+                            ▶ Start Sub-App
+                          </StartAppBtn>
+                        )}
+                        {o.app && appPath && (
+                          <OpenAppLink to={appPath + (hasBuiltin ? '' : '/feature-requests')}>
+                            Open →
+                          </OpenAppLink>
+                        )}
+                      </td>
+                      <td><DeleteRowBtn onClick={() => removeRow(o.origIdx)} title="Remove">&times;</DeleteRowBtn></td>
+                    </tr>
+                  );
+                })}
+              </React.Fragment>
+            );
+          })}
+        </tbody>
+      </OwnerTable>
+      <AddRowBtn onClick={() => addRow('New Stream', '')} style={{ marginTop: 16 }}>+ Add Stream &amp; Sub-App</AddRowBtn>
+    </OwnerContent>
+  );
+}
+
 export default function ApiManagementPage() {
-  const [activeTab, setActiveTab] = useState<'api' | 'db'>('api');
+  const [activeTab, setActiveTab] = useState<'api' | 'db' | 'owners'>('api');
 
   return (
     <Page>
@@ -346,9 +732,12 @@ export default function ApiManagementPage() {
       <TabBar>
         <Tab $active={activeTab === 'api'} onClick={() => setActiveTab('api')}>API Management</Tab>
         <Tab $active={activeTab === 'db'} onClick={() => setActiveTab('db')}>App &amp; DB Documentation</Tab>
+        <Tab $active={activeTab === 'owners'} onClick={() => setActiveTab('owners')}>Sub-App Owners</Tab>
       </TabBar>
 
-      {activeTab === 'api' ? <ApiRegistryTab /> : <DbDocumentationPage />}
+      {activeTab === 'api' && <ApiRegistryTab />}
+      {activeTab === 'db' && <DbDocumentationPage />}
+      {activeTab === 'owners' && <SubAppOwnersTab />}
     </Page>
   );
 }

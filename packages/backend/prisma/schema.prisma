@@ -161,6 +161,7 @@ model FeedbackItem {
   deadlineWeek    String?
   deadlineDate    DateTime?
   deadlineHistory Json?
+  assignee        String?
   automationFTE   Float            @default(0)
   status          String           @default("open")
   createdAt   DateTime         @default(now())

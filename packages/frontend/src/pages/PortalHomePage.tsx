@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { theme } from '../styles/theme';
 import api from '../utils/api';
+import { getSubAppPath } from './ApiManagementPage';
 
 const fadeIn = keyframes`
   from { opacity: 0; transform: translateY(12px); }
@@ -515,6 +516,34 @@ const ModalBtn = styled.button<{ $primary?: boolean }>`
   &:hover { opacity: 0.9; }
 `;
 
+const SectionToggle = styled.div`
+  max-width: 1300px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 18px 32px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  &:hover { opacity: 0.85; }
+`;
+
+const SectionToggleTitle = styled.span`
+  font-size: 13px;
+  font-weight: 700;
+  color: ${theme.colors.textPrimary};
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+`;
+
+const SectionToggleArrow = styled.span<{ $open: boolean }>`
+  font-size: 11px;
+  color: ${theme.colors.textSecondary};
+  transition: transform 0.2s;
+  transform: rotate(${p => p.$open ? '90deg' : '0deg'});
+`;
+
 const KPIStrip = styled.div`
   max-width: 1300px;
   width: 100%;
@@ -818,18 +847,115 @@ export default function PortalHomePage() {
   const [newStepCount, setNewStepCount] = useState(6);
   const [newStepLabels, setNewStepLabels] = useState<string[]>([]);
   const [totalDoneHours, setTotalDoneHours] = useState(0);
+  const [streamOwners, setStreamOwners] = useState<Record<string, string>>({});
+  const [subAppOwners, setSubAppOwners] = useState<Record<string, string>>({});
+  const [subAppDeadlines, setSubAppDeadlines] = useState<Record<string, string>>({});
+  const [codeKpis, setCodeKpis] = useState({ linesOfCode: 0, pages: 0, endpoints: 0, commits: 0 });
+  const [ticketStats, setTicketStats] = useState({ total: 0, open: 0, in_progress: 0, review: 0, testing: 0, done: 0 });
+  const [allTickets, setAllTickets] = useState<{ app: string; automationFTE: number; status: string }[]>([]);
+  const [kpiOpen, setKpiOpen] = useState(true);
+  const [streamsOpen, setStreamsOpen] = useState(true);
+  const [leaderboardOpen, setLeaderboardOpen] = useState(true);
+  const [codingHoursFromGit, setCodingHoursFromGit] = useState(0);
 
   useEffect(() => {
-    api.get('/feedback/automation-summary')
+    api.get('/feedback')
       .then((res) => {
-        const apps = res.data.data || [];
-        const doneHours = apps.reduce((s: number, a: any) => s + (a.doneFTE || 0), 0);
+        const items: any[] = res.data || [];
+        const stats = { total: items.length, open: 0, in_progress: 0, review: 0, testing: 0, done: 0 };
+        items.forEach(t => { if (stats.hasOwnProperty(t.status)) (stats as any)[t.status]++; });
+        setTicketStats(stats);
+        setAllTickets(items.map(t => ({ app: t.app || '', automationFTE: t.automationFTE || 0, status: t.status || 'open' })));
+        const doneHours = items
+          .filter(t => t.status === 'done' && t.automationFTE > 0)
+          .reduce((s: number, t: any) => s + (t.automationFTE || 0), 0);
         setTotalDoneHours(doneHours);
       })
       .catch(() => {});
+
+    api.get('/kpis')
+      .then((res) => {
+        const d = res.data;
+        setCodeKpis({
+          linesOfCode: d.linesOfCode || 0,
+          pages: d.pages || 0,
+          endpoints: d.endpoints || 0,
+          commits: d.commits || 0,
+        });
+        if (d.codingHours) setCodingHoursFromGit(d.codingHours);
+      })
+      .catch(() => {});
+
+    try {
+      const raw = localStorage.getItem('subAppOwners_v2');
+      if (raw) {
+        const list: { stream: string; streamOwner: string; app: string; owner: string; deadlineTarget?: string }[] = JSON.parse(raw);
+        const sMap: Record<string, string> = {};
+        const aMap: Record<string, string> = {};
+        const dMap: Record<string, string> = {};
+        list.forEach(e => {
+          if (e.stream && e.streamOwner) sMap[e.stream] = e.streamOwner;
+          if (e.app && e.owner) {
+            aMap[e.app] = e.owner;
+            aMap[e.app.replace(/-/g, ' – ')] = e.owner;
+            aMap[e.app.replace(/–/g, '-')] = e.owner;
+            aMap[e.app.replace(/[-–]/g, ' ')] = e.owner;
+          }
+          if (e.app && e.deadlineTarget) {
+            dMap[e.app] = e.deadlineTarget;
+            dMap[e.app.replace(/-/g, ' – ')] = e.deadlineTarget;
+            dMap[e.app.replace(/–/g, '-')] = e.deadlineTarget;
+            dMap[e.app.replace(/[-–]/g, ' ')] = e.deadlineTarget;
+          }
+        });
+        setStreamOwners(sMap);
+        setSubAppOwners(aMap);
+        setSubAppDeadlines(dMap);
+      }
+    } catch {}
   }, []);
 
+
+  const findOwner = (label: string): string => {
+    if (subAppOwners[label]) return subAppOwners[label];
+    const norm = (s: string) => s.toLowerCase().replace(/[-–—\s]+/g, '');
+    const normLabel = norm(label);
+    for (const [key, val] of Object.entries(subAppOwners)) {
+      if (norm(key) === normLabel) return val;
+    }
+    return '';
+  };
+
+  const findDeadline = (label: string): string => {
+    if (subAppDeadlines[label]) return subAppDeadlines[label];
+    const norm = (s: string) => s.toLowerCase().replace(/[-–—\s]+/g, '');
+    const normLabel = norm(label);
+    for (const [key, val] of Object.entries(subAppDeadlines)) {
+      if (norm(key) === normLabel) return val;
+    }
+    return '';
+  };
+
+  const formatDeadlineDate = (isoDate: string): string => {
+    if (!isoDate) return '';
+    const parts = isoDate.split('-');
+    if (parts.length !== 3) return isoDate;
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  };
+
   const hoursSavedPerMonth = Math.round(totalDoneHours * 10) / 10;
+
+  const normKey = (s: string) => s.toLowerCase().replace(/[-–—\s]+/g, '');
+  const getStreamHours = (proc: ProcessRow) => {
+    const stepLabels = proc.steps.map(s => normKey(s.label));
+    const matched = allTickets.filter(t => {
+      const tApp = normKey(t.app);
+      return stepLabels.some(sl => sl === tApp || sl.includes(tApp) || tApp.includes(sl));
+    });
+    const done = matched.filter(t => t.status === 'done').reduce((s, t) => s + t.automationFTE, 0);
+    const total = matched.reduce((s, t) => s + t.automationFTE, 0);
+    return { done: Math.round(done * 10) / 10, total: Math.round(total * 10) / 10 };
+  };
   const peaktimeRatio = 0.45;
   const peaktimeHours = Math.round(hoursSavedPerMonth * peaktimeRatio * 10) / 10;
 
@@ -950,53 +1076,10 @@ export default function PortalHomePage() {
           <FeedbackLink to="/automation-controlling">Automation Controlling</FeedbackLink>
           <FeedbackLink to="/api-management">API, App, DB Management</FeedbackLink>
           <FeedbackLink to="/collaboration-model">Collaboration Model</FeedbackLink>
-          <FeedbackLink to="/feedback">App Requests &amp; Bugs</FeedbackLink>
+          <FeedbackLink to="/feedback">Features &amp; Bugs</FeedbackLink>
           <HeaderText>You rock today!</HeaderText>
         </HeaderRight>
       </Header>
-
-      <KPIStrip>
-        <KPICard $color="#e05c00" $glow>
-          <KPIValue>{hoursSavedPerMonth.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} h</KPIValue>
-          <KPILabel>Hours Saved / Month</KPILabel>
-          <KPISub>from {totalDoneHours > 0 ? 'completed' : 'no'} tickets</KPISub>
-        </KPICard>
-        <KPICard $color="#c44500">
-          <KPIValue>{peaktimeHours.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} h</KPIValue>
-          <KPILabel>hereof Peaktime Hours</KPILabel>
-          <KPISub>~45% &middot; 5th–15th of month</KPISub>
-        </KPICard>
-        <KPICard $color="#8b5cf6">
-          <KPIValue>&mdash;</KPIValue>
-          <KPILabel>Token Costs</KPILabel>
-          <KPISub>all users &middot; coming soon</KPISub>
-        </KPICard>
-        <KPICard $color={theme.colors.info}>
-          <KPIValue>&mdash;</KPIValue>
-          <KPILabel>Hours Spent Coding</KPILabel>
-          <KPISub>all users &middot; coming soon</KPISub>
-        </KPICard>
-        <KPICard $color={theme.colors.primary} $glow>
-          <KPIValue>10,738</KPIValue>
-          <KPILabel>Lines of Code</KPILabel>
-          <KPISub>Frontend + Backend + Shared</KPISub>
-        </KPICard>
-        <KPICard $color="#6f42c1">
-          <KPIValue>25</KPIValue>
-          <KPILabel>Pages</KPILabel>
-          <KPISub>across 4 Sub-Apps</KPISub>
-        </KPICard>
-        <KPICard $color={theme.colors.success}>
-          <KPIValue>26</KPIValue>
-          <KPILabel>API Endpoints</KPILabel>
-          <KPISub>REST &middot; Active</KPISub>
-        </KPICard>
-        <KPICard $color={theme.colors.warning}>
-          <KPIValue>8</KPIValue>
-          <KPILabel>Git Commits</KPILabel>
-          <KPISub>on main branch</KPISub>
-        </KPICard>
-      </KPIStrip>
 
       <GuidanceStrip>
         <GuidanceItem>1. If you can explain it, you can vibe-code it.</GuidanceItem>
@@ -1004,11 +1087,80 @@ export default function PortalHomePage() {
         <GuidanceLink to="/collaboration-model">3. See Further Guidance &rarr;</GuidanceLink>
       </GuidanceStrip>
 
-      <ProcessContainer style={{ paddingTop: 28 }}>
+      <SectionToggle onClick={() => setKpiOpen(p => !p)}>
+        <SectionToggleArrow $open={kpiOpen}>▶</SectionToggleArrow>
+        <SectionToggleTitle>KPIs &amp; Metrics</SectionToggleTitle>
+      </SectionToggle>
+      {kpiOpen && (
+        <KPIStrip>
+          <KPICard $color="#e05c00" $glow>
+            <KPIValue>{hoursSavedPerMonth.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} h</KPIValue>
+            <KPILabel>Hours Saved / Month</KPILabel>
+            <KPISub>from {ticketStats.done} completed ticket{ticketStats.done !== 1 ? 's' : ''}</KPISub>
+          </KPICard>
+          <KPICard $color="#c44500">
+            <KPIValue>{peaktimeHours.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} h</KPIValue>
+            <KPILabel>hereof Peaktime Hours</KPILabel>
+            <KPISub>~45% &middot; 5th–15th of month</KPISub>
+          </KPICard>
+          <KPICard $color="#8b5cf6">
+            <KPIValue>&mdash;</KPIValue>
+            <KPILabel>Token Costs</KPILabel>
+            <KPISub>all users &middot; coming soon</KPISub>
+          </KPICard>
+          <KPICard $color={theme.colors.info}>
+            <KPIValue>{codingHoursFromGit > 0 ? codingHoursFromGit.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' h' : '—'}</KPIValue>
+            <KPILabel>Hours Spent Coding</KPILabel>
+            <KPISub>{codingHoursFromGit > 0 ? `from ${codeKpis.commits} git commits` : 'based on git activity'}</KPISub>
+          </KPICard>
+          <KPICard $color={theme.colors.secondary} $glow>
+            <KPIValue>{ticketStats.total}</KPIValue>
+            <KPILabel>Features</KPILabel>
+            <KPISub style={{ fontSize: 9, lineHeight: 1.5 }}>
+              {ticketStats.done > 0 && <span style={{ color: theme.colors.success }}>✓ {ticketStats.done} Done</span>}
+              {ticketStats.in_progress > 0 && <span> · {ticketStats.in_progress} WIP</span>}
+              {ticketStats.open > 0 && <span> · {ticketStats.open} Open</span>}
+              {ticketStats.review > 0 && <span> · {ticketStats.review} Review</span>}
+              {ticketStats.testing > 0 && <span> · {ticketStats.testing} Test</span>}
+            </KPISub>
+          </KPICard>
+          <KPICard $color={theme.colors.primary} $glow>
+            <KPIValue>{codeKpis.linesOfCode.toLocaleString('de-DE')}</KPIValue>
+            <KPILabel>Lines of Code</KPILabel>
+            <KPISub>Frontend + Backend + Shared</KPISub>
+          </KPICard>
+          <KPICard $color="#6f42c1">
+            <KPIValue>{codeKpis.pages}</KPIValue>
+            <KPILabel>Pages</KPILabel>
+            <KPISub>across all Sub-Apps</KPISub>
+          </KPICard>
+          <KPICard $color={theme.colors.success}>
+            <KPIValue>{codeKpis.endpoints}</KPIValue>
+            <KPILabel>API Endpoints</KPILabel>
+            <KPISub>REST &middot; Active</KPISub>
+          </KPICard>
+          <KPICard $color={theme.colors.warning}>
+            <KPIValue>{codeKpis.commits}</KPIValue>
+            <KPILabel>Git Commits</KPILabel>
+            <KPISub>on main branch</KPISub>
+          </KPICard>
+        </KPIStrip>
+      )}
+
+      <SectionToggle onClick={() => setStreamsOpen(p => !p)} style={{ paddingTop: 28 }}>
+        <SectionToggleArrow $open={streamsOpen}>▶</SectionToggleArrow>
+        <SectionToggleTitle>Streams &amp; Sub-Apps</SectionToggleTitle>
+      </SectionToggle>
+      {streamsOpen && <ProcessContainer style={{ paddingTop: 12 }}>
         {processes.map((proc) => (
           <div key={proc.title} style={{ marginBottom: 36 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <ProcessTitle>{proc.title}</ProcessTitle>
+              {streamOwners[proc.title] && (
+                <span style={{ fontSize: 11, color: theme.colors.textSecondary, fontWeight: 600, background: '#f0f0f0', padding: '2px 10px', borderRadius: 10 }}>
+                  Stream Owner: {streamOwners[proc.title]}
+                </span>
+              )}
               <AddStepBtn onClick={() => addStepToProcess(proc.title)}>+ Add Step</AddStepBtn>
               {!['Franchise Controlling'].includes(proc.title) && (
                 <RemoveBtn onClick={() => removeProcess(proc.title)}>Remove</RemoveBtn>
@@ -1026,10 +1178,10 @@ export default function PortalHomePage() {
                 >
                   <StepCard
                     $active={step.active}
-                    $clickable={!!step.path}
+                    $clickable={!!(step.path || getSubAppPath(step.label))}
                     $idx={i}
                     $dragOver={dragOverTarget?.proc === proc.title && dragOverTarget.idx === i}
-                    onClick={() => step.path && navigate(step.path)}
+                    onClick={() => { const p = step.path || getSubAppPath(step.label); if (p) navigate(p.includes('/sub-app/') ? p + '/feature-requests' : p); }}
                   >
                     <StepNumber $active={step.active}>{i + 1}</StepNumber>
                     {editingStep?.proc === proc.title && editingStep.idx === i && editingStep.field === 'label' ? (
@@ -1054,11 +1206,15 @@ export default function PortalHomePage() {
                         onClick={e => e.stopPropagation()}
                       />
                     ) : (
-                      <StepDesc $active={step.active} onDoubleClick={e => { e.stopPropagation(); startEdit(proc.title, i, 'desc', step.desc); }} style={{ cursor: 'text' }} title="Double-click to rename">{step.desc}</StepDesc>
+                      <StepDesc $active={step.active} onDoubleClick={e => { e.stopPropagation(); startEdit(proc.title, i, 'desc', findOwner(step.label) || step.desc); }} style={{ cursor: 'text' }} title="Double-click to rename">{findOwner(step.label) || step.desc}</StepDesc>
                     )}
                     <StepBadge $color={step.badgeColor}>{step.badge}</StepBadge>
                     {step.env && <EnvBadge $env={step.env} $active={step.active}>{step.env}</EnvBadge>}
-                    {step.deadline && <StepDeadline $active={step.active}>Deadline: {step.deadline}</StepDeadline>}
+                    {(findDeadline(step.label) || step.deadline) && (
+                      <StepDeadline $active={step.active}>
+                        Deadline: {findDeadline(step.label) ? formatDeadlineDate(findDeadline(step.label)) : step.deadline}
+                      </StepDeadline>
+                    )}
                   </StepCard>
                   {proc.steps.length > 1 && (
                     <RemoveStepBtn onClick={() => removeStepFromProcess(proc.title, i)} title="Delete step">−</RemoveStepBtn>
@@ -1066,25 +1222,31 @@ export default function PortalHomePage() {
                 </StepWrapper>
               ))}
             </FlowRow>
-            <ProgressWrapper>
-              {hoursMilestones.map((m, mi) => (
-                <TargetMarker key={`${m.label}-${mi}`} $pct={m.pct}>
-                  <TargetLabel $highlight={m.highlight}>{m.label}</TargetLabel>
-                  <TargetLine $highlight={m.highlight} />
-                </TargetMarker>
-              ))}
-              <ProgressBarOuter>
-                <ProgressBarInner $pct={Math.min((hoursSavedPerMonth / HOURS_SAVED_MAX) * 100, 100)} />
-                <ProgressLabel>{hoursSavedPerMonth.toFixed(1)}h saved / month</ProgressLabel>
-              </ProgressBarOuter>
-            </ProgressWrapper>
+            {(() => {
+              const sh = getStreamHours(proc);
+              const pct = HOURS_SAVED_MAX > 0 ? Math.min((sh.done / HOURS_SAVED_MAX) * 100, 100) : 0;
+              return (
+                <ProgressWrapper>
+                  {hoursMilestones.map((m, mi) => (
+                    <TargetMarker key={`${m.label}-${mi}`} $pct={m.pct}>
+                      <TargetLabel $highlight={m.highlight}>{m.label}</TargetLabel>
+                      <TargetLine $highlight={m.highlight} />
+                    </TargetMarker>
+                  ))}
+                  <ProgressBarOuter>
+                    <ProgressBarInner $pct={pct} />
+                    <ProgressLabel>{sh.done.toFixed(1)}h saved{sh.total > sh.done ? ` (${sh.total.toFixed(1)}h planned)` : ''}</ProgressLabel>
+                  </ProgressBarOuter>
+                </ProgressWrapper>
+              );
+            })()}
           </div>
         ))}
 
         <AddProcessBtn onClick={openAddModal}>
           + Add Process &amp; Team
         </AddProcessBtn>
-      </ProcessContainer>
+      </ProcessContainer>}
 
       {showAddModal && (
         <ModalOverlay onClick={() => setShowAddModal(false)}>
@@ -1134,26 +1296,29 @@ export default function PortalHomePage() {
         </ModalOverlay>
       )}
 
-      <LeaderboardSection>
-        <LeaderboardTitle>
-          🏆 Automation Leaderboard
-        </LeaderboardTitle>
-        <LeaderboardGrid>
-          {leaderboardData.map((person, idx) => (
-            <PersonCard key={person.name} $rank={idx + 1}>
-              <RankBadge $rank={idx + 1}>{idx + 1}</RankBadge>
-              <PersonAvatar>{person.initials}</PersonAvatar>
-              <PersonName>{person.name}</PersonName>
-              <PersonRole>{person.role}</PersonRole>
-              <ScoreBar>
-                <ScoreFill $pct={person.score} />
-              </ScoreBar>
-              <ScoreLabel>{person.score} pts</ScoreLabel>
-              <ScoreSubtext>Automation Score</ScoreSubtext>
-            </PersonCard>
-          ))}
-        </LeaderboardGrid>
-      </LeaderboardSection>
+      <SectionToggle onClick={() => setLeaderboardOpen(p => !p)}>
+        <SectionToggleArrow $open={leaderboardOpen}>▶</SectionToggleArrow>
+        <SectionToggleTitle>🏆 Automation Leaderboard</SectionToggleTitle>
+      </SectionToggle>
+      {leaderboardOpen && (
+        <LeaderboardSection>
+          <LeaderboardGrid>
+            {leaderboardData.map((person, idx) => (
+              <PersonCard key={person.name} $rank={idx + 1}>
+                <RankBadge $rank={idx + 1}>{idx + 1}</RankBadge>
+                <PersonAvatar>{person.initials}</PersonAvatar>
+                <PersonName>{person.name}</PersonName>
+                <PersonRole>{person.role}</PersonRole>
+                <ScoreBar>
+                  <ScoreFill $pct={person.score} />
+                </ScoreBar>
+                <ScoreLabel>{person.score} pts</ScoreLabel>
+                <ScoreSubtext>Automation Score</ScoreSubtext>
+              </PersonCard>
+            ))}
+          </LeaderboardGrid>
+        </LeaderboardSection>
+      )}
     </Page>
   );
 }

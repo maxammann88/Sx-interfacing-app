@@ -228,7 +228,7 @@ function seedRandom(id: number, offset: number): number {
 }
 
 function getDummyKpis(countryId: number, overdueAmount: number) {
-  const depositHeld = Math.round(seedRandom(countryId, 4) * 300000 + 5000);
+  const depositHeld = 10000;
   const opDepositIn = depositHeld > 0 ? Math.round((overdueAmount / depositHeld) * 100) : 0;
   const dsoDeviation = Math.round(seedRandom(countryId, 2) * 60 - 10);
   const overaged90d = overdueAmount > 0
@@ -248,6 +248,7 @@ export default function StammdatenViewPage() {
   const [overdueMap, setOverdueMap] = useState<Record<number, number>>({});
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [cutoffDate, setCutoffDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [payoutOverrides, setPayoutOverrides] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     api.get('/master-data')
@@ -429,7 +430,7 @@ export default function StammdatenViewPage() {
                     </td>
                     {(() => {
                       const ps = paymentStatusByFir[c.fir];
-                      if (!ps) return (<><td style={{ textAlign: 'center', color: '#ccc' }}>-</td><td style={{ textAlign: 'right', color: '#ccc' }}>-</td><td style={{ textAlign: 'center', color: '#ccc' }}>-</td></>);
+                      if (!ps) return (<><td style={{ textAlign: 'center', color: '#ccc' }}>-</td><td style={{ textAlign: 'right', color: '#ccc' }}>-</td><td style={{ textAlign: 'center', cursor: 'pointer', userSelect: 'none' }} onClick={() => setPayoutOverrides(prev => ({ ...prev, [c.fir]: !(prev[c.fir] ?? false) }))} title="Click to toggle Payout Block">{(payoutOverrides[c.fir] ?? false) ? <span style={{ color: theme.colors.danger, fontWeight: 700 }}>Y</span> : <span style={{ color: theme.colors.textLight }}>N</span>}</td></>);
                       return (
                         <>
                           <td style={{ textAlign: 'center', fontWeight: 700, color: ps.dc === 'C' ? theme.colors.success : theme.colors.danger }}>
@@ -438,8 +439,15 @@ export default function StammdatenViewPage() {
                           <td style={{ textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>
                             {formatEur(ps.amount)}
                           </td>
-                          <td style={{ textAlign: 'center' }}>
-                            {ps.payoutBlocked
+                          <td
+                            style={{ textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}
+                            onClick={() => {
+                              const current = payoutOverrides[c.fir] ?? ps.payoutBlocked;
+                              setPayoutOverrides(prev => ({ ...prev, [c.fir]: !current }));
+                            }}
+                            title="Click to toggle Payout Block"
+                          >
+                            {(payoutOverrides[c.fir] ?? ps.payoutBlocked)
                               ? <span style={{ color: theme.colors.danger, fontWeight: 700 }}>Y</span>
                               : <span style={{ color: theme.colors.textLight }}>N</span>}
                           </td>

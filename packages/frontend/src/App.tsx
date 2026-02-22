@@ -28,6 +28,7 @@ import PaymentTermsPage from './pages/parameter-maintenance/PaymentTermsPage';
 import AutomationControllingPage from './pages/AutomationControllingPage';
 import ApiManagementPage from './pages/ApiManagementPage';
 import CollaborationModelPage from './pages/CollaborationModelPage';
+import GenericSubAppPage from './pages/GenericSubAppPage';
 
 export default function App() {
   return (
@@ -69,6 +70,8 @@ export default function App() {
             <Route path="bookings" element={<FsmBookingsPage />} />
             <Route path="reporting" element={<FsmReportingPage />} />
           </Route>
+
+          <Route path="/sub-app/:slug/*" element={<GenericSubAppPage />} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

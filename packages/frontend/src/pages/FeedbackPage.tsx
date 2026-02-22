@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import styled from 'styled-components';
 import { theme } from '../styles/theme';
 import api from '../utils/api';
@@ -30,6 +30,7 @@ interface FeedbackItem {
   deadlineWeek: string | null;
   deadlineDate: string | null;
   deadlineHistory: DeadlineHistoryEntry[] | null;
+  assignee: string | null;
   automationFTE: number;
   status: string;
   createdAt: string;
@@ -37,7 +38,16 @@ interface FeedbackItem {
   comments: FeedbackComment[];
 }
 
-const APP_OPTIONS = ['Interfacing', 'FSM', 'New App'] as const;
+import { getSubAppRegistry } from './ApiManagementPage';
+
+function getAppOptions(): string[] {
+  const reg = getSubAppRegistry();
+  const apps = new Set<string>();
+  apps.add('Core');
+  reg.forEach(r => { if (r.app) apps.add(r.app); });
+  return Array.from(apps);
+}
+
 
 const Page = styled.div`
   min-height: 100vh;
@@ -292,7 +302,7 @@ const CommentInput = styled.input`
   &:focus { outline: none; border-color: ${theme.colors.primary}; }
 `;
 
-const AppBadge = styled.span`
+const AppBadge = styled.select`
   font-size: 10px;
   font-weight: 700;
   padding: 2px 8px;
@@ -301,6 +311,16 @@ const AppBadge = styled.span`
   letter-spacing: 0.5px;
   background: #e0e0e0;
   color: #333;
+  border: 1px solid transparent;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 16px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath fill='%23666' d='M0 0l4 5 4-5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 4px center;
+  &:hover { border-color: ${theme.colors.primary}; }
+  &:focus { outline: none; border-color: ${theme.colors.primary}; }
 `;
 
 const ActionsRow = styled.div`
@@ -539,6 +559,39 @@ const FTELabel = styled.span`
   color: ${theme.colors.textSecondary};
 `;
 
+const AssigneeRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+`;
+
+const AssigneeSelect = styled.select`
+  padding: 4px 8px;
+  border: 1px solid ${theme.colors.border};
+  border-radius: ${theme.borderRadius};
+  font-size: 12px;
+  color: ${theme.colors.textPrimary};
+  background: white;
+  &:focus { outline: none; border-color: ${theme.colors.primary}; }
+`;
+
+const CursorBtn = styled.button`
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  border: none;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  letter-spacing: 0.3px;
+  &:hover { filter: brightness(1.1); }
+`;
+
 function getDaysLeft(dateStr: string | null): { days: number; label: string; color: string } | null {
   if (!dateStr) return null;
   const deadline = new Date(dateStr + 'T23:59:59');
@@ -560,10 +613,23 @@ function formatDateShort(iso: string | null): string {
 }
 
 export default function FeedbackPage() {
+  const [searchParams] = useSearchParams();
+  const highlightTicketId = searchParams.get('ticket') ? Number(searchParams.get('ticket')) : null;
+  const ticketRefs = useRef<Record<number, HTMLDivElement | null>>({});
+
   const [items, setItems] = useState<FeedbackItem[]>([]);
   const [filter, setFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'feature' | 'bug'>('all');
   const [appFilter, setAppFilter] = useState<string>('all');
+
+  const registry = useMemo(() => getSubAppRegistry(), []);
+  const TEAM_MEMBERS = useMemo(() => {
+    const names = new Set<string>();
+    registry.forEach(r => { if (r.owner) names.add(r.owner); if (r.streamOwner) names.add(r.streamOwner); });
+    return Array.from(names).sort();
+  }, [registry]);
+
+  const appOptions = useMemo(() => getAppOptions(), []);
 
   const [newApp, setNewApp] = useState('Interfacing');
   const [newAuthor, setNewAuthor] = useState('');
@@ -593,6 +659,20 @@ export default function FeedbackPage() {
   }, []);
 
   useEffect(() => { loadItems(); }, [loadItems]);
+
+  useEffect(() => {
+    if (highlightTicketId && items.length > 0) {
+      setTimeout(() => {
+        const el = ticketRefs.current[highlightTicketId];
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.style.transition = 'box-shadow 0.3s';
+          el.style.boxShadow = '0 0 0 3px #ff5f00';
+          setTimeout(() => { el.style.boxShadow = ''; }, 3000);
+        }
+      }, 300);
+    }
+  }, [highlightTicketId, items]);
 
   const handleCreate = async () => {
     if (!newTitle.trim()) return;
@@ -663,6 +743,48 @@ export default function FeedbackPage() {
     } catch { /* ignore */ }
   };
 
+  const handleAppChange = async (item: FeedbackItem, newAppValue: string) => {
+    if (newAppValue === item.app) return;
+    try {
+      await api.patch(`/feedback/${item.id}/app`, { app: newAppValue });
+      await loadItems();
+    } catch { /* ignore */ }
+  };
+
+  const handleAssigneeChange = async (item: FeedbackItem, assignee: string) => {
+    try {
+      await api.patch(`/feedback/${item.id}/assignee`, { assignee: assignee || null });
+      await loadItems();
+    } catch { /* ignore */ }
+  };
+
+  const getDefaultAssignee = (app: string) => {
+    const subApp = registry.find(r => r.app.toLowerCase() === app.toLowerCase() || app.toLowerCase().includes(r.app.toLowerCase()));
+    if (subApp?.owner) return subApp.owner;
+    if (subApp?.streamOwner) return subApp.streamOwner;
+    const stream = registry.find(r => r.stream.toLowerCase().includes(app.toLowerCase()));
+    return stream?.streamOwner || '';
+  };
+
+  const buildCursorPrompt = (item: FeedbackItem) => {
+    const lines = [
+      `Task: ${item.title}`,
+      item.description ? `Description: ${item.description}` : '',
+      `App: ${item.app}`,
+      `Type: ${item.type}`,
+      item.notes ? `Notes: ${item.notes}` : '',
+      item.deadlineDate ? `Deadline: ${item.deadlineDate}` : '',
+    ].filter(Boolean).join('\n');
+    return lines;
+  };
+
+  const handleSendToCursor = (item: FeedbackItem) => {
+    const prompt = buildCursorPrompt(item);
+    navigator.clipboard.writeText(prompt).then(() => {
+      alert('Ticket prompt copied to clipboard!\\n\\nOpen Cursor → Plan Mode (Cmd+L) → Paste (Cmd+V)');
+    });
+  };
+
   const getLinkEdits = (item: FeedbackItem) => linkEdits[item.id] ?? {
     jira: item.jiraUrl || '',
     confluence: item.confluenceUrl || '',
@@ -722,7 +844,7 @@ export default function FeedbackPage() {
             <FormGroup>
               <Label>App</Label>
               <Select value={newApp} onChange={e => setNewApp(e.target.value)}>
-                {APP_OPTIONS.map(a => <option key={a} value={a}>{a}</option>)}
+                {appOptions.map(a => <option key={a} value={a}>{a}</option>)}
               </Select>
             </FormGroup>
             <FormGroup>
@@ -779,7 +901,7 @@ export default function FeedbackPage() {
           <FilterChip $active={typeFilter === 'bug'} onClick={() => setTypeFilter('bug')}>Bugs</FilterChip>
           <span style={{ borderLeft: `1px solid ${theme.colors.border}`, margin: '0 4px' }} />
           <FilterChip $active={appFilter === 'all'} onClick={() => setAppFilter('all')}>All Apps</FilterChip>
-          {APP_OPTIONS.map(a => (
+          {appOptions.map(a => (
             <FilterChip key={a} $active={appFilter === a} onClick={() => setAppFilter(a)}>{a}</FilterChip>
           ))}
         </Filters>
@@ -791,9 +913,16 @@ export default function FeedbackPage() {
         )}
 
         {filtered.map(item => (
-          <ItemCard key={item.id} $status={item.status}>
+          <ItemCard key={item.id} $status={item.status} ref={(el: HTMLDivElement | null) => { ticketRefs.current[item.id] = el; }}>
             <ItemHeader>
-              <AppBadge>{item.app || 'Interfacing'}</AppBadge>
+              <AppBadge
+                value={item.app || 'Interfacing'}
+                onChange={e => handleAppChange(item, e.target.value)}
+                onClick={e => e.stopPropagation()}
+              >
+                {appOptions.map(a => <option key={a} value={a}>{a}</option>)}
+                {item.app && !appOptions.includes(item.app) && <option value={item.app}>{item.app}</option>}
+              </AppBadge>
               <TypeBadge $type={item.type}>{item.type === 'feature' ? 'Feature' : 'Bug'}</TypeBadge>
               <ItemTitle $done={item.status === 'done'}>{item.title}</ItemTitle>
               <StatusBadge $status={item.status}>
@@ -859,6 +988,25 @@ export default function FeedbackPage() {
                 <span style={{ fontSize: 10, color: theme.colors.textLight }}>~45% &middot; 5th–15th of month</span>
               </FTERow>
             )}
+
+            <AssigneeRow>
+              <FTELabel>Assignee:</FTELabel>
+              <AssigneeSelect
+                value={item.assignee || getDefaultAssignee(item.app)}
+                onChange={e => handleAssigneeChange(item, e.target.value)}
+              >
+                <option value="">– Unassigned –</option>
+                {TEAM_MEMBERS.map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </AssigneeSelect>
+              {!item.assignee && getDefaultAssignee(item.app) && (
+                <span style={{ fontSize: 9, color: theme.colors.textLight }}>default: {getDefaultAssignee(item.app)} (from registry)</span>
+              )}
+              <CursorBtn onClick={() => handleSendToCursor(item)} title="Copy ticket as prompt for Cursor Plan Mode">
+                ▶ Send to Cursor
+              </CursorBtn>
+            </AssigneeRow>
 
             <ActionsRow>
               {item.status === 'open' && (

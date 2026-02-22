@@ -19,15 +19,42 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 
 router.post('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { app, author, type, title, description, deadlineWeek } = req.body;
+    const { app, author, type, title, description, deadlineWeek, assignee } = req.body;
     if (!type || !title) {
       return res.status(400).json({ error: 'type and title are required' });
     }
     const item = await prisma.feedbackItem.create({
-      data: { app: app || 'Interfacing', author: author || null, type, title, description: description || null, deadlineWeek: deadlineWeek || null },
+      data: { app: app || 'Interfacing', author: author || null, type, title, description: description || null, deadlineWeek: deadlineWeek || null, assignee: assignee || null },
       include: { comments: true },
     });
     res.status(201).json(item);
+  } catch (err) { next(err); }
+});
+
+router.patch('/:id/app', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = parseInt(req.params.id as string, 10);
+    const { app } = req.body;
+    if (!app) return res.status(400).json({ error: 'app is required' });
+    const item = await prisma.feedbackItem.update({
+      where: { id },
+      data: { app },
+      include: { comments: { orderBy: { createdAt: 'asc' } } },
+    });
+    res.json(item);
+  } catch (err) { next(err); }
+});
+
+router.patch('/:id/assignee', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = parseInt(req.params.id as string, 10);
+    const { assignee } = req.body;
+    const item = await prisma.feedbackItem.update({
+      where: { id },
+      data: { assignee: assignee || null },
+      include: { comments: { orderBy: { createdAt: 'asc' } } },
+    });
+    res.json(item);
   } catch (err) { next(err); }
 });
 

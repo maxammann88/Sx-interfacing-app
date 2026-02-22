@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import styled from 'styled-components';
 import { theme } from '../styles/theme';
 import api from '../utils/api';
+import { getSubAppRegistry } from './ApiManagementPage';
 
 const Page = styled.div`
   min-height: 100vh;
@@ -182,14 +183,6 @@ const FullWidthCard = styled(Card)`
   grid-column: 1 / -1;
 `;
 
-interface ProjectFTE {
-  id: string;
-  name: string;
-  totalFTE: number;
-  automatedFTE: number;
-  progress: number;
-}
-
 interface KPIWeight {
   id: string;
   name: string;
@@ -208,20 +201,19 @@ interface TicketFTE {
   deadlineDate: string | null;
 }
 
-const PROJECT_TOTAL_FTE: Record<string, number> = {
-  'Parameter Maintenance': 1.5,
-  'FSM': 3.0,
-  'Bookings & Invoicing': 2.0,
-  'Interfacing': 2.5,
-  'Controlling': 1.0,
-  'B2P': 4.0,
-};
+const BUDGET_STORAGE_KEY = 'automationBudgetHours_v1';
 
-const APP_DISPLAY: Record<string, string> = {
-  'Interfacing': 'Interfacing',
-  'FSM': 'FSM',
-  'New App': 'New App',
-};
+function loadBudgetHours(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(BUDGET_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return {};
+}
+
+function saveBudgetHours(data: Record<string, number>) {
+  localStorage.setItem(BUDGET_STORAGE_KEY, JSON.stringify(data));
+}
 
 const initialKPIs: KPIWeight[] = [
   { id: 'time-saved', name: 'Time Saved', description: 'Hours saved per month through automation', weight: 30, unit: 'hrs/month' },
@@ -335,11 +327,22 @@ function getScoreColor(pct: number): string {
 
 export default function AutomationControllingPage() {
   const [tickets, setTickets] = useState<TicketFTE[]>([]);
-  const [projectTotalFTE, setProjectTotalFTE] = useState<Record<string, number>>({ ...PROJECT_TOTAL_FTE });
+  const [budgetHours, setBudgetHours] = useState<Record<string, number>>(loadBudgetHours);
   const [kpis, setKpis] = useState(initialKPIs);
   const [loading, setLoading] = useState(true);
   const [calMonth, setCalMonth] = useState(() => new Date().getMonth());
   const [calYear, setCalYear] = useState(() => new Date().getFullYear());
+  const [budgetExpandedStreams, setBudgetExpandedStreams] = useState<Set<string>>(() => new Set());
+
+  const toggleBudgetStream = (name: string) => {
+    setBudgetExpandedStreams(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
+  };
+
+  const registry = useMemo(() => getSubAppRegistry(), []);
 
   const loadTickets = useCallback(async () => {
     try {
@@ -359,27 +362,49 @@ export default function AutomationControllingPage() {
 
   useEffect(() => { loadTickets(); }, [loadTickets]);
 
-  const projects: ProjectFTE[] = useMemo(() => {
-    const appFTE: Record<string, number> = {};
-    const appDoneFTE: Record<string, number> = {};
-    tickets.forEach(t => {
-      const app = t.app;
-      appFTE[app] = (appFTE[app] || 0) + t.automationFTE;
-      if (t.status === 'done') appDoneFTE[app] = (appDoneFTE[app] || 0) + t.automationFTE;
-    });
-    const allApps = new Set([...Object.keys(projectTotalFTE), ...Object.keys(appFTE)]);
-    return Array.from(allApps).map(app => {
-      const total = projectTotalFTE[app] ?? 0;
-      const automated = appDoneFTE[app] ?? 0;
-      const planned = appFTE[app] ?? 0;
-      const progress = total > 0 ? Math.round((automated / total) * 100) : 0;
-      return { id: app, name: APP_DISPLAY[app] || app, totalFTE: total, automatedFTE: automated, progress, plannedFTE: planned };
-    });
-  }, [tickets, projectTotalFTE]);
+  const norm = (s: string) => s.toLowerCase().replace(/[-–—\s]+/g, '');
 
-  const updateProjectTotalFTE = (app: string, value: number) => {
-    setProjectTotalFTE(prev => ({ ...prev, [app]: value }));
+  const budgetStreams = useMemo(() => {
+    const streamNames = Array.from(new Set(registry.map(r => r.stream)));
+    return streamNames.map(stream => {
+      const apps = registry.filter(r => r.stream === stream);
+      const streamOwner = apps[0]?.streamOwner || '';
+      const subApps = apps.map(a => {
+        const appTickets = tickets.filter(t => {
+          const tApp = norm(t.app || '');
+          const aApp = norm(a.app || '');
+          return tApp === aApp || tApp.includes(aApp) || aApp.includes(tApp);
+        });
+        const planned = appTickets.reduce((s, t) => s + t.automationFTE, 0);
+        const done = appTickets.filter(t => t.status === 'done').reduce((s, t) => s + t.automationFTE, 0);
+        const budget = budgetHours[a.app] ?? 0;
+        const progress = budget > 0 ? Math.round((done / budget) * 100) : 0;
+        return { ...a, planned, done, budget, progress, ticketCount: appTickets.length };
+      });
+      const totalBudget = subApps.reduce((s, a) => s + a.budget, 0);
+      const totalPlanned = subApps.reduce((s, a) => s + a.planned, 0);
+      const totalDone = subApps.reduce((s, a) => s + a.done, 0);
+      const totalProgress = totalBudget > 0 ? Math.round((totalDone / totalBudget) * 100) : 0;
+      return { name: stream, streamOwner, subApps, totalBudget, totalPlanned, totalDone, totalProgress };
+    });
+  }, [registry, tickets, budgetHours]);
+
+  const totals = useMemo(() => {
+    const totalFTE = budgetStreams.reduce((s, st) => s + st.totalBudget, 0);
+    const plannedFTE = budgetStreams.reduce((s, st) => s + st.totalPlanned, 0);
+    const automatedFTE = budgetStreams.reduce((s, st) => s + st.totalDone, 0);
+    const avgProgress = totalFTE > 0 ? Math.round((automatedFTE / totalFTE) * 100) : 0;
+    return { totalFTE, plannedFTE, automatedFTE, avgProgress };
+  }, [budgetStreams]);
+
+  const updateBudget = (appName: string, value: number) => {
+    setBudgetHours(prev => {
+      const next = { ...prev, [appName]: value };
+      saveBudgetHours(next);
+      return next;
+    });
   };
+
 
   const updateKPIWeight = (id: string, weight: number) => {
     setKpis(prev => prev.map(k => k.id === id ? { ...k, weight } : k));
@@ -424,14 +449,6 @@ export default function AutomationControllingPage() {
 
   const totalWeight = useMemo(() => kpis.reduce((s, k) => s + k.weight, 0), [kpis]);
 
-  const totals = useMemo(() => {
-    const totalFTE = projects.reduce((s, p) => s + p.totalFTE, 0);
-    const automatedFTE = projects.reduce((s, p) => s + p.automatedFTE, 0);
-    const plannedFTE = projects.reduce((s, p) => s + ((p as any).plannedFTE || 0), 0);
-    const avgProgress = totalFTE > 0 ? Math.round((automatedFTE / totalFTE) * 100) : 0;
-    return { totalFTE, automatedFTE, plannedFTE, avgProgress };
-  }, [projects]);
-
   return (
     <Page>
       <Header>
@@ -467,6 +484,11 @@ export default function AutomationControllingPage() {
             <SummaryLabel>Remaining Manual Hours</SummaryLabel>
           </SummaryCard>
         </SummaryRow>
+
+        <FullWidthCard style={{ marginBottom: 28 }}>
+          <CardTitle>Stream &rarr; Sub-App &rarr; Feature Reporting</CardTitle>
+          <StreamReporting tickets={tickets} />
+        </FullWidthCard>
 
         <Card style={{ marginBottom: 28 }}>
           <CardTitle>Release Schedule</CardTitle>
@@ -515,61 +537,83 @@ export default function AutomationControllingPage() {
         </Card>
 
         <SectionGrid>
-          <Card>
-            <CardTitle>Hours Saved per Project (from Tickets)</CardTitle>
+          <Card style={{ gridColumn: '1 / -1' }}>
+            <CardTitle>Hours Saved per Stream &amp; Sub-App (from Tickets)</CardTitle>
             <Table>
               <thead>
                 <tr>
-                  <th>Project</th>
-                  <th style={{ textAlign: 'right' }}>Total Hours (Budget)</th>
-                  <th style={{ textAlign: 'right' }}>Planned Hours</th>
-                  <th style={{ textAlign: 'right' }}>Hours Saved (Done)</th>
-                  <th style={{ textAlign: 'right' }}>Progress</th>
-                  <th style={{ width: 140 }}>Visual</th>
+                  <th style={{ width: '30%' }}>Stream / Sub-App</th>
+                  <th style={{ textAlign: 'right', width: '14%' }}>Budget (h)</th>
+                  <th style={{ textAlign: 'right', width: '12%' }}>Planned</th>
+                  <th style={{ textAlign: 'right', width: '12%' }}>Done</th>
+                  <th style={{ textAlign: 'right', width: '10%' }}>Progress</th>
+                  <th style={{ width: '12%' }}>Visual</th>
+                  <th style={{ textAlign: 'right', width: '10%' }}>Tickets</th>
                 </tr>
               </thead>
               <tbody>
-                {projects.map(p => (
-                  <tr key={p.id}>
-                    <td style={{ fontWeight: 600 }}>{p.name}</td>
-                    <td style={{ textAlign: 'right' }}>
-                      <NumberInput
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        value={p.totalFTE}
-                        onChange={e => updateProjectTotalFTE(p.id, parseFloat(e.target.value) || 0)}
-                      />
-                    </td>
-                    <td style={{ textAlign: 'right', fontWeight: 600, color: theme.colors.warning }}>
-                      {(p as any).plannedFTE?.toFixed(1) ?? '0.0'}
-                    </td>
-                    <td style={{ textAlign: 'right', fontWeight: 600, color: theme.colors.success }}>
-                      {p.automatedFTE.toFixed(1)}
-                    </td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, color: getScoreColor(p.progress) }}>
-                      {p.progress}%
-                    </td>
-                    <td>
-                      <ScoreBar>
-                        <ScoreFill $pct={p.progress} $color={getScoreColor(p.progress)} />
-                      </ScoreBar>
-                    </td>
-                  </tr>
-                ))}
+                {budgetStreams.map(stream => {
+                  const bOpen = budgetExpandedStreams.has(stream.name);
+                  return (
+                    <React.Fragment key={stream.name}>
+                      <tr style={{ background: theme.colors.secondary, color: 'white', cursor: 'pointer' }} onClick={() => toggleBudgetStream(stream.name)}>
+                        <td style={{ fontWeight: 700, fontSize: 13, padding: '10px 14px' }}>
+                          <span style={{ display: 'inline-block', width: 16, fontSize: 11, opacity: 0.8 }}>{bOpen ? '▼' : '▶'}</span>
+                          <span style={{ fontSize: 9, opacity: 0.7, textTransform: 'uppercase', letterSpacing: 1, marginRight: 8 }}>Stream</span>
+                          {stream.name}
+                          {stream.streamOwner && <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 12 }}>({stream.streamOwner})</span>}
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: 700 }}>{stream.totalBudget.toFixed(1)}</td>
+                        <td style={{ textAlign: 'right', color: '#ffc107' }}>{stream.totalPlanned.toFixed(1)}</td>
+                        <td style={{ textAlign: 'right', color: '#90ee90' }}>{stream.totalDone.toFixed(1)}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 700 }}>{stream.totalProgress}%</td>
+                        <td>
+                          <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: 6, height: 8 }}>
+                            <div style={{ background: '#28a745', borderRadius: 6, height: 8, width: `${Math.min(stream.totalProgress, 100)}%` }} />
+                          </div>
+                        </td>
+                        <td style={{ textAlign: 'right' }}>{stream.subApps.reduce((s, a) => s + a.ticketCount, 0)}</td>
+                      </tr>
+                      {bOpen && stream.subApps.map(app => (
+                        <tr key={`${stream.name}-${app.app}`} style={{ background: '#f8f8f8', borderLeft: `3px solid ${theme.colors.primary}` }}>
+                          <td style={{ fontWeight: 600, fontSize: 12, paddingLeft: 38 }}>{app.app}</td>
+                          <td style={{ textAlign: 'right' }}>
+                            <NumberInput
+                              type="number"
+                              step="0.5"
+                              min="0"
+                              value={app.budget}
+                              onChange={e => { e.stopPropagation(); updateBudget(app.app, parseFloat(e.target.value) || 0); }}
+                              onClick={e => e.stopPropagation()}
+                              style={{ width: 70 }}
+                            />
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 600, color: theme.colors.warning }}>{app.planned.toFixed(1)}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 600, color: theme.colors.success }}>{app.done.toFixed(1)}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 700, color: getScoreColor(app.progress) }}>{app.progress}%</td>
+                          <td>
+                            <ScoreBar>
+                              <ScoreFill $pct={Math.min(app.progress, 100)} $color={getScoreColor(app.progress)} />
+                            </ScoreBar>
+                          </td>
+                          <td style={{ textAlign: 'right', color: theme.colors.textSecondary }}>{app.ticketCount}</td>
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  );
+                })}
                 <tr style={{ fontWeight: 700, borderTop: `2px solid ${theme.colors.textPrimary}` }}>
                   <td>Total</td>
                   <td style={{ textAlign: 'right' }}>{totals.totalFTE.toFixed(1)}</td>
                   <td style={{ textAlign: 'right', color: theme.colors.warning }}>{totals.plannedFTE.toFixed(1)}</td>
                   <td style={{ textAlign: 'right', color: theme.colors.success }}>{totals.automatedFTE.toFixed(1)}</td>
-                  <td style={{ textAlign: 'right', color: getScoreColor(totals.avgProgress) }}>
-                    {totals.avgProgress}%
-                  </td>
+                  <td style={{ textAlign: 'right', color: getScoreColor(totals.avgProgress) }}>{totals.avgProgress}%</td>
                   <td>
                     <ScoreBar>
-                      <ScoreFill $pct={totals.avgProgress} $color={getScoreColor(totals.avgProgress)} />
+                      <ScoreFill $pct={Math.min(totals.avgProgress, 100)} $color={getScoreColor(totals.avgProgress)} />
                     </ScoreBar>
                   </td>
+                  <td></td>
                 </tr>
               </tbody>
             </Table>
@@ -700,5 +744,195 @@ export default function AutomationControllingPage() {
         </SectionGrid>
       </Content>
     </Page>
+  );
+}
+
+const REPORT_STATUS_COLORS: Record<string, string> = {
+  Live: '#28a745', Dev: '#ff5f00', Planned: '#999', Blocked: '#dc3545',
+  open: '#6c757d', in_progress: '#ff5f00', review: '#6f42c1', testing: '#0d6efd', done: '#28a745',
+};
+
+const ReportBadge = styled.span<{ $color: string }>`
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: white;
+  background: ${p => p.$color};
+`;
+
+const StreamRow = styled.tr`
+  td {
+    background: ${theme.colors.secondary} !important;
+    color: white !important;
+    font-weight: 700 !important;
+    font-size: 14px !important;
+    padding: 12px 14px !important;
+    letter-spacing: 0.3px;
+  }
+`;
+
+const SubAppRow = styled.tr`
+  td {
+    background: #f0f0f0 !important;
+    font-weight: 700 !important;
+    font-size: 12px !important;
+    padding: 9px 14px 9px 36px !important;
+    border-left: 3px solid ${theme.colors.primary} !important;
+  }
+`;
+
+const FeatureRow = styled.tr`
+  cursor: pointer;
+  td {
+    font-size: 12px;
+    padding: 6px 14px 6px 60px;
+    color: ${theme.colors.textSecondary};
+    border-left: 3px solid #e0e0e0;
+  }
+  &:hover td {
+    background: #fef6f0 !important;
+    color: ${theme.colors.primary};
+  }
+`;
+
+const FeatureLink = styled.span`
+  text-decoration: none;
+  color: inherit;
+  &:hover {
+    text-decoration: underline;
+    color: ${theme.colors.primary};
+  }
+`;
+
+function StreamReporting({ tickets }: { tickets: { id: number; app: string; title: string; automationFTE: number; status: string }[] }) {
+  const registry = useMemo(() => getSubAppRegistry(), []);
+  const [expandedStreams, setExpandedStreams] = useState<Set<string>>(() => new Set());
+  const [expandedApps, setExpandedApps] = useState<Set<string>>(() => new Set());
+
+  const toggleStream = (name: string) => {
+    setExpandedStreams(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
+  };
+
+  const toggleApp = (key: string) => {
+    setExpandedApps(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
+  const streams = useMemo(() => {
+    const streamNames = Array.from(new Set(registry.map(r => r.stream)));
+    return streamNames.map(stream => {
+      const apps = registry.filter(r => r.stream === stream);
+      const streamOwner = apps[0]?.streamOwner || '';
+      return {
+        name: stream,
+        streamOwner,
+        apps: apps.map(a => {
+          const normStr = (s: string) => s.toLowerCase().replace(/[-–—\s]+/g, '');
+          const appTickets = tickets.filter(t => {
+            const tApp = normStr(t.app || '');
+            const aApp = normStr(a.app || '');
+            return tApp === aApp || tApp.includes(aApp) || aApp.includes(tApp);
+          });
+          const totalHours = appTickets.reduce((s, t) => s + t.automationFTE, 0);
+          const doneHours = appTickets.filter(t => t.status === 'done').reduce((s, t) => s + t.automationFTE, 0);
+          return { ...a, tickets: appTickets, totalHours, doneHours };
+        }),
+      };
+    });
+  }, [registry, tickets]);
+
+  return (
+    <div style={{ maxHeight: 700, overflowY: 'auto' }}>
+      <Table>
+        <thead>
+          <tr>
+            <th style={{ width: '35%' }}>Name</th>
+            <th style={{ width: '15%' }}>Owner</th>
+            <th style={{ width: '10%' }}>Status</th>
+            <th style={{ width: '10%', textAlign: 'right' }}>Hours</th>
+            <th style={{ width: '15%' }}>Progress</th>
+            <th style={{ width: '15%', textAlign: 'right' }}>Features</th>
+          </tr>
+        </thead>
+        <tbody>
+          {streams.map(stream => {
+            const totalHours = stream.apps.reduce((s, a) => s + a.totalHours, 0);
+            const doneHours = stream.apps.reduce((s, a) => s + a.doneHours, 0);
+            const totalFeatures = stream.apps.reduce((s, a) => s + a.tickets.length, 0);
+            const streamOpen = expandedStreams.has(stream.name);
+            return (
+              <React.Fragment key={stream.name}>
+                <StreamRow onClick={() => toggleStream(stream.name)} style={{ cursor: 'pointer' }}>
+                  <td colSpan={2}>
+                    <span style={{ display: 'inline-block', width: 16, fontSize: 11, opacity: 0.8 }}>{streamOpen ? '▼' : '▶'}</span>
+                    <span style={{ fontSize: 10, opacity: 0.7, textTransform: 'uppercase', letterSpacing: 1, marginRight: 8 }}>Stream</span>
+                    {stream.name}
+                    {stream.streamOwner && (
+                      <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 16 }}>Owner: {stream.streamOwner}</span>
+                    )}
+                  </td>
+                  <td></td>
+                  <td style={{ textAlign: 'right' }}>{totalHours.toFixed(1)} h</td>
+                  <td>
+                    <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: 6, height: 8, width: '100%' }}>
+                      <div style={{ background: '#28a745', borderRadius: 6, height: 8, width: `${totalHours > 0 ? (doneHours / totalHours * 100) : 0}%` }} />
+                    </div>
+                  </td>
+                  <td style={{ textAlign: 'right' }}>{totalFeatures}</td>
+                </StreamRow>
+                {streamOpen && stream.apps.map(app => {
+                  const appKey = `${stream.name}::${app.app}`;
+                  const appOpen = expandedApps.has(appKey);
+                  return (
+                    <React.Fragment key={appKey}>
+                      <SubAppRow onClick={() => app.tickets.length > 0 && toggleApp(appKey)} style={{ cursor: app.tickets.length > 0 ? 'pointer' : 'default' }}>
+                        <td>
+                          {app.tickets.length > 0 && <span style={{ display: 'inline-block', width: 14, fontSize: 10, color: theme.colors.textSecondary }}>{appOpen ? '▼' : '▶'}</span>}
+                          {app.app}
+                        </td>
+                        <td style={{ color: theme.colors.textSecondary }}>{app.owner || '–'}</td>
+                        <td><ReportBadge $color={REPORT_STATUS_COLORS[app.status] || '#999'}>{app.status}</ReportBadge></td>
+                        <td style={{ textAlign: 'right' }}>{app.totalHours.toFixed(1)} h</td>
+                        <td>
+                          <div style={{ background: '#e0e0e0', borderRadius: 6, height: 6, width: '100%' }}>
+                            <div style={{ background: '#28a745', borderRadius: 6, height: 6, width: `${app.totalHours > 0 ? (app.doneHours / app.totalHours * 100) : 0}%` }} />
+                          </div>
+                        </td>
+                        <td style={{ textAlign: 'right' }}>{app.tickets.length}</td>
+                      </SubAppRow>
+                      {appOpen && app.tickets.map(t => (
+                        <FeatureRow key={t.id} onClick={() => window.location.href = `/feedback?ticket=${t.id}`}>
+                          <td>
+                            <FeatureLink title="Click to open ticket">
+                              #{t.id} {t.title}
+                            </FeatureLink>
+                          </td>
+                          <td></td>
+                          <td><ReportBadge $color={REPORT_STATUS_COLORS[t.status] || '#999'}>{t.status}</ReportBadge></td>
+                          <td style={{ textAlign: 'right', fontWeight: 600 }}>{t.automationFTE > 0 ? `${t.automationFTE.toFixed(1)} h` : '–'}</td>
+                          <td></td>
+                          <td></td>
+                        </FeatureRow>
+                      ))}
+                    </React.Fragment>
+                  );
+                })}
+              </React.Fragment>
+            );
+          })}
+        </tbody>
+      </Table>
+    </div>
   );
 }
