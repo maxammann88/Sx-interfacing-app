@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import api from '../utils/api';
 import { formatDate, formatEur, getDefaultPeriod } from '../utils/format';
 import {
@@ -88,19 +88,6 @@ interface CountryWithMaster {
   paymentBlock: boolean;
   masterData: MasterDataEntry | null;
 }
-
-const ToggleBtn = styled.button<{ $active: boolean }>`
-  padding: 2px 10px;
-  border: none;
-  border-radius: 10px;
-  font-size: 10px;
-  font-weight: 700;
-  cursor: pointer;
-  background: ${p => p.$active ? theme.colors.danger : theme.colors.success};
-  color: white;
-  transition: all 0.15s;
-  &:hover { opacity: 0.85; }
-`;
 
 const BalanceCell = styled.td`
   color: ${theme.colors.danger} !important;
@@ -240,11 +227,14 @@ function seedRandom(id: number, offset: number): number {
   return x - Math.floor(x);
 }
 
-function getDummyKpis(countryId: number) {
-  const opDepositIn = Math.round(seedRandom(countryId, 1) * 120);
+function getDummyKpis(countryId: number, overdueAmount: number) {
+  const depositHeld = Math.round(seedRandom(countryId, 4) * 300000 + 5000);
+  const opDepositIn = depositHeld > 0 ? Math.round((overdueAmount / depositHeld) * 100) : 0;
   const dsoDeviation = Math.round(seedRandom(countryId, 2) * 60 - 10);
-  const overaged90d = Math.round(seedRandom(countryId, 3) * 50);
-  return { opDepositIn, dsoDeviation, overaged90d };
+  const overaged90d = overdueAmount > 0
+    ? Math.min(100, Math.round(seedRandom(countryId, 3) * overdueAmount / 1000))
+    : 0;
+  return { opDepositIn, dsoDeviation, overaged90d, depositHeld };
 }
 
 export default function StammdatenViewPage() {
@@ -255,14 +245,9 @@ export default function StammdatenViewPage() {
   const [statusFilter, setStatusFilter] = useState('alle');
   const [search, setSearch] = useState('');
   const [balanceMap, setBalanceMap] = useState<Record<number, number>>({});
+  const [overdueMap, setOverdueMap] = useState<Record<number, number>>({});
   const [balanceLoading, setBalanceLoading] = useState(false);
-
-  const togglePaymentBlock = async (countryId: number, current: boolean) => {
-    try {
-      await api.patch(`/master-data/${countryId}/payment-block`, { paymentBlock: !current });
-      setData(prev => prev.map(c => c.id === countryId ? { ...c, paymentBlock: !current } : c));
-    } catch { /* ignore */ }
-  };
+  const [cutoffDate, setCutoffDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
   useEffect(() => {
     api.get('/master-data')
@@ -274,20 +259,27 @@ export default function StammdatenViewPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => {
+  const loadOverview = useCallback((releaseDate: string) => {
     const period = getDefaultPeriod();
     setBalanceLoading(true);
-    api.get('/statement/overview', { params: { period } })
+    api.get('/statement/overview', { params: { period, releaseDate } })
       .then((res) => {
-        const map: Record<number, number> = {};
+        const bMap: Record<number, number> = {};
+        const oMap: Record<number, number> = {};
         (res.data.data || []).forEach((row: any) => {
-          map[row.countryId] = row.balanceOpenItems ?? 0;
+          bMap[row.countryId] = row.balanceOpenItems ?? 0;
+          oMap[row.countryId] = row.overdueBalance ?? 0;
         });
-        setBalanceMap(map);
+        setBalanceMap(bMap);
+        setOverdueMap(oMap);
       })
       .catch(() => {})
       .finally(() => setBalanceLoading(false));
   }, []);
+
+  useEffect(() => {
+    loadOverview(cutoffDate);
+  }, [cutoffDate, loadOverview]);
 
   useEffect(() => {
     let result = data;
@@ -346,7 +338,7 @@ export default function StammdatenViewPage() {
           <SmallTable>
             <thead>
               <HeaderRow1>
-                <SectionHeader colSpan={22}>COUNTRY LIST</SectionHeader>
+                <SectionHeader colSpan={23}>COUNTRY LIST</SectionHeader>
                 <SectionHeader colSpan={9} style={{ background: theme.colors.secondary }}>MASTER DATA</SectionHeader>
               </HeaderRow1>
               <HeaderRow2>
@@ -356,8 +348,25 @@ export default function StammdatenViewPage() {
                 <th>KST</th>
                 <th>Country</th>
                 <th style={{ color: theme.colors.danger }}>Open Balance</th>
-                <th>Payment Block</th>
-                <th>OP % Deposit in</th>
+                <th style={{ color: theme.colors.danger }}>
+                  <div>Overdue Amounts</div>
+                  <input
+                    type="date"
+                    value={cutoffDate}
+                    onChange={(e) => setCutoffDate(e.target.value)}
+                    style={{
+                      marginTop: 3,
+                      fontSize: 9,
+                      padding: '1px 4px',
+                      border: `1px solid ${theme.colors.border}`,
+                      borderRadius: 4,
+                      width: 110,
+                      cursor: 'pointer',
+                    }}
+                  />
+                </th>
+                <th>Deposit Held</th>
+                <th>O-OP% Deposit</th>
                 <th>DSO Deviation</th>
                 <th>Overaged 90d Ratio</th>
                 <th>D/C</th>
@@ -385,11 +394,12 @@ export default function StammdatenViewPage() {
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan={31} style={{ textAlign: 'center', color: '#999', padding: 20 }}>No data available</td></tr>
+                <tr><td colSpan={32} style={{ textAlign: 'center', color: '#999', padding: 20 }}>No data available</td></tr>
               )}
               {filtered.filter((c) => c.fir !== 0).map((c) => {
                 const md = c.masterData;
-                const kpi = getDummyKpis(c.id);
+                const overdueAmt = overdueMap[c.id] ?? Math.round(seedRandom(c.id, 5) * (balanceMap[c.id] || 10000));
+                const kpi = getDummyKpis(c.id, overdueAmt);
                 return (
                   <tr key={c.id}>
                     {/* Country List */}
@@ -402,17 +412,12 @@ export default function StammdatenViewPage() {
                       {balanceLoading ? '...' :
                         balanceMap[c.id] !== undefined ? formatEur(balanceMap[c.id]) : '-'}
                     </BalanceCell>
-                    {(() => {
-                      const staticBlocked = paymentStatusByFir[c.fir]?.payoutBlocked ?? false;
-                      const isBlocked = c.paymentBlock || staticBlocked;
-                      return (
-                        <td style={{ textAlign: 'center' }}>
-                          <ToggleBtn $active={isBlocked} onClick={() => togglePaymentBlock(c.id, isBlocked)}>
-                            {isBlocked ? 'Y' : 'N'}
-                          </ToggleBtn>
-                        </td>
-                      );
-                    })()}
+                    <BalanceCell>
+                      {balanceLoading ? '...' : formatEur(overdueAmt)}
+                    </BalanceCell>
+                    <td style={{ textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                      {formatEur(kpi.depositHeld)}
+                    </td>
                     <td style={{ textAlign: 'right', fontWeight: 700, color: kpiColor(kpi.opDepositIn, 30, 80) }}>
                       {kpi.opDepositIn}%
                     </td>

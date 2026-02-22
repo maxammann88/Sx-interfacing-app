@@ -447,24 +447,24 @@ export default function AutomationControllingPage() {
 
         <SummaryRow>
           <SummaryCard $color={theme.colors.primary}>
-            <SummaryValue>{totals.totalFTE.toFixed(1)}</SummaryValue>
-            <SummaryLabel>Total FTE (Budget)</SummaryLabel>
+            <SummaryValue>{totals.totalFTE.toFixed(1)} h</SummaryValue>
+            <SummaryLabel>Total Hours (Budget)</SummaryLabel>
           </SummaryCard>
           <SummaryCard $color={theme.colors.warning}>
-            <SummaryValue>{totals.plannedFTE.toFixed(1)}</SummaryValue>
-            <SummaryLabel>Planned FTE (from Tickets)</SummaryLabel>
+            <SummaryValue>{totals.plannedFTE.toFixed(1)} h</SummaryValue>
+            <SummaryLabel>Planned Hours (from Tickets)</SummaryLabel>
           </SummaryCard>
           <SummaryCard $color={theme.colors.success}>
-            <SummaryValue>{totals.automatedFTE.toFixed(1)}</SummaryValue>
-            <SummaryLabel>Automated FTE (Done)</SummaryLabel>
+            <SummaryValue>{totals.automatedFTE.toFixed(1)} h</SummaryValue>
+            <SummaryLabel>Hours Saved (Done)</SummaryLabel>
           </SummaryCard>
           <SummaryCard $color={getScoreColor(totals.avgProgress)}>
             <SummaryValue>{totals.avgProgress}%</SummaryValue>
             <SummaryLabel>Overall Automation</SummaryLabel>
           </SummaryCard>
           <SummaryCard $color={theme.colors.info}>
-            <SummaryValue>{(totals.totalFTE - totals.automatedFTE).toFixed(1)}</SummaryValue>
-            <SummaryLabel>Remaining Manual FTE</SummaryLabel>
+            <SummaryValue>{(totals.totalFTE - totals.automatedFTE).toFixed(1)} h</SummaryValue>
+            <SummaryLabel>Remaining Manual Hours</SummaryLabel>
           </SummaryCard>
         </SummaryRow>
 
@@ -516,14 +516,14 @@ export default function AutomationControllingPage() {
 
         <SectionGrid>
           <Card>
-            <CardTitle>FTE per Project (from Tickets)</CardTitle>
+            <CardTitle>Hours Saved per Project (from Tickets)</CardTitle>
             <Table>
               <thead>
                 <tr>
                   <th>Project</th>
-                  <th style={{ textAlign: 'right' }}>Total FTE (Budget)</th>
-                  <th style={{ textAlign: 'right' }}>Planned FTE</th>
-                  <th style={{ textAlign: 'right' }}>Automated (Done)</th>
+                  <th style={{ textAlign: 'right' }}>Total Hours (Budget)</th>
+                  <th style={{ textAlign: 'right' }}>Planned Hours</th>
+                  <th style={{ textAlign: 'right' }}>Hours Saved (Done)</th>
                   <th style={{ textAlign: 'right' }}>Progress</th>
                   <th style={{ width: 140 }}>Visual</th>
                 </tr>
@@ -648,7 +648,7 @@ export default function AutomationControllingPage() {
           </FullWidthCard>
 
           <FullWidthCard>
-            <CardTitle>Ticket FTE Breakdown ({tickets.filter(t => t.automationFTE > 0).length} tickets with FTE)</CardTitle>
+            <CardTitle>Ticket Hours Saved Breakdown ({tickets.filter(t => t.automationFTE > 0).length} tickets with hours)</CardTitle>
             <div style={{ maxHeight: 400, overflowY: 'auto' }}>
               <Table>
                 <thead>
@@ -658,7 +658,7 @@ export default function AutomationControllingPage() {
                     <th>Title</th>
                     <th>Type</th>
                     <th>Status</th>
-                    <th style={{ textAlign: 'right' }}>Automation FTE</th>
+                    <th style={{ textAlign: 'right' }}>Hours Saved / Month</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -689,7 +689,7 @@ export default function AutomationControllingPage() {
                   {tickets.filter(t => t.automationFTE > 0).length === 0 && (
                     <tr>
                       <td colSpan={6} style={{ textAlign: 'center', color: theme.colors.textLight, padding: 24 }}>
-                        No tickets with Automation FTE set yet. Go to "App Requests & Bugs" and set FTE values on feature tickets.
+                        No tickets with Hours Saved set yet. Go to "App Requests & Bugs" and set hours saved values on feature tickets.
                       </td>
                     </tr>
                   )}

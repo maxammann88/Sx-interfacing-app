@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { theme } from '../styles/theme';
+import api from '../utils/api';
 
 const fadeIn = keyframes`
   from { opacity: 0; transform: translateY(12px); }
@@ -95,17 +96,17 @@ const FlowRow = styled.div`
   gap: 0;
 `;
 
-const StepCard = styled.div<{ $active: boolean; $clickable: boolean; $idx: number }>`
-  flex: 1;
+const StepCard = styled.div<{ $active: boolean; $clickable: boolean; $idx: number; $dragOver?: boolean }>`
+  width: 100%;
   position: relative;
-  min-height: 160px;
+  height: 170px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   text-align: center;
-  padding: 28px 28px 28px ${p => p.$idx === 0 ? '28px' : '36px'};
-  cursor: ${p => p.$clickable ? 'pointer' : 'default'};
+  padding: 20px 24px 20px ${p => p.$idx === 0 ? '24px' : '36px'};
+  cursor: ${p => p.$clickable ? 'pointer' : 'grab'};
   background: ${p => p.$active ? theme.colors.primary : theme.colors.surface};
   color: ${p => p.$active ? 'white' : theme.colors.textPrimary};
   clip-path: ${p => {
@@ -114,6 +115,7 @@ const StepCard = styled.div<{ $active: boolean; $clickable: boolean; $idx: numbe
   }};
   transition: all 0.25s;
   box-shadow: ${p => p.$active ? 'none' : 'inset 0 0 0 1px #e0e0e0'};
+  ${p => p.$dragOver ? `outline: 2px dashed ${theme.colors.primary}; outline-offset: -4px;` : ''}
 
   &:hover {
     ${p => p.$clickable ? `
@@ -273,12 +275,14 @@ const TargetLabel = styled.span<{ $highlight?: boolean }>`
   letter-spacing: 0.3px;
 `;
 
-const quarterTargets = [
-  { label: 'Q2 Target 2026\nTeam Dinner', pct: 15, highlight: true },
-  { label: 'Q3 Target 2026', pct: 35, highlight: false },
-  { label: 'Q4 Target 2026', pct: 55, highlight: false },
-  { label: '...', pct: 75, highlight: false },
-  { label: '...', pct: 100, highlight: false },
+const HOURS_SAVED_MAX = 60;
+
+const hoursMilestones = [
+  { label: '10h', pct: (10 / HOURS_SAVED_MAX) * 100, highlight: false },
+  { label: '20h', pct: (20 / HOURS_SAVED_MAX) * 100, highlight: false },
+  { label: '30h', pct: (30 / HOURS_SAVED_MAX) * 100, highlight: false },
+  { label: '40h', pct: (40 / HOURS_SAVED_MAX) * 100, highlight: false },
+  { label: '50h – Team Dinner 🎉', pct: (50 / HOURS_SAVED_MAX) * 100, highlight: true },
 ];
 
 const LeaderboardSection = styled.div`
@@ -511,6 +515,57 @@ const ModalBtn = styled.button<{ $primary?: boolean }>`
   &:hover { opacity: 0.9; }
 `;
 
+const KPIStrip = styled.div`
+  max-width: 1300px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 24px 32px 0;
+  display: flex;
+  gap: 16px;
+  animation: ${fadeIn} 0.35s ease;
+`;
+
+const KPICard = styled.div<{ $color: string; $glow?: boolean }>`
+  flex: 1;
+  background: ${theme.colors.surface};
+  border-radius: 12px;
+  box-shadow: ${theme.shadow};
+  padding: 18px 20px;
+  text-align: center;
+  border-top: 4px solid ${p => p.$color};
+  position: relative;
+  overflow: hidden;
+  ${p => p.$glow ? `
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255,95,0,0.04) 0%, transparent 60%);
+      pointer-events: none;
+    }
+  ` : ''}
+`;
+
+const KPIValue = styled.div`
+  font-size: 26px;
+  font-weight: 800;
+  color: ${theme.colors.textPrimary};
+  font-variant-numeric: tabular-nums;
+`;
+
+const KPILabel = styled.div`
+  font-size: 11px;
+  color: ${theme.colors.textSecondary};
+  margin-top: 2px;
+  font-weight: 600;
+`;
+
+const KPISub = styled.div`
+  font-size: 9px;
+  color: ${theme.colors.textLight};
+  margin-top: 4px;
+`;
+
 const RemoveBtn = styled.button`
   background: none;
   border: none;
@@ -521,6 +576,90 @@ const RemoveBtn = styled.button`
   padding: 2px 8px;
   border-radius: 4px;
   &:hover { background: rgba(220,53,69,0.08); }
+`;
+
+const AddStepBtn = styled.button`
+  background: none;
+  border: none;
+  color: ${theme.colors.primary};
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 4px;
+  &:hover { background: rgba(255,95,0,0.08); }
+`;
+
+const StepWrapper = styled.div`
+  flex: 1;
+  position: relative;
+  &:hover > button { opacity: 1; }
+`;
+
+const RemoveStepBtn = styled.button`
+  position: absolute;
+  bottom: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid ${theme.colors.danger};
+  background: white;
+  color: ${theme.colors.danger};
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+  &:hover { background: ${theme.colors.danger}; color: white; }
+`;
+
+const StepEditInput = styled.input`
+  background: white;
+  border: 1px solid ${theme.colors.primary};
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: ${theme.colors.textPrimary};
+  width: 100%;
+  max-width: 120px;
+  text-align: center;
+  &:focus { outline: none; box-shadow: 0 0 0 2px rgba(255,95,0,0.2); }
+`;
+
+const GuidanceStrip = styled.div`
+  max-width: 1300px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 12px 32px 0;
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  flex-wrap: wrap;
+  animation: ${fadeIn} 0.4s ease;
+`;
+
+const GuidanceItem = styled.span`
+  font-size: 12px;
+  color: ${theme.colors.textSecondary};
+  font-weight: 500;
+  font-style: italic;
+`;
+
+const GuidanceLink = styled(Link)`
+  font-size: 12px;
+  font-weight: 700;
+  color: ${theme.colors.primary};
+  text-decoration: none;
+  &:hover { text-decoration: underline; }
 `;
 
 const initialProcesses: ProcessRow[] = [
@@ -595,7 +734,7 @@ const initialProcesses: ProcessRow[] = [
     progress: 0,
     steps: [
       {
-        label: 'Partner Requests',
+        label: 'Partner Requests & Reconciliation',
         desc: 'Person 1',
         path: null,
         badge: 'Planned',
@@ -605,7 +744,7 @@ const initialProcesses: ProcessRow[] = [
         env: null,
       },
       {
-        label: 'Dummy',
+        label: 'Parameter Maintenance',
         desc: 'Person 2',
         path: null,
         badge: 'Planned',
@@ -615,7 +754,7 @@ const initialProcesses: ProcessRow[] = [
         env: null,
       },
       {
-        label: 'Dummy',
+        label: 'VPF',
         desc: 'Person 3',
         path: null,
         badge: 'Planned',
@@ -625,7 +764,7 @@ const initialProcesses: ProcessRow[] = [
         env: null,
       },
       {
-        label: 'Dummy',
+        label: 'Bonus & Accruals',
         desc: 'Person 4',
         path: null,
         badge: 'Planned',
@@ -635,7 +774,7 @@ const initialProcesses: ProcessRow[] = [
         env: null,
       },
       {
-        label: 'Dummy',
+        label: 'Month End Processes',
         desc: 'Person 5',
         path: null,
         badge: 'Planned',
@@ -645,7 +784,7 @@ const initialProcesses: ProcessRow[] = [
         env: null,
       },
       {
-        label: 'Dummy',
+        label: 'Reporting & Controlling',
         desc: 'Person 6',
         path: null,
         badge: 'Planned',
@@ -678,6 +817,21 @@ export default function PortalHomePage() {
   const [newTitle, setNewTitle] = useState('');
   const [newStepCount, setNewStepCount] = useState(6);
   const [newStepLabels, setNewStepLabels] = useState<string[]>([]);
+  const [totalDoneHours, setTotalDoneHours] = useState(0);
+
+  useEffect(() => {
+    api.get('/feedback/automation-summary')
+      .then((res) => {
+        const apps = res.data.data || [];
+        const doneHours = apps.reduce((s: number, a: any) => s + (a.doneFTE || 0), 0);
+        setTotalDoneHours(doneHours);
+      })
+      .catch(() => {});
+  }, []);
+
+  const hoursSavedPerMonth = Math.round(totalDoneHours * 10) / 10;
+  const peaktimeRatio = 0.45;
+  const peaktimeHours = Math.round(hoursSavedPerMonth * peaktimeRatio * 10) / 10;
 
   const openAddModal = () => {
     setNewTitle('');
@@ -714,55 +868,214 @@ export default function PortalHomePage() {
     setProcesses(prev => prev.filter(p => p.title !== title));
   };
 
+  const addStepToProcess = (title: string) => {
+    setProcesses(prev => prev.map(p => {
+      if (p.title !== title) return p;
+      const idx = p.steps.length;
+      return { ...p, steps: [...p.steps, makeDefaultStep(idx)] };
+    }));
+  };
+
+  const removeStepFromProcess = (title: string, stepIdx: number) => {
+    setProcesses(prev => prev.map(p => {
+      if (p.title !== title || p.steps.length <= 1) return p;
+      return { ...p, steps: p.steps.filter((_, i) => i !== stepIdx) };
+    }));
+  };
+
+  const renameStepInProcess = (title: string, stepIdx: number, field: 'label' | 'desc', value: string) => {
+    setProcesses(prev => prev.map(p => {
+      if (p.title !== title) return p;
+      const steps = p.steps.map((s, i) => i === stepIdx ? { ...s, [field]: value } : s);
+      return { ...p, steps };
+    }));
+  };
+
+  const [editingStep, setEditingStep] = useState<{ proc: string; idx: number; field: 'label' | 'desc' } | null>(null);
+  const [editingValue, setEditingValue] = useState('');
+
+  const dragProcRef = useRef<string | null>(null);
+  const dragIdxRef = useRef<number>(-1);
+  const [dragOverTarget, setDragOverTarget] = useState<{ proc: string; idx: number } | null>(null);
+
+  const handleDragStart = (procTitle: string, stepIdx: number) => {
+    dragProcRef.current = procTitle;
+    dragIdxRef.current = stepIdx;
+  };
+
+  const handleDragOver = (e: React.DragEvent, procTitle: string, stepIdx: number) => {
+    e.preventDefault();
+    if (dragProcRef.current === procTitle) {
+      setDragOverTarget({ proc: procTitle, idx: stepIdx });
+    }
+  };
+
+  const handleDrop = (procTitle: string, dropIdx: number) => {
+    if (dragProcRef.current !== procTitle) return;
+    const fromIdx = dragIdxRef.current;
+    if (fromIdx === dropIdx) { setDragOverTarget(null); return; }
+    setProcesses(prev => prev.map(p => {
+      if (p.title !== procTitle) return p;
+      const steps = [...p.steps];
+      const [moved] = steps.splice(fromIdx, 1);
+      steps.splice(dropIdx, 0, moved);
+      return { ...p, steps };
+    }));
+    setDragOverTarget(null);
+  };
+
+  const handleDragEnd = () => {
+    dragProcRef.current = null;
+    dragIdxRef.current = -1;
+    setDragOverTarget(null);
+  };
+
+  const startEdit = (proc: string, idx: number, field: 'label' | 'desc', current: string) => {
+    setEditingStep({ proc, idx, field });
+    setEditingValue(current);
+  };
+
+  const commitEdit = () => {
+    if (editingStep && editingValue.trim()) {
+      renameStepInProcess(editingStep.proc, editingStep.idx, editingStep.field, editingValue.trim());
+    }
+    setEditingStep(null);
+  };
+
   return (
     <Page>
       <Header>
         <LogoImg src="/sixt-logo.png" alt="SIXT" />
         <HeaderRight>
           <FeedbackLink to="/automation-controlling">Automation Controlling</FeedbackLink>
-          <FeedbackLink to="/api-management">API Management</FeedbackLink>
+          <FeedbackLink to="/api-management">API, App, DB Management</FeedbackLink>
+          <FeedbackLink to="/collaboration-model">Collaboration Model</FeedbackLink>
           <FeedbackLink to="/feedback">App Requests &amp; Bugs</FeedbackLink>
           <HeaderText>You rock today!</HeaderText>
         </HeaderRight>
       </Header>
 
-      <ProcessContainer style={{ paddingTop: 40 }}>
+      <KPIStrip>
+        <KPICard $color="#e05c00" $glow>
+          <KPIValue>{hoursSavedPerMonth.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} h</KPIValue>
+          <KPILabel>Hours Saved / Month</KPILabel>
+          <KPISub>from {totalDoneHours > 0 ? 'completed' : 'no'} tickets</KPISub>
+        </KPICard>
+        <KPICard $color="#c44500">
+          <KPIValue>{peaktimeHours.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} h</KPIValue>
+          <KPILabel>hereof Peaktime Hours</KPILabel>
+          <KPISub>~45% &middot; 5th–15th of month</KPISub>
+        </KPICard>
+        <KPICard $color="#8b5cf6">
+          <KPIValue>&mdash;</KPIValue>
+          <KPILabel>Token Costs</KPILabel>
+          <KPISub>all users &middot; coming soon</KPISub>
+        </KPICard>
+        <KPICard $color={theme.colors.info}>
+          <KPIValue>&mdash;</KPIValue>
+          <KPILabel>Hours Spent Coding</KPILabel>
+          <KPISub>all users &middot; coming soon</KPISub>
+        </KPICard>
+        <KPICard $color={theme.colors.primary} $glow>
+          <KPIValue>10,738</KPIValue>
+          <KPILabel>Lines of Code</KPILabel>
+          <KPISub>Frontend + Backend + Shared</KPISub>
+        </KPICard>
+        <KPICard $color="#6f42c1">
+          <KPIValue>25</KPIValue>
+          <KPILabel>Pages</KPILabel>
+          <KPISub>across 4 Sub-Apps</KPISub>
+        </KPICard>
+        <KPICard $color={theme.colors.success}>
+          <KPIValue>26</KPIValue>
+          <KPILabel>API Endpoints</KPILabel>
+          <KPISub>REST &middot; Active</KPISub>
+        </KPICard>
+        <KPICard $color={theme.colors.warning}>
+          <KPIValue>8</KPIValue>
+          <KPILabel>Git Commits</KPILabel>
+          <KPISub>on main branch</KPISub>
+        </KPICard>
+      </KPIStrip>
+
+      <GuidanceStrip>
+        <GuidanceItem>1. If you can explain it, you can vibe-code it.</GuidanceItem>
+        <GuidanceItem>2. Focus on features with impact.</GuidanceItem>
+        <GuidanceLink to="/collaboration-model">3. See Further Guidance &rarr;</GuidanceLink>
+      </GuidanceStrip>
+
+      <ProcessContainer style={{ paddingTop: 28 }}>
         {processes.map((proc) => (
           <div key={proc.title} style={{ marginBottom: 36 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <ProcessTitle>{proc.title}</ProcessTitle>
+              <AddStepBtn onClick={() => addStepToProcess(proc.title)}>+ Add Step</AddStepBtn>
               {!['Franchise Controlling'].includes(proc.title) && (
                 <RemoveBtn onClick={() => removeProcess(proc.title)}>Remove</RemoveBtn>
               )}
             </div>
             <FlowRow>
               {proc.steps.map((step, i) => (
-                <StepCard
+                <StepWrapper
                   key={`${proc.title}-${i}`}
-                  $active={step.active}
-                  $clickable={!!step.path}
-                  $idx={i}
-                  onClick={() => step.path && navigate(step.path)}
+                  draggable
+                  onDragStart={() => handleDragStart(proc.title, i)}
+                  onDragOver={e => handleDragOver(e, proc.title, i)}
+                  onDrop={() => handleDrop(proc.title, i)}
+                  onDragEnd={handleDragEnd}
                 >
-                  <StepNumber $active={step.active}>{i + 1}</StepNumber>
-                  <StepTitle $active={step.active}>{step.label}</StepTitle>
-                  <StepDesc $active={step.active}>{step.desc}</StepDesc>
-                  <StepBadge $color={step.badgeColor}>{step.badge}</StepBadge>
-                  {step.env && <EnvBadge $env={step.env} $active={step.active}>{step.env}</EnvBadge>}
-                  {step.deadline && <StepDeadline $active={step.active}>Deadline: {step.deadline}</StepDeadline>}
-                </StepCard>
+                  <StepCard
+                    $active={step.active}
+                    $clickable={!!step.path}
+                    $idx={i}
+                    $dragOver={dragOverTarget?.proc === proc.title && dragOverTarget.idx === i}
+                    onClick={() => step.path && navigate(step.path)}
+                  >
+                    <StepNumber $active={step.active}>{i + 1}</StepNumber>
+                    {editingStep?.proc === proc.title && editingStep.idx === i && editingStep.field === 'label' ? (
+                      <StepEditInput
+                        autoFocus
+                        value={editingValue}
+                        onChange={e => setEditingValue(e.target.value)}
+                        onBlur={commitEdit}
+                        onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditingStep(null); }}
+                        onClick={e => e.stopPropagation()}
+                      />
+                    ) : (
+                      <StepTitle $active={step.active} onDoubleClick={e => { e.stopPropagation(); startEdit(proc.title, i, 'label', step.label); }} style={{ cursor: 'text' }} title="Double-click to rename">{step.label}</StepTitle>
+                    )}
+                    {editingStep?.proc === proc.title && editingStep.idx === i && editingStep.field === 'desc' ? (
+                      <StepEditInput
+                        autoFocus
+                        value={editingValue}
+                        onChange={e => setEditingValue(e.target.value)}
+                        onBlur={commitEdit}
+                        onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditingStep(null); }}
+                        onClick={e => e.stopPropagation()}
+                      />
+                    ) : (
+                      <StepDesc $active={step.active} onDoubleClick={e => { e.stopPropagation(); startEdit(proc.title, i, 'desc', step.desc); }} style={{ cursor: 'text' }} title="Double-click to rename">{step.desc}</StepDesc>
+                    )}
+                    <StepBadge $color={step.badgeColor}>{step.badge}</StepBadge>
+                    {step.env && <EnvBadge $env={step.env} $active={step.active}>{step.env}</EnvBadge>}
+                    {step.deadline && <StepDeadline $active={step.active}>Deadline: {step.deadline}</StepDeadline>}
+                  </StepCard>
+                  {proc.steps.length > 1 && (
+                    <RemoveStepBtn onClick={() => removeStepFromProcess(proc.title, i)} title="Delete step">−</RemoveStepBtn>
+                  )}
+                </StepWrapper>
               ))}
             </FlowRow>
             <ProgressWrapper>
-              {quarterTargets.map((qt, qi) => (
-                <TargetMarker key={`${qt.label}-${qi}`} $pct={qt.pct}>
-                  <TargetLabel $highlight={qt.highlight}>{qt.label}</TargetLabel>
-                  <TargetLine $highlight={qt.highlight} />
+              {hoursMilestones.map((m, mi) => (
+                <TargetMarker key={`${m.label}-${mi}`} $pct={m.pct}>
+                  <TargetLabel $highlight={m.highlight}>{m.label}</TargetLabel>
+                  <TargetLine $highlight={m.highlight} />
                 </TargetMarker>
               ))}
               <ProgressBarOuter>
-                <ProgressBarInner $pct={proc.progress} />
-                <ProgressLabel>{proc.progress}% Automation Progress</ProgressLabel>
+                <ProgressBarInner $pct={Math.min((hoursSavedPerMonth / HOURS_SAVED_MAX) * 100, 100)} />
+                <ProgressLabel>{hoursSavedPerMonth.toFixed(1)}h saved / month</ProgressLabel>
               </ProgressBarOuter>
             </ProgressWrapper>
           </div>

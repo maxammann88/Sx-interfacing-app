@@ -27,6 +27,7 @@ import AccountMappingPage from './pages/parameter-maintenance/AccountMappingPage
 import PaymentTermsPage from './pages/parameter-maintenance/PaymentTermsPage';
 import AutomationControllingPage from './pages/AutomationControllingPage';
 import ApiManagementPage from './pages/ApiManagementPage';
+import CollaborationModelPage from './pages/CollaborationModelPage';
 
 export default function App() {
   return (
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="/feedback" element={<FeedbackPage />} />
           <Route path="/automation-controlling" element={<AutomationControllingPage />} />
           <Route path="/api-management" element={<ApiManagementPage />} />
+          <Route path="/collaboration-model" element={<CollaborationModelPage />} />
 
           <Route path="/parameter-maintenance" element={<ParameterMaintenanceLayout />}>
             <Route index element={<StammdatenViewPage />} />

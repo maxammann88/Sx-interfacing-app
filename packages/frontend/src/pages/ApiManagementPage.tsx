@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import styled from 'styled-components';
 import { theme } from '../styles/theme';
+import DbDocumentationPage from './DbDocumentationPage';
 
 const Page = styled.div`
   min-height: 100vh;
@@ -35,6 +36,28 @@ const HeaderTitle = styled.span`
   font-size: 15px;
   font-weight: 700;
   color: ${theme.colors.white};
+`;
+
+const TabBar = styled.div`
+  display: flex;
+  gap: 0;
+  background: ${theme.colors.surface};
+  border-bottom: 2px solid ${theme.colors.border};
+  padding: 0 32px;
+`;
+
+const Tab = styled.button<{ $active: boolean }>`
+  padding: 14px 28px;
+  border: none;
+  background: none;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  color: ${p => p.$active ? theme.colors.primary : theme.colors.textSecondary};
+  border-bottom: 3px solid ${p => p.$active ? theme.colors.primary : 'transparent'};
+  margin-bottom: -2px;
+  transition: all 0.15s;
+  &:hover { color: ${theme.colors.primary}; }
 `;
 
 const Content = styled.div`
@@ -217,7 +240,7 @@ const endpoints: ApiEndpoint[] = [
   { method: 'GET', path: '/api/fsm/results', description: 'Get calculation results', app: 'FSM', status: 'planned', auth: true },
 ];
 
-export default function ApiManagementPage() {
+function ApiRegistryTab() {
   const [appFilter, setAppFilter] = useState<string>('all');
   const [methodFilter, setMethodFilter] = useState<string>('all');
 
@@ -233,86 +256,99 @@ export default function ApiManagementPage() {
   const plannedCount = endpoints.filter(e => e.status === 'planned').length;
 
   return (
+    <Content>
+      <PageTitle>API Management</PageTitle>
+
+      <SummaryRow>
+        <SummaryCard $color={theme.colors.primary}>
+          <SummaryValue>{endpoints.length}</SummaryValue>
+          <SummaryLabel>Total Endpoints</SummaryLabel>
+        </SummaryCard>
+        <SummaryCard $color={theme.colors.success}>
+          <SummaryValue>{activeCount}</SummaryValue>
+          <SummaryLabel>Active</SummaryLabel>
+        </SummaryCard>
+        <SummaryCard $color={theme.colors.warning}>
+          <SummaryValue>{plannedCount}</SummaryValue>
+          <SummaryLabel>Planned</SummaryLabel>
+        </SummaryCard>
+        <SummaryCard $color={theme.colors.info}>
+          <SummaryValue>{apps.length}</SummaryValue>
+          <SummaryLabel>Services</SummaryLabel>
+        </SummaryCard>
+      </SummaryRow>
+
+      <SectionGrid>
+        <FullWidthCard>
+          <CardTitle>API Endpoints Registry</CardTitle>
+
+          <FilterRow>
+            <FilterChip $active={appFilter === 'all'} onClick={() => setAppFilter('all')}>All Apps</FilterChip>
+            {apps.map(a => (
+              <FilterChip key={a} $active={appFilter === a} onClick={() => setAppFilter(a)}>{a}</FilterChip>
+            ))}
+            <span style={{ borderLeft: `1px solid ${theme.colors.border}`, margin: '0 4px' }} />
+            <FilterChip $active={methodFilter === 'all'} onClick={() => setMethodFilter('all')}>All Methods</FilterChip>
+            {methods.map(m => (
+              <FilterChip key={m} $active={methodFilter === m} onClick={() => setMethodFilter(m)}>
+                {m}
+              </FilterChip>
+            ))}
+          </FilterRow>
+
+          <Table>
+            <thead>
+              <tr>
+                <th style={{ width: 70 }}>Method</th>
+                <th>Endpoint</th>
+                <th>Description</th>
+                <th style={{ width: 90 }}>App</th>
+                <th style={{ width: 80 }}>Status</th>
+                <th style={{ width: 50 }}>Auth</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((e, i) => (
+                <tr key={i}>
+                  <td><MethodBadge $method={e.method}>{e.method}</MethodBadge></td>
+                  <td><EndpointPath>{e.path}</EndpointPath></td>
+                  <td style={{ color: theme.colors.textSecondary, fontSize: 12 }}>{e.description}</td>
+                  <td><Badge $color={e.app === 'Core' ? theme.colors.info : e.app === 'FSM' ? '#e05c00' : theme.colors.success}>{e.app}</Badge></td>
+                  <td>
+                    <Badge $color={e.status === 'active' ? theme.colors.success : e.status === 'planned' ? theme.colors.warning : theme.colors.danger}>
+                      {e.status}
+                    </Badge>
+                  </td>
+                  <td style={{ textAlign: 'center', fontSize: 12 }}>
+                    {e.auth ? <span style={{ color: theme.colors.danger, fontWeight: 700 }}>Yes</span> : <span style={{ color: theme.colors.textLight }}>No</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        </FullWidthCard>
+      </SectionGrid>
+    </Content>
+  );
+}
+
+export default function ApiManagementPage() {
+  const [activeTab, setActiveTab] = useState<'api' | 'db'>('api');
+
+  return (
     <Page>
       <Header>
         <Link to="/"><LogoImg src="/sixt-logo.png" alt="SIXT" /></Link>
         <BackLink to="/">&larr;</BackLink>
-        <HeaderTitle>API Management</HeaderTitle>
+        <HeaderTitle>API, App, DB Management</HeaderTitle>
       </Header>
 
-      <Content>
-        <PageTitle>API Management</PageTitle>
+      <TabBar>
+        <Tab $active={activeTab === 'api'} onClick={() => setActiveTab('api')}>API Management</Tab>
+        <Tab $active={activeTab === 'db'} onClick={() => setActiveTab('db')}>App &amp; DB Documentation</Tab>
+      </TabBar>
 
-        <SummaryRow>
-          <SummaryCard $color={theme.colors.primary}>
-            <SummaryValue>{endpoints.length}</SummaryValue>
-            <SummaryLabel>Total Endpoints</SummaryLabel>
-          </SummaryCard>
-          <SummaryCard $color={theme.colors.success}>
-            <SummaryValue>{activeCount}</SummaryValue>
-            <SummaryLabel>Active</SummaryLabel>
-          </SummaryCard>
-          <SummaryCard $color={theme.colors.warning}>
-            <SummaryValue>{plannedCount}</SummaryValue>
-            <SummaryLabel>Planned</SummaryLabel>
-          </SummaryCard>
-          <SummaryCard $color={theme.colors.info}>
-            <SummaryValue>{apps.length}</SummaryValue>
-            <SummaryLabel>Services</SummaryLabel>
-          </SummaryCard>
-        </SummaryRow>
-
-        <SectionGrid>
-          <FullWidthCard>
-            <CardTitle>API Endpoints Registry</CardTitle>
-
-            <FilterRow>
-              <FilterChip $active={appFilter === 'all'} onClick={() => setAppFilter('all')}>All Apps</FilterChip>
-              {apps.map(a => (
-                <FilterChip key={a} $active={appFilter === a} onClick={() => setAppFilter(a)}>{a}</FilterChip>
-              ))}
-              <span style={{ borderLeft: `1px solid ${theme.colors.border}`, margin: '0 4px' }} />
-              <FilterChip $active={methodFilter === 'all'} onClick={() => setMethodFilter('all')}>All Methods</FilterChip>
-              {methods.map(m => (
-                <FilterChip key={m} $active={methodFilter === m} onClick={() => setMethodFilter(m)}>
-                  {m}
-                </FilterChip>
-              ))}
-            </FilterRow>
-
-            <Table>
-              <thead>
-                <tr>
-                  <th style={{ width: 70 }}>Method</th>
-                  <th>Endpoint</th>
-                  <th>Description</th>
-                  <th style={{ width: 90 }}>App</th>
-                  <th style={{ width: 80 }}>Status</th>
-                  <th style={{ width: 50 }}>Auth</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((e, i) => (
-                  <tr key={i}>
-                    <td><MethodBadge $method={e.method}>{e.method}</MethodBadge></td>
-                    <td><EndpointPath>{e.path}</EndpointPath></td>
-                    <td style={{ color: theme.colors.textSecondary, fontSize: 12 }}>{e.description}</td>
-                    <td><Badge $color={e.app === 'Core' ? theme.colors.info : e.app === 'FSM' ? '#e05c00' : theme.colors.success}>{e.app}</Badge></td>
-                    <td>
-                      <Badge $color={e.status === 'active' ? theme.colors.success : e.status === 'planned' ? theme.colors.warning : theme.colors.danger}>
-                        {e.status}
-                      </Badge>
-                    </td>
-                    <td style={{ textAlign: 'center', fontSize: 12 }}>
-                      {e.auth ? <span style={{ color: theme.colors.danger, fontWeight: 700 }}>Yes</span> : <span style={{ color: theme.colors.textLight }}>No</span>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
-          </FullWidthCard>
-        </SectionGrid>
-      </Content>
+      {activeTab === 'api' ? <ApiRegistryTab /> : <DbDocumentationPage />}
     </Page>
   );
 }

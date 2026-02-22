@@ -839,17 +839,26 @@ export default function FeedbackPage() {
             </DeadlineDateRow>
 
             <FTERow>
-              <FTELabel>Automation FTE:</FTELabel>
+              <FTELabel>Hours Saved / Month:</FTELabel>
               <FTEInput
                 type="number"
-                step="0.1"
+                step="0.5"
                 min="0"
                 value={fteEdits[item.id] ?? item.automationFTE}
                 onChange={e => setFteEdits(p => ({ ...p, [item.id]: e.target.value }))}
                 onBlur={() => handleSaveFTE(item)}
               />
-              <span style={{ fontSize: 10, color: theme.colors.textLight }}>FTE saved by this feature</span>
+              <span style={{ fontSize: 10, color: theme.colors.textLight }}>hours saved by this feature per month</span>
             </FTERow>
+            {(fteEdits[item.id] ?? item.automationFTE) > 0 && (
+              <FTERow>
+                <FTELabel style={{ color: '#c44500' }}>of which peak time hours saved:</FTELabel>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#c44500' }}>
+                  {(Number(fteEdits[item.id] ?? item.automationFTE) * 0.45).toFixed(1)} h
+                </span>
+                <span style={{ fontSize: 10, color: theme.colors.textLight }}>~45% &middot; 5th–15th of month</span>
+              </FTERow>
+            )}
 
             <ActionsRow>
               {item.status === 'open' && (
