@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
@@ -720,8 +720,8 @@ const initialProcesses: ProcessRow[] = [
         label: 'FSM – Calculation',
         desc: 'Person 3',
         path: '/fsm',
-        badge: 'Coming soon',
-        badgeColor: '#999',
+        badge: 'Dev',
+        badgeColor: '#ff5f00',
         active: true,
         deadline: 'KW12 2026',
         env: 'DEV',
@@ -852,7 +852,7 @@ export default function PortalHomePage() {
   const [subAppDeadlines, setSubAppDeadlines] = useState<Record<string, string>>({});
   const [codeKpis, setCodeKpis] = useState({ linesOfCode: 0, pages: 0, endpoints: 0, commits: 0 });
   const [ticketStats, setTicketStats] = useState({ total: 0, open: 0, in_progress: 0, review: 0, testing: 0, done: 0 });
-  const [allTickets, setAllTickets] = useState<{ app: string; automationFTE: number; status: string }[]>([]);
+  const [allTickets, setAllTickets] = useState<{ app: string; automationFTE: number; peakPercent: number; status: string }[]>([]);
   const [kpiOpen, setKpiOpen] = useState(true);
   const [streamsOpen, setStreamsOpen] = useState(true);
   const [leaderboardOpen, setLeaderboardOpen] = useState(true);
@@ -865,7 +865,7 @@ export default function PortalHomePage() {
         const stats = { total: items.length, open: 0, in_progress: 0, review: 0, testing: 0, done: 0 };
         items.forEach(t => { if (stats.hasOwnProperty(t.status)) (stats as any)[t.status]++; });
         setTicketStats(stats);
-        setAllTickets(items.map(t => ({ app: t.app || '', automationFTE: t.automationFTE || 0, status: t.status || 'open' })));
+        setAllTickets(items.map(t => ({ app: t.app || '', automationFTE: t.automationFTE || 0, peakPercent: t.peakPercent || 0, status: t.status || 'open' })));
         const doneHours = items
           .filter(t => t.status === 'done' && t.automationFTE > 0)
           .reduce((s: number, t: any) => s + (t.automationFTE || 0), 0);
@@ -956,8 +956,14 @@ export default function PortalHomePage() {
     const total = matched.reduce((s, t) => s + t.automationFTE, 0);
     return { done: Math.round(done * 10) / 10, total: Math.round(total * 10) / 10 };
   };
-  const peaktimeRatio = 0.45;
-  const peaktimeHours = Math.round(hoursSavedPerMonth * peaktimeRatio * 10) / 10;
+  const peaktimeHours = useMemo(() => {
+    const doneTickets = allTickets.filter(t => t.status === 'done' && t.automationFTE > 0);
+    const total = doneTickets.reduce((s, t) => {
+      const pct = t.peakPercent > 0 ? t.peakPercent / 100 : 0;
+      return s + (t.automationFTE * pct);
+    }, 0);
+    return Math.round(total * 10) / 10;
+  }, [allTickets]);
 
   const openAddModal = () => {
     setNewTitle('');
@@ -1101,7 +1107,7 @@ export default function PortalHomePage() {
           <KPICard $color="#c44500">
             <KPIValue>{peaktimeHours.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} h</KPIValue>
             <KPILabel>hereof Peaktime Hours</KPILabel>
-            <KPISub>~45% &middot; 5th–15th of month</KPISub>
+            <KPISub>from ticket Peak % &middot; 5th–15th of month</KPISub>
           </KPICard>
           <KPICard $color="#8b5cf6">
             <KPIValue>&mdash;</KPIValue>

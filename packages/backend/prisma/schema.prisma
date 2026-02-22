@@ -163,6 +163,8 @@ model FeedbackItem {
   deadlineHistory Json?
   assignee        String?
   automationFTE   Float            @default(0)
+  codingEffort    Float            @default(0)
+  peakPercent     Float            @default(0)
   status          String           @default("open")
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt

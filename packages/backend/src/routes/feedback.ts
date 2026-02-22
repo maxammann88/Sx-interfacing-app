@@ -19,12 +19,24 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 
 router.post('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { app, author, type, title, description, deadlineWeek, assignee } = req.body;
+    const { app, author, type, title, description, deadlineWeek, assignee, deadlineDate, automationFTE, codingEffort, peakPercent } = req.body;
     if (!type || !title) {
       return res.status(400).json({ error: 'type and title are required' });
     }
     const item = await prisma.feedbackItem.create({
-      data: { app: app || 'Interfacing', author: author || null, type, title, description: description || null, deadlineWeek: deadlineWeek || null, assignee: assignee || null },
+      data: {
+        app: app || 'Interfacing',
+        author: author || null,
+        type,
+        title,
+        description: description || null,
+        deadlineWeek: deadlineWeek || null,
+        assignee: assignee || null,
+        deadlineDate: deadlineDate ? new Date(deadlineDate) : null,
+        automationFTE: typeof automationFTE === 'number' ? automationFTE : 0,
+        codingEffort: typeof codingEffort === 'number' ? codingEffort : 0,
+        peakPercent: typeof peakPercent === 'number' ? peakPercent : 0,
+      },
       include: { comments: true },
     });
     res.status(201).json(item);
@@ -141,6 +153,32 @@ router.patch('/:id/automation-fte', async (req: Request, res: Response, next: Ne
     const item = await prisma.feedbackItem.update({
       where: { id },
       data: { automationFTE: typeof automationFTE === 'number' ? automationFTE : 0 },
+      include: { comments: { orderBy: { createdAt: 'asc' } } },
+    });
+    res.json(item);
+  } catch (err) { next(err); }
+});
+
+router.patch('/:id/coding-effort', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = parseInt(req.params.id as string, 10);
+    const { codingEffort } = req.body;
+    const item = await prisma.feedbackItem.update({
+      where: { id },
+      data: { codingEffort: typeof codingEffort === 'number' ? codingEffort : 0 },
+      include: { comments: { orderBy: { createdAt: 'asc' } } },
+    });
+    res.json(item);
+  } catch (err) { next(err); }
+});
+
+router.patch('/:id/peak-percent', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = parseInt(req.params.id as string, 10);
+    const { peakPercent } = req.body;
+    const item = await prisma.feedbackItem.update({
+      where: { id },
+      data: { peakPercent: typeof peakPercent === 'number' ? peakPercent : 0 },
       include: { comments: { orderBy: { createdAt: 'asc' } } },
     });
     res.json(item);

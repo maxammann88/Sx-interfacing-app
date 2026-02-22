@@ -32,6 +32,8 @@ interface FeedbackItem {
   deadlineHistory: DeadlineHistoryEntry[] | null;
   assignee: string | null;
   automationFTE: number;
+  codingEffort: number;
+  peakPercent: number;
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -305,7 +307,7 @@ const CommentInput = styled.input`
 const AppBadge = styled.select`
   font-size: 10px;
   font-weight: 700;
-  padding: 2px 8px;
+  padding: 3px 6px;
   border-radius: 10px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -313,12 +315,6 @@ const AppBadge = styled.select`
   color: #333;
   border: 1px solid transparent;
   cursor: pointer;
-  appearance: none;
-  -webkit-appearance: none;
-  padding-right: 16px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath fill='%23666' d='M0 0l4 5 4-5z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 4px center;
   &:hover { border-color: ${theme.colors.primary}; }
   &:focus { outline: none; border-color: ${theme.colors.primary}; }
 `;
@@ -631,6 +627,14 @@ export default function FeedbackPage() {
 
   const appOptions = useMemo(() => getAppOptions(), []);
 
+  const isPeakRelevant = (appName: string): boolean => {
+    const norm = (s: string) => s.toLowerCase().replace(/[-–—\s]+/g, '');
+    const entry = registry.find(r => norm(r.app) === norm(appName));
+    if (!entry) return false;
+    const stream = entry.stream.toLowerCase();
+    return stream.includes('franchise') || stream.includes('b2p');
+  };
+
   const [newApp, setNewApp] = useState('Interfacing');
   const [newAuthor, setNewAuthor] = useState('');
   const [newType, setNewType] = useState('feature');
@@ -650,6 +654,12 @@ export default function FeedbackPage() {
   const [deadlineDateSaving, setDeadlineDateSaving] = useState<Record<number, boolean>>({});
   const [historyModalItem, setHistoryModalItem] = useState<FeedbackItem | null>(null);
   const [fteEdits, setFteEdits] = useState<Record<number, string>>({});
+  const [codingEffortEdits, setCodingEffortEdits] = useState<Record<number, string>>({});
+  const [peakPctEdits, setPeakPctEdits] = useState<Record<number, string>>({});
+  const [newDeadlineDate, setNewDeadlineDate] = useState('');
+  const [newHoursSaved, setNewHoursSaved] = useState('');
+  const [newPeakPct, setNewPeakPct] = useState('');
+  const [newCodingEffort, setNewCodingEffort] = useState('');
 
   const loadItems = useCallback(async () => {
     try {
@@ -678,9 +688,25 @@ export default function FeedbackPage() {
     if (!newTitle.trim()) return;
     setSaving(true);
     try {
-      await api.post('/feedback', { app: newApp, author: newAuthor.trim() || null, type: newType, title: newTitle.trim(), description: newDesc.trim() || null, deadlineWeek: getDefaultDeadline() });
+      const payload: any = {
+        app: newApp,
+        author: newAuthor.trim() || null,
+        type: newType,
+        title: newTitle.trim(),
+        description: newDesc.trim() || null,
+        deadlineWeek: getDefaultDeadline(),
+        deadlineDate: newDeadlineDate || null,
+        automationFTE: parseFloat(newHoursSaved) || 0,
+        codingEffort: parseFloat(newCodingEffort) || 0,
+        peakPercent: parseFloat(newPeakPct) || 0,
+      };
+      await api.post('/feedback', payload);
       setNewTitle('');
       setNewDesc('');
+      setNewDeadlineDate('');
+      setNewHoursSaved('');
+      setNewPeakPct('');
+      setNewCodingEffort('');
       await loadItems();
     } catch { /* ignore */ }
     setSaving(false);
@@ -739,6 +765,24 @@ export default function FeedbackPage() {
     if (val === item.automationFTE) return;
     try {
       await api.patch(`/feedback/${item.id}/automation-fte`, { automationFTE: val });
+      await loadItems();
+    } catch { /* ignore */ }
+  };
+
+  const handleSaveCodingEffort = async (item: FeedbackItem) => {
+    const val = parseFloat(codingEffortEdits[item.id] ?? '') || 0;
+    if (val === (item.codingEffort || 0)) return;
+    try {
+      await api.patch(`/feedback/${item.id}/coding-effort`, { codingEffort: val });
+      await loadItems();
+    } catch { /* ignore */ }
+  };
+
+  const handleSavePeakPct = async (item: FeedbackItem) => {
+    const val = parseFloat(peakPctEdits[item.id] ?? '') || 0;
+    if (val === (item.peakPercent || 0)) return;
+    try {
+      await api.patch(`/feedback/${item.id}/peak-percent`, { peakPercent: val });
       await loadItems();
     } catch { /* ignore */ }
   };
@@ -881,6 +925,56 @@ export default function FeedbackPage() {
               placeholder="Detailed description..."
             />
           </FormGroup>
+          <FormRow style={{ marginTop: 12 }}>
+            <FormGroup>
+              <Label>Deadline</Label>
+              <Input
+                type="date"
+                value={newDeadlineDate}
+                onChange={e => setNewDeadlineDate(e.target.value)}
+                style={{ minWidth: 140 }}
+              />
+            </FormGroup>
+            <FormGroup>
+              <Label>Hours Saved / Month</Label>
+              <Input
+                type="number"
+                step="0.5"
+                min="0"
+                value={newHoursSaved}
+                onChange={e => setNewHoursSaved(e.target.value)}
+                placeholder="0"
+                style={{ minWidth: 80 }}
+              />
+            </FormGroup>
+            {isPeakRelevant(newApp) && (
+              <FormGroup>
+                <Label>Peak %</Label>
+                <Input
+                  type="number"
+                  step="5"
+                  min="0"
+                  max="100"
+                  value={newPeakPct}
+                  onChange={e => setNewPeakPct(e.target.value)}
+                  placeholder="0"
+                  style={{ minWidth: 70 }}
+                />
+              </FormGroup>
+            )}
+            <FormGroup>
+              <Label>Coding Effort (h)</Label>
+              <Input
+                type="number"
+                step="0.5"
+                min="0"
+                value={newCodingEffort}
+                onChange={e => setNewCodingEffort(e.target.value)}
+                placeholder="0"
+                style={{ minWidth: 80 }}
+              />
+            </FormGroup>
+          </FormRow>
           <div style={{ marginTop: 12 }}>
             <Button onClick={handleCreate} disabled={saving || !newTitle.trim()}>
               {saving ? 'Saving...' : 'Submit'}
@@ -965,9 +1059,7 @@ export default function FeedbackPage() {
                   ⚠ Changed {(item.deadlineHistory as DeadlineHistoryEntry[]).length}x — click for history
                 </DeadlineChanged>
               )}
-            </DeadlineDateRow>
-
-            <FTERow>
+              <span style={{ margin: '0 6px', borderLeft: `1px solid ${theme.colors.border}`, height: 20 }} />
               <FTELabel>Hours Saved / Month:</FTELabel>
               <FTEInput
                 type="number"
@@ -976,16 +1068,45 @@ export default function FeedbackPage() {
                 value={fteEdits[item.id] ?? item.automationFTE}
                 onChange={e => setFteEdits(p => ({ ...p, [item.id]: e.target.value }))}
                 onBlur={() => handleSaveFTE(item)}
+                style={{ width: 60 }}
               />
-              <span style={{ fontSize: 10, color: theme.colors.textLight }}>hours saved by this feature per month</span>
-            </FTERow>
-            {(fteEdits[item.id] ?? item.automationFTE) > 0 && (
+              <span style={{ margin: '0 6px', borderLeft: `1px solid ${theme.colors.border}`, height: 20 }} />
+              <FTELabel>Coding Effort:</FTELabel>
+              <FTEInput
+                type="number"
+                step="0.5"
+                min="0"
+                value={codingEffortEdits[item.id] ?? (item.codingEffort || 0)}
+                onChange={e => setCodingEffortEdits(p => ({ ...p, [item.id]: e.target.value }))}
+                onBlur={() => handleSaveCodingEffort(item)}
+                style={{ width: 60 }}
+              />
+              <span style={{ fontSize: 10, color: theme.colors.textLight }}>h</span>
+              {isPeakRelevant(item.app) && (
+                <>
+                  <span style={{ margin: '0 6px', borderLeft: `1px solid ${theme.colors.border}`, height: 20 }} />
+                  <FTELabel style={{ color: '#c44500' }}>Peak %:</FTELabel>
+                  <FTEInput
+                    type="number"
+                    step="5"
+                    min="0"
+                    max="100"
+                    value={peakPctEdits[item.id] ?? (item.peakPercent || 0)}
+                    onChange={e => setPeakPctEdits(p => ({ ...p, [item.id]: e.target.value }))}
+                    onBlur={() => handleSavePeakPct(item)}
+                    style={{ width: 50 }}
+                  />
+                  <span style={{ fontSize: 10, color: theme.colors.textLight }}>%</span>
+                </>
+              )}
+            </DeadlineDateRow>
+            {(fteEdits[item.id] ?? item.automationFTE) > 0 && isPeakRelevant(item.app) && (peakPctEdits[item.id] ?? item.peakPercent) > 0 && (
               <FTERow>
                 <FTELabel style={{ color: '#c44500' }}>of which peak time hours saved:</FTELabel>
                 <span style={{ fontSize: 12, fontWeight: 600, color: '#c44500' }}>
-                  {(Number(fteEdits[item.id] ?? item.automationFTE) * 0.45).toFixed(1)} h
+                  {(Number(fteEdits[item.id] ?? item.automationFTE) * Number(peakPctEdits[item.id] ?? item.peakPercent) / 100).toFixed(1)} h
                 </span>
-                <span style={{ fontSize: 10, color: theme.colors.textLight }}>~45% &middot; 5th–15th of month</span>
+                <span style={{ fontSize: 10, color: theme.colors.textLight }}>{peakPctEdits[item.id] ?? item.peakPercent}% &middot; 5th–15th of month</span>
               </FTERow>
             )}
 
@@ -1003,9 +1124,6 @@ export default function FeedbackPage() {
               {!item.assignee && getDefaultAssignee(item.app) && (
                 <span style={{ fontSize: 9, color: theme.colors.textLight }}>default: {getDefaultAssignee(item.app)} (from registry)</span>
               )}
-              <CursorBtn onClick={() => handleSendToCursor(item)} title="Copy ticket as prompt for Cursor Plan Mode">
-                ▶ Send to Cursor
-              </CursorBtn>
             </AssigneeRow>
 
             <ActionsRow>
@@ -1052,8 +1170,10 @@ export default function FeedbackPage() {
               <SmallButton $variant="danger" onClick={() => handleDelete(item.id)}>
                 Delete
               </SmallButton>
+              <CursorBtn onClick={() => handleSendToCursor(item)} title="Copy ticket as prompt for Cursor Plan Mode">
+                ▶ Send to Cursor
+              </CursorBtn>
             </ActionsRow>
-
             <LinksRow>
               <LinkInputGroup>
                 <LinkLabel>Jira:</LinkLabel>
