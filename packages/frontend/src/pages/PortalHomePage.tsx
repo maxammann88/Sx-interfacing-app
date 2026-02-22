@@ -984,27 +984,70 @@ export default function PortalHomePage() {
 
   const handleAddProcess = () => {
     if (!newTitle.trim()) return;
-    const newProc: ProcessRow = {
-      title: newTitle.trim(),
-      progress: 0,
-      steps: Array.from({ length: newStepCount }, (_, i) => ({
-        ...makeDefaultStep(i),
-        label: newStepLabels[i]?.trim() || `Step ${i + 1}`,
-      })),
-    };
+    const streamTitle = newTitle.trim();
+    const stepDefs = Array.from({ length: newStepCount }, (_, i) => ({
+      ...makeDefaultStep(i),
+      label: newStepLabels[i]?.trim() || `Step ${i + 1}`,
+    }));
+    const newProc: ProcessRow = { title: streamTitle, progress: 0, steps: stepDefs };
     setProcesses(prev => [...prev, newProc]);
+
+    try {
+      const raw = localStorage.getItem('subAppOwners_v2');
+      const registry: any[] = raw ? JSON.parse(raw) : [];
+      const existingApps = new Set(registry.filter(r => r.stream === streamTitle).map(r => r.app));
+      const toAdd = stepDefs
+        .filter(s => !existingApps.has(s.label))
+        .map(s => ({
+          stream: streamTitle,
+          streamOwner: '',
+          app: s.label,
+          owner: '',
+          status: 'Planned',
+          description: '',
+          deadlineTarget: '',
+        }));
+      if (toAdd.length > 0) {
+        const updated = [...registry, ...toAdd];
+        localStorage.setItem('subAppOwners_v2', JSON.stringify(updated));
+      }
+    } catch { /* ignore */ }
+
     setShowAddModal(false);
   };
 
   const removeProcess = (title: string) => {
     setProcesses(prev => prev.filter(p => p.title !== title));
+    try {
+      const raw = localStorage.getItem('subAppOwners_v2');
+      if (raw) {
+        const registry: any[] = JSON.parse(raw);
+        const updated = registry.filter(r => r.stream !== title);
+        localStorage.setItem('subAppOwners_v2', JSON.stringify(updated));
+      }
+    } catch { /* ignore */ }
   };
 
   const addStepToProcess = (title: string) => {
     setProcesses(prev => prev.map(p => {
       if (p.title !== title) return p;
       const idx = p.steps.length;
-      return { ...p, steps: [...p.steps, makeDefaultStep(idx)] };
+      const newStep = makeDefaultStep(idx);
+      try {
+        const raw = localStorage.getItem('subAppOwners_v2');
+        const registry: any[] = raw ? JSON.parse(raw) : [];
+        registry.push({
+          stream: title,
+          streamOwner: streamOwners[title] || '',
+          app: newStep.label,
+          owner: '',
+          status: 'Planned',
+          description: '',
+          deadlineTarget: '',
+        });
+        localStorage.setItem('subAppOwners_v2', JSON.stringify(registry));
+      } catch { /* ignore */ }
+      return { ...p, steps: [...p.steps, newStep] };
     }));
   };
 
@@ -1250,7 +1293,7 @@ export default function PortalHomePage() {
         ))}
 
         <AddProcessBtn onClick={openAddModal}>
-          + Add Process &amp; Team
+          + Add Stream
         </AddProcessBtn>
       </ProcessContainer>}
 
@@ -1295,7 +1338,7 @@ export default function PortalHomePage() {
             <ModalActions>
               <ModalBtn onClick={() => setShowAddModal(false)}>Cancel</ModalBtn>
               <ModalBtn $primary onClick={handleAddProcess} disabled={!newTitle.trim()}>
-                Add Process
+                Add Stream
               </ModalBtn>
             </ModalActions>
           </ModalBox>

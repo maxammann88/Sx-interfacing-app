@@ -81,43 +81,71 @@ function countSourceFiles(dir: string, extensions: string[]): number {
   return total;
 }
 
+function collectFileTimestamps(dir: string, extensions: string[]): number[] {
+  const ts: number[] = [];
+  if (!fs.existsSync(dir)) return ts;
+  const walk = (d: string) => {
+    for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
+      if (['node_modules', 'dist', '.git', 'build'].includes(entry.name)) continue;
+      const full = path.join(d, entry.name);
+      if (entry.isDirectory()) { walk(full); continue; }
+      if (!extensions.some(ext => entry.name.endsWith(ext))) continue;
+      try {
+        const stat = fs.statSync(full);
+        ts.push(stat.mtimeMs);
+      } catch { /* skip */ }
+    }
+  };
+  walk(dir);
+  return ts;
+}
+
 function calcCodingHours(): { totalHours: number; sessions: { start: string; end: string; durationMin: number }[] } {
-  const SESSION_GAP_MIN = 45;
+  const SESSION_GAP_MIN = 90;
   try {
     const commitLog = execSync(
       'git log --format="%aI" --all',
       { cwd: ROOT, encoding: 'utf-8', timeout: 5000 }
     ).trim();
-    if (!commitLog) return { totalHours: 0, sessions: [] };
 
-    const timestamps = commitLog.split('\n')
-      .map(l => new Date(l.trim()).getTime())
+    const commitTimestamps = commitLog
+      ? commitLog.split('\n').map(l => new Date(l.trim()).getTime()).filter(t => !isNaN(t))
+      : [];
+
+    const fileTs = [
+      ...collectFileTimestamps(path.join(ROOT, 'packages', 'frontend', 'src'), ['.ts', '.tsx', '.js', '.jsx', '.css']),
+      ...collectFileTimestamps(path.join(ROOT, 'packages', 'backend', 'src'), ['.ts', '.js']),
+      ...collectFileTimestamps(path.join(ROOT, 'packages', 'backend', 'prisma'), ['.prisma']),
+    ];
+
+    const allTimestamps = [...commitTimestamps, ...fileTs]
       .filter(t => !isNaN(t))
       .sort((a, b) => a - b);
 
-    if (timestamps.length === 0) return { totalHours: 0, sessions: [] };
+    if (allTimestamps.length === 0) return { totalHours: 0, sessions: [] };
 
     const sessions: { start: number; end: number }[] = [];
-    let sessionStart = timestamps[0];
-    let sessionEnd = timestamps[0];
+    let sessionStart = allTimestamps[0];
+    let sessionEnd = allTimestamps[0];
 
-    for (let i = 1; i < timestamps.length; i++) {
-      const gap = (timestamps[i] - sessionEnd) / (1000 * 60);
+    for (let i = 1; i < allTimestamps.length; i++) {
+      const gap = (allTimestamps[i] - sessionEnd) / (1000 * 60);
       if (gap <= SESSION_GAP_MIN) {
-        sessionEnd = timestamps[i];
+        sessionEnd = allTimestamps[i];
       } else {
         sessions.push({ start: sessionStart, end: sessionEnd });
-        sessionStart = timestamps[i];
-        sessionEnd = timestamps[i];
+        sessionStart = allTimestamps[i];
+        sessionEnd = allTimestamps[i];
       }
     }
     sessions.push({ start: sessionStart, end: sessionEnd });
 
-    // Each session gets at minimum 30 min (work before first commit / after last commit in session)
-    const MIN_SESSION_MIN = 30;
+    const PRE_SESSION_MIN = 30;
+    const POST_SESSION_MIN = 15;
     let totalMin = 0;
     const result = sessions.map(s => {
-      const dur = Math.max(MIN_SESSION_MIN, (s.end - s.start) / (1000 * 60) + MIN_SESSION_MIN);
+      const span = (s.end - s.start) / (1000 * 60);
+      const dur = Math.max(45, span + PRE_SESSION_MIN + POST_SESSION_MIN);
       totalMin += dur;
       return {
         start: new Date(s.start).toISOString(),

@@ -42,6 +42,74 @@ interface FeedbackItem {
 
 import { getSubAppRegistry } from './ApiManagementPage';
 
+function exportTicketsToXlsx(items: FeedbackItem[]) {
+  const registry = getSubAppRegistry();
+  const streamMap: Record<string, string> = {};
+  registry.forEach(r => {
+    const norm = (s: string) => s.toLowerCase().replace(/[-–—\s]+/g, '');
+    streamMap[norm(r.app)] = r.stream;
+  });
+  const getStream = (app: string) => {
+    const n = app.toLowerCase().replace(/[-–—\s]+/g, '');
+    return streamMap[n] || '';
+  };
+
+  const headers = [
+    'ID', 'Stream', 'Sub-App', 'Type', 'Title', 'Description', 'Status',
+    'Author', 'Assignee', 'Deadline Start (KW)', 'Deadline Date',
+    'Hours Saved / Month', 'Peak %', 'Peak Hours / Month',
+    'Coding Effort (h)', 'Jira URL', 'Confluence URL',
+    'Created At', 'Updated At', 'Comments',
+  ];
+
+  const rows = items.map(item => {
+    const peakHours = item.automationFTE > 0 && item.peakPercent > 0
+      ? (item.automationFTE * item.peakPercent / 100).toFixed(2) : '0';
+    return [
+      item.id,
+      getStream(item.app),
+      item.app,
+      item.type,
+      item.title,
+      (item.description || '').replace(/[\t\n\r]/g, ' '),
+      item.status,
+      item.author || '',
+      item.assignee || '',
+      item.deadlineWeek || '',
+      item.deadlineDate ? item.deadlineDate.split('T')[0] : '',
+      item.automationFTE,
+      item.peakPercent,
+      peakHours,
+      item.codingEffort,
+      item.jiraUrl || '',
+      item.confluenceUrl || '',
+      item.createdAt ? new Date(item.createdAt).toLocaleString('de-DE') : '',
+      item.updatedAt ? new Date(item.updatedAt).toLocaleString('de-DE') : '',
+      (item.comments || []).length,
+    ];
+  });
+
+  const BOM = '\uFEFF';
+  const csv = BOM + [headers, ...rows].map(row =>
+    row.map(cell => {
+      const str = String(cell ?? '');
+      return str.includes('\t') || str.includes('"') || str.includes('\n')
+        ? '"' + str.replace(/"/g, '""') + '"' : str;
+    }).join('\t')
+  ).join('\r\n');
+
+  const blob = new Blob([csv], { type: 'application/vnd.ms-excel;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const now = new Date();
+  a.download = `Tickets_Export_${now.toISOString().split('T')[0]}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 function getAppOptions(): string[] {
   const reg = getSubAppRegistry();
   const apps = new Set<string>();
@@ -617,6 +685,7 @@ export default function FeedbackPage() {
   const [filter, setFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'feature' | 'bug'>('all');
   const [appFilter, setAppFilter] = useState<string>('all');
+  const [streamFilter, setStreamFilter] = useState<string>('all');
 
   const registry = useMemo(() => getSubAppRegistry(), []);
   const TEAM_MEMBERS = useMemo(() => {
@@ -626,6 +695,42 @@ export default function FeedbackPage() {
   }, [registry]);
 
   const appOptions = useMemo(() => getAppOptions(), []);
+
+  const streamAppMap = useMemo(() => {
+    const map: Record<string, string[]> = { Core: ['Core'] };
+    registry.forEach(r => {
+      if (!map[r.stream]) map[r.stream] = [];
+      if (!map[r.stream].includes(r.app)) map[r.stream].push(r.app);
+    });
+    return map;
+  }, [registry]);
+
+  const streamNames = useMemo(() => {
+    const names = Object.keys(streamAppMap);
+    const order = ['Core'];
+    const rest = names.filter(n => n !== 'Core').sort();
+    return [...order, ...rest];
+  }, [streamAppMap]);
+
+  const appToStream = useMemo(() => {
+    const norm = (s: string) => s.toLowerCase().replace(/[-–—\s]+/g, '');
+    const map: Record<string, string> = {};
+    map['core'] = 'Core';
+    registry.forEach(r => { map[norm(r.app)] = r.stream; });
+    return map;
+  }, [registry]);
+
+  const getStreamForApp = (appName: string): string => {
+    const norm = (s: string) => s.toLowerCase().replace(/[-–—\s]+/g, '');
+    const n = norm(appName);
+    if (n === 'core') return 'Core';
+    return appToStream[n] || '';
+  };
+
+  const filteredAppsForStream = useMemo(() => {
+    if (streamFilter === 'all') return appOptions;
+    return streamAppMap[streamFilter] || [];
+  }, [streamFilter, streamAppMap, appOptions]);
 
   const isPeakRelevant = (appName: string): boolean => {
     const norm = (s: string) => s.toLowerCase().replace(/[-–—\s]+/g, '');
@@ -859,6 +964,10 @@ export default function FeedbackPage() {
   const filtered = items.filter(i => {
     if (filter !== 'all' && i.status !== filter) return false;
     if (typeFilter !== 'all' && i.type !== typeFilter) return false;
+    if (streamFilter !== 'all') {
+      const itemStream = getStreamForApp(i.app);
+      if (itemStream !== streamFilter) return false;
+    }
     if (appFilter !== 'all' && i.app !== appFilter) return false;
     return true;
   });
@@ -994,8 +1103,36 @@ export default function FeedbackPage() {
           <FilterChip $active={typeFilter === 'feature'} onClick={() => setTypeFilter('feature')}>Features</FilterChip>
           <FilterChip $active={typeFilter === 'bug'} onClick={() => setTypeFilter('bug')}>Bugs</FilterChip>
           <span style={{ borderLeft: `1px solid ${theme.colors.border}`, margin: '0 4px' }} />
-          <FilterChip $active={appFilter === 'all'} onClick={() => setAppFilter('all')}>All Apps</FilterChip>
-          {appOptions.map(a => (
+          <button
+            onClick={() => exportTicketsToXlsx(items)}
+            style={{
+              background: theme.colors.success,
+              color: 'white',
+              border: 'none',
+              borderRadius: 8,
+              padding: '6px 14px',
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+            title="Download all tickets as XLSX (pivot-ready)"
+          >
+            ↓ XLSX Export
+          </button>
+        </Filters>
+        <Filters style={{ paddingTop: 0, marginTop: -4 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: theme.colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginRight: 4 }}>Stream:</span>
+          <FilterChip $active={streamFilter === 'all'} onClick={() => { setStreamFilter('all'); setAppFilter('all'); }}>All Streams</FilterChip>
+          {streamNames.map(s => (
+            <FilterChip key={s} $active={streamFilter === s} onClick={() => { setStreamFilter(s); setAppFilter('all'); }}>{s}</FilterChip>
+          ))}
+          <span style={{ borderLeft: `1px solid ${theme.colors.border}`, margin: '0 4px' }} />
+          <span style={{ fontSize: 10, fontWeight: 700, color: theme.colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginRight: 4 }}>Sub-App:</span>
+          <FilterChip $active={appFilter === 'all'} onClick={() => setAppFilter('all')}>All</FilterChip>
+          {filteredAppsForStream.map(a => (
             <FilterChip key={a} $active={appFilter === a} onClick={() => setAppFilter(a)}>{a}</FilterChip>
           ))}
         </Filters>

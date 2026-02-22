@@ -52,13 +52,6 @@ const PageTitle = styled.h1`
   margin-bottom: 24px;
 `;
 
-const SectionGrid = styled.div`
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-  margin-bottom: 32px;
-`;
-
 const Card = styled.div`
   background: ${theme.colors.surface};
   border-radius: 12px;
@@ -183,6 +176,24 @@ const FullWidthCard = styled(Card)`
   grid-column: 1 / -1;
 `;
 
+const CollapsibleHeader = styled.div<{ $open?: boolean }>`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 0;
+  &:hover { opacity: 0.85; }
+`;
+
+const CollapseArrow = styled.span<{ $open: boolean }>`
+  display: inline-block;
+  font-size: 12px;
+  transition: transform 0.2s;
+  transform: rotate(${p => p.$open ? 90 : 0}deg);
+  color: ${theme.colors.textSecondary};
+`;
+
 interface KPIWeight {
   id: string;
   name: string;
@@ -196,6 +207,7 @@ interface TicketFTE {
   app: string;
   title: string;
   automationFTE: number;
+  peakPercent: number;
   status: string;
   type: string;
   deadlineDate: string | null;
@@ -325,6 +337,59 @@ function getScoreColor(pct: number): string {
   return theme.colors.success;
 }
 
+const ForecastBar = styled.div`
+  position: relative;
+  height: 32px;
+  background: #f0f0f0;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 6px;
+`;
+
+const ForecastFill = styled.div<{ $pct: number; $color: string }>`
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: ${p => Math.min(p.$pct, 100)}%;
+  background: ${p => p.$color};
+  border-radius: 8px 0 0 8px;
+  transition: width 0.4s;
+`;
+
+const ForecastLabel = styled.div`
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  font-weight: 700;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  z-index: 1;
+`;
+
+const ForecastMarker = styled.div<{ $left: number }>`
+  position: absolute;
+  left: ${p => p.$left}%;
+  top: 0;
+  height: 100%;
+  width: 2px;
+  background: ${theme.colors.textPrimary};
+  z-index: 2;
+  &::after {
+    content: attr(data-label);
+    position: absolute;
+    top: -18px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 9px;
+    font-weight: 700;
+    white-space: nowrap;
+    color: ${theme.colors.textSecondary};
+  }
+`;
+
 export default function AutomationControllingPage() {
   const [tickets, setTickets] = useState<TicketFTE[]>([]);
   const [budgetHours, setBudgetHours] = useState<Record<string, number>>(loadBudgetHours);
@@ -333,6 +398,14 @@ export default function AutomationControllingPage() {
   const [calMonth, setCalMonth] = useState(() => new Date().getMonth());
   const [calYear, setCalYear] = useState(() => new Date().getFullYear());
   const [budgetExpandedStreams, setBudgetExpandedStreams] = useState<Set<string>>(() => new Set());
+
+  const [summaryOpen, setSummaryOpen] = useState(true);
+  const [streamReportOpen, setStreamReportOpen] = useState(true);
+  const [calendarOpen, setCalendarOpen] = useState(true);
+  const [budgetTableOpen, setBudgetTableOpen] = useState(true);
+  const [kpiWeightsOpen, setKpiWeightsOpen] = useState(false);
+  const [scoreLogicOpen, setScoreLogicOpen] = useState(false);
+  const [forecastOpen, setForecastOpen] = useState(true);
 
   const toggleBudgetStream = (name: string) => {
     setBudgetExpandedStreams(prev => {
@@ -352,6 +425,7 @@ export default function AutomationControllingPage() {
         app: t.app || 'Interfacing',
         title: t.title,
         automationFTE: t.automationFTE || 0,
+        peakPercent: t.peakPercent || 0,
         status: t.status,
         type: t.type,
         deadlineDate: t.deadlineDate || null,
@@ -405,7 +479,6 @@ export default function AutomationControllingPage() {
     });
   };
 
-
   const updateKPIWeight = (id: string, weight: number) => {
     setKpis(prev => prev.map(k => k.id === id ? { ...k, weight } : k));
   };
@@ -449,6 +522,51 @@ export default function AutomationControllingPage() {
 
   const totalWeight = useMemo(() => kpis.reduce((s, k) => s + k.weight, 0), [kpis]);
 
+  // Forecast: expected cumulative hours saved over next quarter based on ticket deadlines
+  const forecast = useMemo(() => {
+    const today = new Date();
+    const qEnd = new Date(today);
+    qEnd.setMonth(qEnd.getMonth() + 3);
+
+    const currentDone = tickets
+      .filter(t => t.status === 'done' && t.automationFTE > 0)
+      .reduce((s, t) => s + t.automationFTE, 0);
+    const currentPeakDone = tickets
+      .filter(t => t.status === 'done' && t.automationFTE > 0 && t.peakPercent > 0)
+      .reduce((s, t) => s + (t.automationFTE * t.peakPercent / 100), 0);
+
+    const upcoming = tickets
+      .filter(t => t.status !== 'done' && t.deadlineDate && t.automationFTE > 0)
+      .map(t => ({
+        ...t,
+        deadline: new Date(t.deadlineDate!),
+        peakHours: t.automationFTE * (t.peakPercent || 0) / 100,
+      }))
+      .filter(t => t.deadline >= today && t.deadline <= qEnd)
+      .sort((a, b) => a.deadline.getTime() - b.deadline.getTime());
+
+    const months: { label: string; date: Date; cumulativeHours: number; cumulativePeak: number; newTickets: typeof upcoming }[] = [];
+    for (let i = 0; i <= 3; i++) {
+      const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
+      const mEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+      const ticketsInMonth = upcoming.filter(t => t.deadline <= mEnd && (i === 0 || t.deadline > new Date(d.getFullYear(), d.getMonth(), 0)));
+      const addedHours = ticketsInMonth.reduce((s, t) => s + t.automationFTE, 0);
+      const addedPeak = ticketsInMonth.reduce((s, t) => s + t.peakHours, 0);
+      const prevHours = i > 0 ? months[i - 1].cumulativeHours : currentDone;
+      const prevPeak = i > 0 ? months[i - 1].cumulativePeak : currentPeakDone;
+      months.push({
+        label: MONTHS[d.getMonth()] + ' ' + d.getFullYear(),
+        date: d,
+        cumulativeHours: prevHours + addedHours,
+        cumulativePeak: prevPeak + addedPeak,
+        newTickets: ticketsInMonth,
+      });
+    }
+
+    const totalBudget = budgetStreams.reduce((s, st) => s + st.totalBudget, 0);
+    return { months, currentDone, currentPeakDone, upcoming, totalBudget };
+  }, [tickets, budgetStreams]);
+
   return (
     <Page>
       <Header>
@@ -462,290 +580,353 @@ export default function AutomationControllingPage() {
 
         {loading && <p style={{ color: theme.colors.textLight }}>Loading ticket data...</p>}
 
-        <SummaryRow>
-          <SummaryCard $color={theme.colors.primary}>
-            <SummaryValue>{totals.totalFTE.toFixed(1)} h</SummaryValue>
-            <SummaryLabel>Total Hours (Budget)</SummaryLabel>
-          </SummaryCard>
-          <SummaryCard $color={theme.colors.warning}>
-            <SummaryValue>{totals.plannedFTE.toFixed(1)} h</SummaryValue>
-            <SummaryLabel>Planned Hours (from Tickets)</SummaryLabel>
-          </SummaryCard>
-          <SummaryCard $color={theme.colors.success}>
-            <SummaryValue>{totals.automatedFTE.toFixed(1)} h</SummaryValue>
-            <SummaryLabel>Hours Saved (Done)</SummaryLabel>
-          </SummaryCard>
-          <SummaryCard $color={getScoreColor(totals.avgProgress)}>
-            <SummaryValue>{totals.avgProgress}%</SummaryValue>
-            <SummaryLabel>Overall Automation</SummaryLabel>
-          </SummaryCard>
-          <SummaryCard $color={theme.colors.info}>
-            <SummaryValue>{(totals.totalFTE - totals.automatedFTE).toFixed(1)} h</SummaryValue>
-            <SummaryLabel>Remaining Manual Hours</SummaryLabel>
-          </SummaryCard>
-        </SummaryRow>
-
-        <FullWidthCard style={{ marginBottom: 28 }}>
-          <CardTitle>Stream &rarr; Sub-App &rarr; Feature Reporting</CardTitle>
-          <StreamReporting tickets={tickets} />
-        </FullWidthCard>
-
+        {/* Summary KPIs */}
         <Card style={{ marginBottom: 28 }}>
-          <CardTitle>Release Schedule</CardTitle>
-          <CalendarWrapper>
-            <CalendarNav>
-              <CalendarNavBtn onClick={() => navigateMonth(-1)}>&larr;</CalendarNavBtn>
-              <MonthLabel>{MONTHS[calMonth]} {calYear}</MonthLabel>
-              <CalendarNavBtn onClick={() => navigateMonth(1)}>&rarr;</CalendarNavBtn>
-              <CalendarNavBtn onClick={() => { setCalMonth(new Date().getMonth()); setCalYear(new Date().getFullYear()); }}>
-                Today
-              </CalendarNavBtn>
-              <span style={{ marginLeft: 'auto', fontSize: 11, color: theme.colors.textLight }}>
-                {tickets.filter(t => t.deadlineDate).length} tickets with deadline
-              </span>
-            </CalendarNav>
-            <CalGrid>
-              {WEEKDAYS.map(d => <DayHeader key={d}>{d}</DayHeader>)}
-              {calendarDays.map((day, i) => {
-                const dateStr = day.toISOString().split('T')[0];
-                const isCurrentMonth = day.getMonth() === calMonth;
-                const isToday = dateStr === todayStr;
-                const dayTickets = ticketsByDate[dateStr] || [];
-                return (
-                  <DayCell key={i} $isToday={isToday} $isCurrentMonth={isCurrentMonth}>
-                    <DayNum $isToday={isToday}>{day.getDate()}</DayNum>
-                    {dayTickets.slice(0, 3).map(t => (
-                      <CalTicket key={t.id} $color={getStatusColor(t.status)} title={`[${t.app}] ${t.title} (${t.status})`}>
-                        <span style={{ opacity: 0.8 }}>{t.app.substring(0, 3)}</span> {t.title}
-                      </CalTicket>
-                    ))}
-                    {dayTickets.length > 3 && (
-                      <span style={{ fontSize: 9, color: theme.colors.textLight }}>+{dayTickets.length - 3} more</span>
-                    )}
-                  </DayCell>
-                );
-              })}
-            </CalGrid>
-            <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 10, color: theme.colors.textLight }}>
-              <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: '#bbb', marginRight: 4 }} />Open</span>
-              <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: theme.colors.info, marginRight: 4 }} />In Progress</span>
-              <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: '#6f42c1', marginRight: 4 }} />Review</span>
-              <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: theme.colors.warning, marginRight: 4 }} />Testing</span>
-              <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: theme.colors.success, marginRight: 4 }} />Done</span>
-            </div>
-          </CalendarWrapper>
+          <CollapsibleHeader onClick={() => setSummaryOpen(o => !o)}>
+            <CollapseArrow $open={summaryOpen}>▶</CollapseArrow>
+            <CardTitle style={{ margin: 0 }}>Summary KPIs</CardTitle>
+          </CollapsibleHeader>
+          {summaryOpen && (
+            <SummaryRow style={{ marginTop: 16, marginBottom: 0 }}>
+              <SummaryCard $color={theme.colors.primary}>
+                <SummaryValue>{totals.totalFTE.toFixed(1)} h</SummaryValue>
+                <SummaryLabel>Current Workload p.m.</SummaryLabel>
+              </SummaryCard>
+              <SummaryCard $color={theme.colors.warning}>
+                <SummaryValue>{totals.plannedFTE.toFixed(1)} h</SummaryValue>
+                <SummaryLabel>Planned Hours (from Tickets)</SummaryLabel>
+              </SummaryCard>
+              <SummaryCard $color={theme.colors.success}>
+                <SummaryValue>{totals.automatedFTE.toFixed(1)} h</SummaryValue>
+                <SummaryLabel>Hours Saved (Done)</SummaryLabel>
+              </SummaryCard>
+              <SummaryCard $color={getScoreColor(totals.avgProgress)}>
+                <SummaryValue>{totals.avgProgress}%</SummaryValue>
+                <SummaryLabel>Overall Automation</SummaryLabel>
+              </SummaryCard>
+              <SummaryCard $color={theme.colors.info}>
+                <SummaryValue>{(totals.totalFTE - totals.automatedFTE).toFixed(1)} h</SummaryValue>
+                <SummaryLabel>Remaining Manual Hours</SummaryLabel>
+              </SummaryCard>
+            </SummaryRow>
+          )}
         </Card>
 
-        <SectionGrid>
-          <Card style={{ gridColumn: '1 / -1' }}>
-            <CardTitle>Hours Saved per Stream &amp; Sub-App (from Tickets)</CardTitle>
-            <Table>
-              <thead>
-                <tr>
-                  <th style={{ width: '30%' }}>Stream / Sub-App</th>
-                  <th style={{ textAlign: 'right', width: '14%' }}>Budget (h)</th>
-                  <th style={{ textAlign: 'right', width: '12%' }}>Planned</th>
-                  <th style={{ textAlign: 'right', width: '12%' }}>Done</th>
-                  <th style={{ textAlign: 'right', width: '10%' }}>Progress</th>
-                  <th style={{ width: '12%' }}>Visual</th>
-                  <th style={{ textAlign: 'right', width: '10%' }}>Tickets</th>
-                </tr>
-              </thead>
-              <tbody>
-                {budgetStreams.map(stream => {
-                  const bOpen = budgetExpandedStreams.has(stream.name);
-                  return (
-                    <React.Fragment key={stream.name}>
-                      <tr style={{ background: theme.colors.secondary, color: 'white', cursor: 'pointer' }} onClick={() => toggleBudgetStream(stream.name)}>
-                        <td style={{ fontWeight: 700, fontSize: 13, padding: '10px 14px' }}>
-                          <span style={{ display: 'inline-block', width: 16, fontSize: 11, opacity: 0.8 }}>{bOpen ? '▼' : '▶'}</span>
-                          <span style={{ fontSize: 9, opacity: 0.7, textTransform: 'uppercase', letterSpacing: 1, marginRight: 8 }}>Stream</span>
-                          {stream.name}
-                          {stream.streamOwner && <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 12 }}>({stream.streamOwner})</span>}
-                        </td>
-                        <td style={{ textAlign: 'right', fontWeight: 700 }}>{stream.totalBudget.toFixed(1)}</td>
-                        <td style={{ textAlign: 'right', color: '#ffc107' }}>{stream.totalPlanned.toFixed(1)}</td>
-                        <td style={{ textAlign: 'right', color: '#90ee90' }}>{stream.totalDone.toFixed(1)}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 700 }}>{stream.totalProgress}%</td>
-                        <td>
-                          <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: 6, height: 8 }}>
-                            <div style={{ background: '#28a745', borderRadius: 6, height: 8, width: `${Math.min(stream.totalProgress, 100)}%` }} />
+        {/* Stream → Sub-App → Feature Reporting */}
+        <FullWidthCard style={{ marginBottom: 28 }}>
+          <CollapsibleHeader onClick={() => setStreamReportOpen(o => !o)}>
+            <CollapseArrow $open={streamReportOpen}>▶</CollapseArrow>
+            <CardTitle style={{ margin: 0 }}>Stream &rarr; Sub-App &rarr; Feature Reporting</CardTitle>
+          </CollapsibleHeader>
+          {streamReportOpen && (
+            <div style={{ marginTop: 16 }}>
+              <StreamReporting tickets={tickets} budgetHours={budgetHours} />
+            </div>
+          )}
+        </FullWidthCard>
+
+        {/* Expected Progress Forecast */}
+        <Card style={{ marginBottom: 28 }}>
+          <CollapsibleHeader onClick={() => setForecastOpen(o => !o)}>
+            <CollapseArrow $open={forecastOpen}>▶</CollapseArrow>
+            <CardTitle style={{ margin: 0 }}>Expected Progress – Next Quarter</CardTitle>
+          </CollapsibleHeader>
+          {forecastOpen && (
+            <div style={{ marginTop: 16 }}>
+              <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
+                <div style={{ flex: 1, background: '#f8f8f8', borderRadius: 10, padding: '14px 18px', borderLeft: `4px solid ${theme.colors.success}` }}>
+                  <div style={{ fontSize: 10, color: theme.colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Current (Done)</div>
+                  <div style={{ fontSize: 22, fontWeight: 800 }}>{forecast.currentDone.toFixed(1)} h</div>
+                  {forecast.currentPeakDone > 0 && <div style={{ fontSize: 11, color: '#c44500', fontWeight: 600 }}>of which peak: {forecast.currentPeakDone.toFixed(1)} h</div>}
+                </div>
+                <div style={{ flex: 1, background: '#f8f8f8', borderRadius: 10, padding: '14px 18px', borderLeft: `4px solid ${theme.colors.info}` }}>
+                  <div style={{ fontSize: 10, color: theme.colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Upcoming Tickets</div>
+                  <div style={{ fontSize: 22, fontWeight: 800 }}>{forecast.upcoming.length}</div>
+                  <div style={{ fontSize: 11, color: theme.colors.textLight }}>with deadline in next 3 months</div>
+                </div>
+                <div style={{ flex: 1, background: '#f8f8f8', borderRadius: 10, padding: '14px 18px', borderLeft: `4px solid ${theme.colors.primary}` }}>
+                  <div style={{ fontSize: 10, color: theme.colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Expected at Quarter End</div>
+                  <div style={{ fontSize: 22, fontWeight: 800 }}>{forecast.months.length > 0 ? forecast.months[forecast.months.length - 1].cumulativeHours.toFixed(1) : '0.0'} h</div>
+                  <div style={{ fontSize: 11, color: theme.colors.textLight }}>
+                    {forecast.totalBudget > 0 ? `${Math.round((forecast.months.length > 0 ? forecast.months[forecast.months.length - 1].cumulativeHours : 0) / forecast.totalBudget * 100)}% of budget` : 'no budget set'}
+                  </div>
+                </div>
+              </div>
+
+              {forecast.months.map((m, i) => {
+                const budgetPct = forecast.totalBudget > 0 ? (m.cumulativeHours / forecast.totalBudget * 100) : 0;
+                const isNow = i === 0;
+                return (
+                  <div key={m.label} style={{ marginBottom: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <span style={{ fontSize: 12, fontWeight: isNow ? 800 : 600, color: isNow ? theme.colors.primary : theme.colors.textPrimary }}>
+                        {isNow ? '▸ ' : ''}{m.label}
+                      </span>
+                      <span style={{ fontSize: 11, color: theme.colors.textSecondary }}>
+                        {m.cumulativeHours.toFixed(1)} h saved
+                        {m.cumulativePeak > 0 && <span style={{ color: '#c44500', marginLeft: 8 }}>({m.cumulativePeak.toFixed(1)} h peak)</span>}
+                        {m.newTickets.length > 0 && <span style={{ marginLeft: 8, color: theme.colors.info }}>+{m.newTickets.length} ticket{m.newTickets.length > 1 ? 's' : ''}</span>}
+                      </span>
+                    </div>
+                    <ForecastBar>
+                      <ForecastFill $pct={budgetPct} $color={isNow ? theme.colors.success : theme.colors.info} />
+                      <ForecastLabel>{budgetPct.toFixed(0)}%</ForecastLabel>
+                      {forecast.totalBudget > 0 && (
+                        <ForecastMarker $left={100} data-label={`Budget: ${forecast.totalBudget.toFixed(0)} h`} />
+                      )}
+                    </ForecastBar>
+                    {m.newTickets.length > 0 && (
+                      <div style={{ marginLeft: 16, marginTop: 2, marginBottom: 6 }}>
+                        {m.newTickets.map(t => (
+                          <div key={t.id} style={{ fontSize: 10, color: theme.colors.textSecondary, lineHeight: 1.6 }}>
+                            <span style={{ color: theme.colors.primary, fontWeight: 600 }}>#{t.id}</span> {t.title}
+                            <span style={{ marginLeft: 8, fontWeight: 700 }}>+{t.automationFTE.toFixed(1)} h</span>
+                            {t.peakHours > 0 && <span style={{ marginLeft: 6, color: '#c44500' }}>({t.peakHours.toFixed(1)} h peak)</span>}
+                            <span style={{ marginLeft: 8, color: theme.colors.textLight }}>
+                              due {t.deadline.toLocaleDateString('de-DE')}
+                            </span>
                           </div>
-                        </td>
-                        <td style={{ textAlign: 'right' }}>{stream.subApps.reduce((s, a) => s + a.ticketCount, 0)}</td>
-                      </tr>
-                      {bOpen && stream.subApps.map(app => (
-                        <tr key={`${stream.name}-${app.app}`} style={{ background: '#f8f8f8', borderLeft: `3px solid ${theme.colors.primary}` }}>
-                          <td style={{ fontWeight: 600, fontSize: 12, paddingLeft: 38 }}>{app.app}</td>
-                          <td style={{ textAlign: 'right' }}>
-                            <NumberInput
-                              type="number"
-                              step="0.5"
-                              min="0"
-                              value={app.budget}
-                              onChange={e => { e.stopPropagation(); updateBudget(app.app, parseFloat(e.target.value) || 0); }}
-                              onClick={e => e.stopPropagation()}
-                              style={{ width: 70 }}
-                            />
-                          </td>
-                          <td style={{ textAlign: 'right', fontWeight: 600, color: theme.colors.warning }}>{app.planned.toFixed(1)}</td>
-                          <td style={{ textAlign: 'right', fontWeight: 600, color: theme.colors.success }}>{app.done.toFixed(1)}</td>
-                          <td style={{ textAlign: 'right', fontWeight: 700, color: getScoreColor(app.progress) }}>{app.progress}%</td>
-                          <td>
-                            <ScoreBar>
-                              <ScoreFill $pct={Math.min(app.progress, 100)} $color={getScoreColor(app.progress)} />
-                            </ScoreBar>
-                          </td>
-                          <td style={{ textAlign: 'right', color: theme.colors.textSecondary }}>{app.ticketCount}</td>
-                        </tr>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {forecast.upcoming.length === 0 && (
+                <div style={{ textAlign: 'center', padding: 20, color: theme.colors.textLight, fontSize: 13 }}>
+                  No upcoming tickets with deadlines in the next quarter. Set deadlines on tickets to see the forecast.
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
+
+        {/* Release Schedule Calendar */}
+        <Card style={{ marginBottom: 28 }}>
+          <CollapsibleHeader onClick={() => setCalendarOpen(o => !o)}>
+            <CollapseArrow $open={calendarOpen}>▶</CollapseArrow>
+            <CardTitle style={{ margin: 0 }}>Release Schedule</CardTitle>
+          </CollapsibleHeader>
+          {calendarOpen && (
+            <CalendarWrapper>
+              <CalendarNav>
+                <CalendarNavBtn onClick={() => navigateMonth(-1)}>&larr;</CalendarNavBtn>
+                <MonthLabel>{MONTHS[calMonth]} {calYear}</MonthLabel>
+                <CalendarNavBtn onClick={() => navigateMonth(1)}>&rarr;</CalendarNavBtn>
+                <CalendarNavBtn onClick={() => { setCalMonth(new Date().getMonth()); setCalYear(new Date().getFullYear()); }}>
+                  Today
+                </CalendarNavBtn>
+                <span style={{ marginLeft: 'auto', fontSize: 11, color: theme.colors.textLight }}>
+                  {tickets.filter(t => t.deadlineDate).length} tickets with deadline
+                </span>
+              </CalendarNav>
+              <CalGrid>
+                {WEEKDAYS.map(d => <DayHeader key={d}>{d}</DayHeader>)}
+                {calendarDays.map((day, i) => {
+                  const dateStr = day.toISOString().split('T')[0];
+                  const isCurrentMonth = day.getMonth() === calMonth;
+                  const isToday = dateStr === todayStr;
+                  const dayTickets = ticketsByDate[dateStr] || [];
+                  return (
+                    <DayCell key={i} $isToday={isToday} $isCurrentMonth={isCurrentMonth}>
+                      <DayNum $isToday={isToday}>{day.getDate()}</DayNum>
+                      {dayTickets.slice(0, 3).map(t => (
+                        <CalTicket key={t.id} $color={getStatusColor(t.status)} title={`[${t.app}] ${t.title} (${t.status})`}>
+                          <span style={{ opacity: 0.8 }}>{t.app.substring(0, 3)}</span> {t.title}
+                        </CalTicket>
                       ))}
-                    </React.Fragment>
+                      {dayTickets.length > 3 && (
+                        <span style={{ fontSize: 9, color: theme.colors.textLight }}>+{dayTickets.length - 3} more</span>
+                      )}
+                    </DayCell>
                   );
                 })}
-                <tr style={{ fontWeight: 700, borderTop: `2px solid ${theme.colors.textPrimary}` }}>
-                  <td>Total</td>
-                  <td style={{ textAlign: 'right' }}>{totals.totalFTE.toFixed(1)}</td>
-                  <td style={{ textAlign: 'right', color: theme.colors.warning }}>{totals.plannedFTE.toFixed(1)}</td>
-                  <td style={{ textAlign: 'right', color: theme.colors.success }}>{totals.automatedFTE.toFixed(1)}</td>
-                  <td style={{ textAlign: 'right', color: getScoreColor(totals.avgProgress) }}>{totals.avgProgress}%</td>
-                  <td>
-                    <ScoreBar>
-                      <ScoreFill $pct={Math.min(totals.avgProgress, 100)} $color={getScoreColor(totals.avgProgress)} />
-                    </ScoreBar>
-                  </td>
-                  <td></td>
-                </tr>
-              </tbody>
-            </Table>
-          </Card>
+              </CalGrid>
+              <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 10, color: theme.colors.textLight }}>
+                <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: '#bbb', marginRight: 4 }} />Open</span>
+                <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: theme.colors.info, marginRight: 4 }} />In Progress</span>
+                <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: '#6f42c1', marginRight: 4 }} />Review</span>
+                <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: theme.colors.warning, marginRight: 4 }} />Testing</span>
+                <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: theme.colors.success, marginRight: 4 }} />Done</span>
+              </div>
+            </CalendarWrapper>
+          )}
+        </Card>
 
-          <Card>
-            <CardTitle>
-              KPI Weights
-              {totalWeight !== 100 && (
-                <Badge $color={theme.colors.danger}>
-                  Sum: {totalWeight}% (should be 100%)
-                </Badge>
-              )}
-              {totalWeight === 100 && (
-                <Badge $color={theme.colors.success}>100%</Badge>
-              )}
-            </CardTitle>
-            <Table>
-              <thead>
-                <tr>
-                  <th>KPI</th>
-                  <th>Description</th>
-                  <th style={{ textAlign: 'right' }}>Weight</th>
-                  <th style={{ width: 140 }}>Adjust</th>
-                </tr>
-              </thead>
-              <tbody>
-                {kpis.map(k => (
-                  <tr key={k.id}>
-                    <td style={{ fontWeight: 600 }}>{k.name}</td>
-                    <td style={{ color: theme.colors.textSecondary, fontSize: 12 }}>{k.description}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 700 }}>{k.weight}%</td>
-                    <td>
-                      <SliderCell>
-                        <Slider
-                          type="range"
-                          min={0}
-                          max={100}
-                          value={k.weight}
-                          onChange={e => updateKPIWeight(k.id, parseInt(e.target.value))}
-                        />
-                      </SliderCell>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
-          </Card>
-
-          <FullWidthCard>
-            <CardTitle>Score Logic & Maturity Levels</CardTitle>
-            <Table>
-              <thead>
-                <tr>
-                  <th>Automation Range</th>
-                  <th>Maturity Level</th>
-                  <th>Color</th>
-                  <th>Description</th>
-                </tr>
-              </thead>
-              <tbody>
-                {scoreRules.map(r => (
-                  <tr key={r.range}>
-                    <td style={{ fontWeight: 600 }}>{r.range}</td>
-                    <td>
-                      <Badge $color={r.color}>{r.label}</Badge>
-                    </td>
-                    <td>
-                      <div style={{ width: 24, height: 24, borderRadius: 6, background: r.color }} />
-                    </td>
-                    <td style={{ color: theme.colors.textSecondary, fontSize: 12 }}>{r.description}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
-          </FullWidthCard>
-
-          <FullWidthCard>
-            <CardTitle>Ticket Hours Saved Breakdown ({tickets.filter(t => t.automationFTE > 0).length} tickets with hours)</CardTitle>
-            <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+        {/* Hours Saved per Stream & Sub-App */}
+        <Card style={{ marginBottom: 28 }}>
+          <CollapsibleHeader onClick={() => setBudgetTableOpen(o => !o)}>
+            <CollapseArrow $open={budgetTableOpen}>▶</CollapseArrow>
+            <CardTitle style={{ margin: 0 }}>Hours Saved per Stream &amp; Sub-App (from Tickets)</CardTitle>
+          </CollapsibleHeader>
+          {budgetTableOpen && (
+            <div style={{ marginTop: 16 }}>
               <Table>
                 <thead>
                   <tr>
-                    <th>#</th>
-                    <th>App</th>
-                    <th>Title</th>
-                    <th>Type</th>
-                    <th>Status</th>
-                    <th style={{ textAlign: 'right' }}>Hours Saved / Month</th>
+                    <th style={{ width: '30%' }}>Stream / Sub-App</th>
+                    <th style={{ textAlign: 'right', width: '14%' }}>Budget (h)</th>
+                    <th style={{ textAlign: 'right', width: '12%' }}>Planned</th>
+                    <th style={{ textAlign: 'right', width: '12%' }}>Done</th>
+                    <th style={{ textAlign: 'right', width: '10%' }}>Progress</th>
+                    <th style={{ width: '12%' }}>Visual</th>
+                    <th style={{ textAlign: 'right', width: '10%' }}>Tickets</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {tickets.filter(t => t.automationFTE > 0).map((t, i) => (
-                    <tr key={t.id}>
-                      <td style={{ color: theme.colors.textLight }}>{i + 1}</td>
-                      <td>{t.app}</td>
-                      <td style={{ fontWeight: 600 }}>{t.title}</td>
-                      <td>
-                        <Badge $color={t.type === 'bug' ? theme.colors.danger : '#6f42c1'}>
-                          {t.type === 'bug' ? 'Bug' : 'Feature'}
-                        </Badge>
-                      </td>
-                      <td>
-                        <Badge $color={
-                          t.status === 'done' ? theme.colors.success :
-                          t.status === 'in_progress' ? theme.colors.info :
-                          t.status === 'review' ? '#6f42c1' :
-                          t.status === 'testing' ? theme.colors.warning : '#ccc'
-                        }>
-                          {t.status === 'in_progress' ? 'In Progress' :
-                           t.status.charAt(0).toUpperCase() + t.status.slice(1)}
-                        </Badge>
-                      </td>
-                      <td style={{ textAlign: 'right', fontWeight: 700 }}>{t.automationFTE.toFixed(1)}</td>
-                    </tr>
-                  ))}
-                  {tickets.filter(t => t.automationFTE > 0).length === 0 && (
-                    <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', color: theme.colors.textLight, padding: 24 }}>
-                        No tickets with Hours Saved set yet. Go to "App Requests & Bugs" and set hours saved values on feature tickets.
-                      </td>
-                    </tr>
-                  )}
+                  {budgetStreams.map(stream => {
+                    const bOpen = budgetExpandedStreams.has(stream.name);
+                    return (
+                      <React.Fragment key={stream.name}>
+                        <tr style={{ background: theme.colors.secondary, color: 'white', cursor: 'pointer' }} onClick={() => toggleBudgetStream(stream.name)}>
+                          <td style={{ fontWeight: 700, fontSize: 13, padding: '10px 14px' }}>
+                            <span style={{ display: 'inline-block', width: 16, fontSize: 11, opacity: 0.8 }}>{bOpen ? '▼' : '▶'}</span>
+                            <span style={{ fontSize: 9, opacity: 0.7, textTransform: 'uppercase', letterSpacing: 1, marginRight: 8 }}>Stream</span>
+                            {stream.name}
+                            {stream.streamOwner && <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 12 }}>({stream.streamOwner})</span>}
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 700 }}>{stream.totalBudget.toFixed(1)}</td>
+                          <td style={{ textAlign: 'right', color: '#ffc107' }}>{stream.totalPlanned.toFixed(1)}</td>
+                          <td style={{ textAlign: 'right', color: '#90ee90' }}>{stream.totalDone.toFixed(1)}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 700 }}>{stream.totalProgress}%</td>
+                          <td>
+                            <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: 6, height: 8 }}>
+                              <div style={{ background: '#28a745', borderRadius: 6, height: 8, width: `${Math.min(stream.totalProgress, 100)}%` }} />
+                            </div>
+                          </td>
+                          <td style={{ textAlign: 'right' }}>{stream.subApps.reduce((s, a) => s + a.ticketCount, 0)}</td>
+                        </tr>
+                        {bOpen && stream.subApps.map(app => (
+                          <tr key={`${stream.name}-${app.app}`} style={{ background: '#f8f8f8', borderLeft: `3px solid ${theme.colors.primary}` }}>
+                            <td style={{ fontWeight: 600, fontSize: 12, paddingLeft: 38 }}>{app.app}</td>
+                            <td style={{ textAlign: 'right' }}>
+                              <NumberInput
+                                type="number"
+                                step="0.5"
+                                min="0"
+                                value={app.budget}
+                                onChange={e => { e.stopPropagation(); updateBudget(app.app, parseFloat(e.target.value) || 0); }}
+                                onClick={e => e.stopPropagation()}
+                                style={{ width: 70 }}
+                              />
+                            </td>
+                            <td style={{ textAlign: 'right', fontWeight: 600, color: theme.colors.warning }}>{app.planned.toFixed(1)}</td>
+                            <td style={{ textAlign: 'right', fontWeight: 600, color: theme.colors.success }}>{app.done.toFixed(1)}</td>
+                            <td style={{ textAlign: 'right', fontWeight: 700, color: getScoreColor(app.progress) }}>{app.progress}%</td>
+                            <td>
+                              <ScoreBar>
+                                <ScoreFill $pct={Math.min(app.progress, 100)} $color={getScoreColor(app.progress)} />
+                              </ScoreBar>
+                            </td>
+                            <td style={{ textAlign: 'right', color: theme.colors.textSecondary }}>{app.ticketCount}</td>
+                          </tr>
+                        ))}
+                      </React.Fragment>
+                    );
+                  })}
+                  <tr style={{ fontWeight: 700, borderTop: `2px solid ${theme.colors.textPrimary}` }}>
+                    <td>Total</td>
+                    <td style={{ textAlign: 'right' }}>{totals.totalFTE.toFixed(1)}</td>
+                    <td style={{ textAlign: 'right', color: theme.colors.warning }}>{totals.plannedFTE.toFixed(1)}</td>
+                    <td style={{ textAlign: 'right', color: theme.colors.success }}>{totals.automatedFTE.toFixed(1)}</td>
+                    <td style={{ textAlign: 'right', color: getScoreColor(totals.avgProgress) }}>{totals.avgProgress}%</td>
+                    <td>
+                      <ScoreBar>
+                        <ScoreFill $pct={Math.min(totals.avgProgress, 100)} $color={getScoreColor(totals.avgProgress)} />
+                      </ScoreBar>
+                    </td>
+                    <td></td>
+                  </tr>
                 </tbody>
               </Table>
             </div>
-          </FullWidthCard>
-        </SectionGrid>
+          )}
+        </Card>
+
+        {/* KPI Weights – collapsed by default */}
+        <Card style={{ marginBottom: 28 }}>
+          <CollapsibleHeader onClick={() => setKpiWeightsOpen(o => !o)}>
+            <CollapseArrow $open={kpiWeightsOpen}>▶</CollapseArrow>
+            <CardTitle style={{ margin: 0 }}>
+              KPI Weights
+              {totalWeight !== 100 && <Badge $color={theme.colors.danger}>Sum: {totalWeight}% (should be 100%)</Badge>}
+              {totalWeight === 100 && <Badge $color={theme.colors.success}>100%</Badge>}
+            </CardTitle>
+          </CollapsibleHeader>
+          {kpiWeightsOpen && (
+            <div style={{ marginTop: 16 }}>
+              <Table>
+                <thead>
+                  <tr>
+                    <th>KPI</th>
+                    <th>Description</th>
+                    <th style={{ textAlign: 'right' }}>Weight</th>
+                    <th style={{ width: 140 }}>Adjust</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {kpis.map(k => (
+                    <tr key={k.id}>
+                      <td style={{ fontWeight: 600 }}>{k.name}</td>
+                      <td style={{ color: theme.colors.textSecondary, fontSize: 12 }}>{k.description}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700 }}>{k.weight}%</td>
+                      <td>
+                        <SliderCell>
+                          <Slider
+                            type="range"
+                            min={0}
+                            max={100}
+                            value={k.weight}
+                            onChange={e => updateKPIWeight(k.id, parseInt(e.target.value))}
+                          />
+                        </SliderCell>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </div>
+          )}
+        </Card>
+
+        {/* Score Logic – collapsed by default */}
+        <Card style={{ marginBottom: 28 }}>
+          <CollapsibleHeader onClick={() => setScoreLogicOpen(o => !o)}>
+            <CollapseArrow $open={scoreLogicOpen}>▶</CollapseArrow>
+            <CardTitle style={{ margin: 0 }}>Score Logic &amp; Maturity Levels</CardTitle>
+          </CollapsibleHeader>
+          {scoreLogicOpen && (
+            <div style={{ marginTop: 16 }}>
+              <Table>
+                <thead>
+                  <tr>
+                    <th>Automation Range</th>
+                    <th>Maturity Level</th>
+                    <th>Color</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {scoreRules.map(r => (
+                    <tr key={r.range}>
+                      <td style={{ fontWeight: 600 }}>{r.range}</td>
+                      <td><Badge $color={r.color}>{r.label}</Badge></td>
+                      <td><div style={{ width: 24, height: 24, borderRadius: 6, background: r.color }} /></td>
+                      <td style={{ color: theme.colors.textSecondary, fontSize: 12 }}>{r.description}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </div>
+          )}
+        </Card>
       </Content>
     </Page>
   );
 }
+
+/* ─── Stream Reporting sub-component ────────────────────────── */
 
 const REPORT_STATUS_COLORS: Record<string, string> = {
   Live: '#28a745', Dev: '#ff5f00', Planned: '#999', Blocked: '#dc3545',
@@ -808,7 +989,7 @@ const FeatureLink = styled.span`
   }
 `;
 
-function StreamReporting({ tickets }: { tickets: { id: number; app: string; title: string; automationFTE: number; status: string }[] }) {
+function StreamReporting({ tickets, budgetHours }: { tickets: TicketFTE[]; budgetHours: Record<string, number> }) {
   const registry = useMemo(() => getSubAppRegistry(), []);
   const [expandedStreams, setExpandedStreams] = useState<Set<string>>(() => new Set());
   const [expandedApps, setExpandedApps] = useState<Set<string>>(() => new Set());
@@ -829,6 +1010,8 @@ function StreamReporting({ tickets }: { tickets: { id: number; app: string; titl
     });
   };
 
+  const normStr = (s: string) => s.toLowerCase().replace(/[-–—\s]+/g, '');
+
   const streams = useMemo(() => {
     const streamNames = Array.from(new Set(registry.map(r => r.stream)));
     return streamNames.map(stream => {
@@ -838,7 +1021,6 @@ function StreamReporting({ tickets }: { tickets: { id: number; app: string; titl
         name: stream,
         streamOwner,
         apps: apps.map(a => {
-          const normStr = (s: string) => s.toLowerCase().replace(/[-–—\s]+/g, '');
           const appTickets = tickets.filter(t => {
             const tApp = normStr(t.app || '');
             const aApp = normStr(a.app || '');
@@ -846,30 +1028,36 @@ function StreamReporting({ tickets }: { tickets: { id: number; app: string; titl
           });
           const totalHours = appTickets.reduce((s, t) => s + t.automationFTE, 0);
           const doneHours = appTickets.filter(t => t.status === 'done').reduce((s, t) => s + t.automationFTE, 0);
-          return { ...a, tickets: appTickets, totalHours, doneHours };
+          const budget = budgetHours[a.app] ?? 0;
+          const progress = budget > 0 ? Math.round((doneHours / budget) * 100) : (totalHours > 0 ? Math.round((doneHours / totalHours) * 100) : 0);
+          return { ...a, tickets: appTickets, totalHours, doneHours, budget, progress };
         }),
       };
     });
-  }, [registry, tickets]);
+  }, [registry, tickets, budgetHours]);
 
   return (
     <div style={{ maxHeight: 700, overflowY: 'auto' }}>
       <Table>
         <thead>
           <tr>
-            <th style={{ width: '35%' }}>Name</th>
-            <th style={{ width: '15%' }}>Owner</th>
-            <th style={{ width: '10%' }}>Status</th>
-            <th style={{ width: '10%', textAlign: 'right' }}>Hours</th>
-            <th style={{ width: '15%' }}>Progress</th>
-            <th style={{ width: '15%', textAlign: 'right' }}>Features</th>
+            <th style={{ width: '30%' }}>Name</th>
+            <th style={{ width: '12%' }}>Owner</th>
+            <th style={{ width: '8%' }}>Status</th>
+            <th style={{ width: '10%', textAlign: 'right' }}>Budget</th>
+            <th style={{ width: '10%', textAlign: 'right' }}>Done</th>
+            <th style={{ width: '8%', textAlign: 'right' }}>Progress</th>
+            <th style={{ width: '12%' }}>Visual</th>
+            <th style={{ width: '10%', textAlign: 'right' }}>Features</th>
           </tr>
         </thead>
         <tbody>
           {streams.map(stream => {
             const totalHours = stream.apps.reduce((s, a) => s + a.totalHours, 0);
             const doneHours = stream.apps.reduce((s, a) => s + a.doneHours, 0);
+            const totalBudget = stream.apps.reduce((s, a) => s + a.budget, 0);
             const totalFeatures = stream.apps.reduce((s, a) => s + a.tickets.length, 0);
+            const streamProgress = totalBudget > 0 ? Math.round((doneHours / totalBudget) * 100) : (totalHours > 0 ? Math.round((doneHours / totalHours) * 100) : 0);
             const streamOpen = expandedStreams.has(stream.name);
             return (
               <React.Fragment key={stream.name}>
@@ -883,10 +1071,12 @@ function StreamReporting({ tickets }: { tickets: { id: number; app: string; titl
                     )}
                   </td>
                   <td></td>
-                  <td style={{ textAlign: 'right' }}>{totalHours.toFixed(1)} h</td>
+                  <td style={{ textAlign: 'right' }}>{totalBudget > 0 ? `${totalBudget.toFixed(1)} h` : '–'}</td>
+                  <td style={{ textAlign: 'right' }}>{doneHours.toFixed(1)} h</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700 }}>{streamProgress}%</td>
                   <td>
                     <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: 6, height: 8, width: '100%' }}>
-                      <div style={{ background: '#28a745', borderRadius: 6, height: 8, width: `${totalHours > 0 ? (doneHours / totalHours * 100) : 0}%` }} />
+                      <div style={{ background: '#28a745', borderRadius: 6, height: 8, width: `${Math.min(streamProgress, 100)}%` }} />
                     </div>
                   </td>
                   <td style={{ textAlign: 'right' }}>{totalFeatures}</td>
@@ -903,10 +1093,12 @@ function StreamReporting({ tickets }: { tickets: { id: number; app: string; titl
                         </td>
                         <td style={{ color: theme.colors.textSecondary }}>{app.owner || '–'}</td>
                         <td><ReportBadge $color={REPORT_STATUS_COLORS[app.status] || '#999'}>{app.status}</ReportBadge></td>
-                        <td style={{ textAlign: 'right' }}>{app.totalHours.toFixed(1)} h</td>
+                        <td style={{ textAlign: 'right', fontWeight: 600 }}>{app.budget > 0 ? `${app.budget.toFixed(1)} h` : '–'}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 600, color: theme.colors.success }}>{app.doneHours.toFixed(1)} h</td>
+                        <td style={{ textAlign: 'right', fontWeight: 700, color: getScoreColor(app.progress) }}>{app.progress}%</td>
                         <td>
                           <div style={{ background: '#e0e0e0', borderRadius: 6, height: 6, width: '100%' }}>
-                            <div style={{ background: '#28a745', borderRadius: 6, height: 6, width: `${app.totalHours > 0 ? (app.doneHours / app.totalHours * 100) : 0}%` }} />
+                            <div style={{ background: '#28a745', borderRadius: 6, height: 6, width: `${Math.min(app.progress, 100)}%` }} />
                           </div>
                         </td>
                         <td style={{ textAlign: 'right' }}>{app.tickets.length}</td>
@@ -920,7 +1112,9 @@ function StreamReporting({ tickets }: { tickets: { id: number; app: string; titl
                           </td>
                           <td></td>
                           <td><ReportBadge $color={REPORT_STATUS_COLORS[t.status] || '#999'}>{t.status}</ReportBadge></td>
+                          <td></td>
                           <td style={{ textAlign: 'right', fontWeight: 600 }}>{t.automationFTE > 0 ? `${t.automationFTE.toFixed(1)} h` : '–'}</td>
+                          <td></td>
                           <td></td>
                           <td></td>
                         </FeatureRow>
