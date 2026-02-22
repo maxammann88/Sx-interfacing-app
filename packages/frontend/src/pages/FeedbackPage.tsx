@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import styled from 'styled-components';
 import { theme } from '../styles/theme';
 import api from '../utils/api';
+import { getTeamMemberNames } from './CodingTeamManagementPage';
 
 interface FeedbackComment {
   id: number;
@@ -40,7 +41,7 @@ interface FeedbackItem {
   comments: FeedbackComment[];
 }
 
-import { getSubAppRegistry } from './ApiManagementPage';
+import { getSubAppRegistry, getSortedStreams } from './ApiManagementPage';
 
 function exportTicketsToXlsx(items: FeedbackItem[]) {
   const registry = getSubAppRegistry();
@@ -690,9 +691,7 @@ export default function FeedbackPage() {
 
   const registry = useMemo(() => getSubAppRegistry(), []);
   const TEAM_MEMBERS = useMemo(() => {
-    const names = new Set<string>();
-    registry.forEach(r => { if (r.owner) names.add(r.owner); if (r.streamOwner) names.add(r.streamOwner); });
-    return Array.from(names).sort();
+    return getTeamMemberNames();
   }, [registry]);
 
   const appOptions = useMemo(() => getAppOptions(), []);
@@ -708,9 +707,11 @@ export default function FeedbackPage() {
 
   const streamNames = useMemo(() => {
     const names = Object.keys(streamAppMap);
-    const order = ['Core'];
-    const rest = names.filter(n => n !== 'Core').sort();
-    return [...order, ...rest];
+    const saved = getSortedStreams();
+    const ordered: string[] = [];
+    saved.forEach(s => { if (names.includes(s)) ordered.push(s); });
+    names.forEach(s => { if (!ordered.includes(s)) ordered.push(s); });
+    return ordered;
   }, [streamAppMap]);
 
   const appToStream = useMemo(() => {
@@ -774,7 +775,16 @@ export default function FeedbackPage() {
   const loadItems = useCallback(async () => {
     try {
       const res = await api.get('/feedback');
-      setItems(res.data);
+      const data: FeedbackItem[] = res.data || [];
+      data.sort((a, b) => {
+        const ap = (a as any).priority || 0;
+        const bp = (b as any).priority || 0;
+        if (ap > 0 && bp > 0) return ap - bp;
+        if (ap > 0) return -1;
+        if (bp > 0) return 1;
+        return 0;
+      });
+      setItems(data);
     } catch { /* ignore */ }
   }, []);
 
@@ -1007,12 +1017,14 @@ export default function FeedbackPage() {
             </FormGroup>
             <FormGroup>
               <Label>Name</Label>
-              <Input
+              <select
                 value={newAuthor}
                 onChange={e => setNewAuthor(e.target.value)}
-                placeholder="Your name..."
-                style={{ minWidth: 140 }}
-              />
+                style={{ minWidth: 140, padding: '6px 10px', borderRadius: 6, border: `1px solid ${theme.colors.border}`, fontSize: 13, background: 'white' }}
+              >
+                <option value="">– Select –</option>
+                {TEAM_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
             </FormGroup>
             <FormGroup>
               <Label>Type</Label>

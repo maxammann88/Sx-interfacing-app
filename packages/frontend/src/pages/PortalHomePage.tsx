@@ -4,7 +4,8 @@ import { Link } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { theme } from '../styles/theme';
 import api from '../utils/api';
-import { getSubAppPath, getSubAppRegistry } from './ApiManagementPage';
+import { getSubAppPath, getSubAppRegistry, getStreamOrder, saveStreamOrder, getSortedStreams } from './ApiManagementPage';
+import { getTeamMemberNames } from './CodingTeamManagementPage';
 
 const fadeIn = keyframes`
   from { opacity: 0; transform: translateY(12px); }
@@ -409,19 +410,35 @@ interface LeaderboardEntry {
   name: string;
   initials: string;
   role: string;
-  score: number;
+  hoursSaved: number;
 }
 
-const leaderboardData: LeaderboardEntry[] = [
-  { name: 'Sarah M.', initials: 'SM', role: 'Franchise Controlling', score: 82 },
-  { name: 'Thomas K.', initials: 'TK', role: 'FSM – Calculation', score: 74 },
-  { name: 'Julia W.', initials: 'JW', role: 'Interfacing', score: 68 },
-  { name: 'Michael R.', initials: 'MR', role: 'Parameter Maintenance', score: 55 },
-  { name: 'Anna B.', initials: 'AB', role: 'Bookings & Invoicing', score: 43 },
-  { name: 'David L.', initials: 'DL', role: 'B2P', score: 31 },
-  { name: 'Lisa H.', initials: 'LH', role: 'Controlling', score: 22 },
-  { name: 'Felix P.', initials: 'FP', role: 'Partner Requests', score: 15 },
-].sort((a, b) => b.score - a.score);
+function makeInitials(name: string): string {
+  return name.split(/\s+/).filter(Boolean).map(p => p[0].toUpperCase()).join('').slice(0, 2);
+}
+
+const TEAM_MEMBERS_KEY = 'teamMembers_v2';
+
+function loadTeamMembers(): { name: string; role: string; stream?: string }[] {
+  try {
+    const raw = localStorage.getItem(TEAM_MEMBERS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return [];
+}
+
+const NAME_ALIASES: Record<string, string> = {
+  'Max A.': 'Max Ammann',
+  'Max': 'Max Ammann',
+  'Thorsten': 'Torsten Hinz',
+  'Henning': 'Henning Seidel',
+  'Herbert': 'Herbert Krenn',
+  'Matthias': 'Matthias Dietrich',
+  'Matthias Berger': 'Matthias Dietrich',
+  'Inês': 'Inês Boavida Couto',
+  'Ines': 'Inês Boavida Couto',
+};
+function resolveAlias(name: string): string { return NAME_ALIASES[name] || name; }
 
 const AddProcessBtn = styled.button`
   display: flex;
@@ -554,25 +571,14 @@ const KPIStrip = styled.div`
   animation: ${fadeIn} 0.35s ease;
 `;
 
-const KPICard = styled.div<{ $color: string; $glow?: boolean }>`
+const KPICard = styled.div`
   flex: 1;
   background: ${theme.colors.surface};
   border-radius: 12px;
   box-shadow: ${theme.shadow};
   padding: 18px 20px;
   text-align: center;
-  border-top: 4px solid ${p => p.$color};
-  position: relative;
-  overflow: hidden;
-  ${p => p.$glow ? `
-    &::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(135deg, rgba(255,95,0,0.04) 0%, transparent 60%);
-      pointer-events: none;
-    }
-  ` : ''}
+  border-top: 4px solid #3a3a3a;
 `;
 
 const KPIValue = styled.div`
@@ -700,26 +706,28 @@ const BUILTIN_PATHS: Record<string, string> = {
 };
 
 const STATUS_BADGE_MAP: Record<string, { badge: string; badgeColor: string; active: boolean }> = {
+  'Live & IT Approved': { badge: 'IT Approved', badgeColor: '#1a7f37', active: true },
   Live: { badge: 'Live', badgeColor: '#28a745', active: true },
   Dev: { badge: 'Dev', badgeColor: '#ff5f00', active: true },
-  Planned: { badge: 'Planned', badgeColor: '#bbb', active: false },
+  Planning: { badge: 'Planning', badgeColor: '#999', active: false },
+  Planned: { badge: 'Planning', badgeColor: '#999', active: false },
   Blocked: { badge: 'Blocked', badgeColor: '#dc3545', active: false },
 };
 
 function buildProcessesFromRegistry(): ProcessRow[] {
   const registry = getSubAppRegistry();
-  const streamOrder: string[] = [];
   const streamMap: Record<string, typeof registry> = {};
 
   registry.forEach(entry => {
     if (!streamMap[entry.stream]) {
       streamMap[entry.stream] = [];
-      streamOrder.push(entry.stream);
     }
     streamMap[entry.stream].push(entry);
   });
 
-  return streamOrder.map(stream => {
+  const orderedStreams = getSortedStreams();
+
+  return orderedStreams.filter(s => !!streamMap[s]).map(stream => {
     const entries = streamMap[stream];
     const steps: Step[] = entries.map((e, i) => {
       const statusInfo = STATUS_BADGE_MAP[e.status] || STATUS_BADGE_MAP.Planned;
@@ -733,7 +741,7 @@ function buildProcessesFromRegistry(): ProcessRow[] {
         badgeColor: statusInfo.badgeColor,
         active: statusInfo.active,
         deadline: e.deadlineTarget || null,
-        env: (e.status === 'Live' || e.status === 'Dev') ? 'DEV' as const : null,
+        env: null,
       };
     });
     return { title: stream, progress: 0, steps };
@@ -770,7 +778,7 @@ function makeDefaultStep(idx: number): Step {
     label: `Step ${idx + 1}`,
     desc: `Person ${idx + 1}`,
     path: null,
-    badge: 'Planned',
+    badge: 'Planning',
     badgeColor: '#bbb',
     active: false,
     deadline: null,
@@ -791,11 +799,12 @@ export default function PortalHomePage() {
   const [subAppDeadlines, setSubAppDeadlines] = useState<Record<string, string>>({});
   const [codeKpis, setCodeKpis] = useState({ linesOfCode: 0, pages: 0, endpoints: 0, commits: 0 });
   const [ticketStats, setTicketStats] = useState({ total: 0, open: 0, in_progress: 0, review: 0, testing: 0, done: 0 });
-  const [allTickets, setAllTickets] = useState<{ app: string; automationFTE: number; peakPercent: number; status: string }[]>([]);
+  const [allTickets, setAllTickets] = useState<{ app: string; automationFTE: number; peakPercent: number; status: string; assignee: string }[]>([]);
   const [kpiOpen, setKpiOpen] = useState(true);
   const [streamsOpen, setStreamsOpen] = useState(true);
   const [leaderboardOpen, setLeaderboardOpen] = useState(true);
   const [codingHoursFromGit, setCodingHoursFromGit] = useState(0);
+  const teamNames = useMemo(() => getTeamMemberNames(), []);
 
   useEffect(() => {
     api.get('/feedback')
@@ -804,7 +813,7 @@ export default function PortalHomePage() {
         const stats = { total: items.length, open: 0, in_progress: 0, review: 0, testing: 0, done: 0 };
         items.forEach(t => { if (stats.hasOwnProperty(t.status)) (stats as any)[t.status]++; });
         setTicketStats(stats);
-        setAllTickets(items.map(t => ({ app: t.app || '', automationFTE: t.automationFTE || 0, peakPercent: t.peakPercent || 0, status: t.status || 'open' })));
+        setAllTickets(items.map(t => ({ app: t.app || '', automationFTE: t.automationFTE || 0, peakPercent: t.peakPercent || 0, status: t.status || 'open', assignee: t.assignee || '' })));
         const doneHours = items
           .filter(t => t.status === 'done' && t.automationFTE > 0)
           .reduce((s: number, t: any) => s + (t.automationFTE || 0), 0);
@@ -910,6 +919,44 @@ export default function PortalHomePage() {
     }, 0);
     return Math.round(total * 10) / 10;
   }, [allTickets]);
+
+  const leaderboardData: LeaderboardEntry[] = useMemo(() => {
+    const reg = getSubAppRegistry();
+    const members = loadTeamMembers();
+    const nameSet = new Set<string>();
+    reg.forEach(r => { if (r.owner) nameSet.add(resolveAlias(r.owner)); if (r.streamOwner) nameSet.add(resolveAlias(r.streamOwner)); });
+    members.forEach(m => nameSet.add(resolveAlias(m.name)));
+    allTickets.forEach(t => { if (t.assignee) nameSet.add(resolveAlias(t.assignee)); });
+
+    const nameRoleMap: Record<string, string> = {};
+    members.forEach(m => { nameRoleMap[m.name] = m.role; });
+    reg.forEach(r => {
+      if (r.owner && !nameRoleMap[r.owner]) nameRoleMap[r.owner] = r.app;
+      if (r.streamOwner && !nameRoleMap[r.streamOwner]) nameRoleMap[r.streamOwner] = r.stream + ' (Stream)';
+    });
+
+    const hoursByPerson: Record<string, number> = {};
+    allTickets.forEach(t => {
+      if (t.assignee && t.status === 'done' && t.automationFTE > 0) {
+        const resolved = resolveAlias(t.assignee);
+        hoursByPerson[resolved] = (hoursByPerson[resolved] || 0) + t.automationFTE;
+      }
+    });
+
+    return Array.from(nameSet)
+      .map(name => ({
+        name,
+        initials: makeInitials(name),
+        role: nameRoleMap[name] || '',
+        hoursSaved: Math.round((hoursByPerson[name] || 0) * 10) / 10,
+      }))
+      .sort((a, b) => b.hoursSaved - a.hoursSaved);
+  }, [allTickets]);
+
+  const maxLeaderboardHours = useMemo(() => {
+    if (leaderboardData.length === 0) return 1;
+    return Math.max(1, ...leaderboardData.map(e => e.hoursSaved));
+  }, [leaderboardData]);
 
   const openAddModal = () => {
     setNewTitle('');
@@ -1063,6 +1110,38 @@ export default function PortalHomePage() {
     setDragOverTarget(null);
   };
 
+  const streamDragIdx = useRef<number>(-1);
+  const [streamDragOver, setStreamDragOver] = useState<number>(-1);
+
+  const handleStreamDragStart = (idx: number) => {
+    streamDragIdx.current = idx;
+  };
+
+  const handleStreamDragOver = (e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    if (streamDragIdx.current >= 0 && streamDragIdx.current !== idx) {
+      setStreamDragOver(idx);
+    }
+  };
+
+  const handleStreamDrop = (dropIdx: number) => {
+    const fromIdx = streamDragIdx.current;
+    if (fromIdx < 0 || fromIdx === dropIdx) { setStreamDragOver(-1); return; }
+    setProcesses(prev => {
+      const next = [...prev];
+      const [moved] = next.splice(fromIdx, 1);
+      next.splice(dropIdx, 0, moved);
+      saveStreamOrder(next.map(p => p.title));
+      return next;
+    });
+    setStreamDragOver(-1);
+  };
+
+  const handleStreamDragEnd = () => {
+    streamDragIdx.current = -1;
+    setStreamDragOver(-1);
+  };
+
   const startEdit = (proc: string, idx: number, field: 'label' | 'desc', current: string) => {
     setEditingStep({ proc, idx, field });
     setEditingValue(current);
@@ -1081,6 +1160,7 @@ export default function PortalHomePage() {
         <LogoImg src="/sixt-logo.png" alt="SIXT" />
         <HeaderRight>
           <FeedbackLink to="/automation-controlling">Automation Controlling</FeedbackLink>
+          <FeedbackLink to="/coding-team">Coding Team</FeedbackLink>
           <FeedbackLink to="/api-management">API, App, DB Management</FeedbackLink>
           <FeedbackLink to="/collaboration-model">Collaboration Model</FeedbackLink>
           <FeedbackLink to="/feedback">Features &amp; Bugs</FeedbackLink>
@@ -1100,27 +1180,27 @@ export default function PortalHomePage() {
       </SectionToggle>
       {kpiOpen && (
         <KPIStrip>
-          <KPICard $color="#e05c00" $glow>
+          <KPICard>
             <KPIValue>{hoursSavedPerMonth.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} h</KPIValue>
             <KPILabel>Hours Saved / Month</KPILabel>
             <KPISub>from {ticketStats.done} completed ticket{ticketStats.done !== 1 ? 's' : ''}</KPISub>
           </KPICard>
-          <KPICard $color="#c44500">
+          <KPICard>
             <KPIValue>{peaktimeHours.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} h</KPIValue>
             <KPILabel>hereof Peaktime Hours</KPILabel>
             <KPISub>from ticket Peak % &middot; 5th–15th of month</KPISub>
           </KPICard>
-          <KPICard $color="#8b5cf6">
+          <KPICard>
             <KPIValue>&mdash;</KPIValue>
             <KPILabel>Token Costs</KPILabel>
             <KPISub>all users &middot; coming soon</KPISub>
           </KPICard>
-          <KPICard $color={theme.colors.info}>
-            <KPIValue>{codingHoursFromGit > 0 ? codingHoursFromGit.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' h' : '—'}</KPIValue>
+          <KPICard>
+            <KPIValue>{codingHoursFromGit > 0 ? Math.round(codingHoursFromGit).toLocaleString('de-DE') + ' h' : '—'}</KPIValue>
             <KPILabel>Hours Spent Coding</KPILabel>
             <KPISub>{codingHoursFromGit > 0 ? `from ${codeKpis.commits} git commits` : 'based on git activity'}</KPISub>
           </KPICard>
-          <KPICard $color={theme.colors.secondary} $glow>
+          <KPICard>
             <KPIValue>{ticketStats.total}</KPIValue>
             <KPILabel>Features</KPILabel>
             <KPISub style={{ fontSize: 9, lineHeight: 1.5 }}>
@@ -1131,22 +1211,26 @@ export default function PortalHomePage() {
               {ticketStats.testing > 0 && <span> · {ticketStats.testing} Test</span>}
             </KPISub>
           </KPICard>
-          <KPICard $color={theme.colors.primary} $glow>
+          <KPICard>
             <KPIValue>{codeKpis.linesOfCode.toLocaleString('de-DE')}</KPIValue>
             <KPILabel>Lines of Code</KPILabel>
             <KPISub>Frontend + Backend + Shared</KPISub>
+            <KPISub style={{ marginTop: 2, fontStyle: 'italic' }}>
+              ~{Math.round(codeKpis.linesOfCode / 50).toLocaleString('de-DE')} h without AI
+              <span style={{ display: 'block', fontSize: 8, color: '#bbb' }}>at ~50 LOC/h avg. developer</span>
+            </KPISub>
           </KPICard>
-          <KPICard $color="#6f42c1">
+          <KPICard>
             <KPIValue>{codeKpis.pages}</KPIValue>
             <KPILabel>Pages</KPILabel>
             <KPISub>across all Sub-Apps</KPISub>
           </KPICard>
-          <KPICard $color={theme.colors.success}>
+          <KPICard>
             <KPIValue>{codeKpis.endpoints}</KPIValue>
             <KPILabel>API Endpoints</KPILabel>
             <KPISub>REST &middot; Active</KPISub>
           </KPICard>
-          <KPICard $color={theme.colors.warning}>
+          <KPICard>
             <KPIValue>{codeKpis.commits}</KPIValue>
             <KPILabel>Git Commits</KPILabel>
             <KPISub>on main branch</KPISub>
@@ -1159,9 +1243,27 @@ export default function PortalHomePage() {
         <SectionToggleTitle>Streams &amp; Sub-Apps</SectionToggleTitle>
       </SectionToggle>
       {streamsOpen && <ProcessContainer style={{ paddingTop: 12 }}>
-        {processes.map((proc) => (
-          <div key={proc.title} style={{ marginBottom: 36 }}>
+        {processes.map((proc, procIdx) => (
+          <div
+            key={proc.title}
+            style={{
+              marginBottom: 36,
+              borderLeft: streamDragOver === procIdx ? `3px solid ${theme.colors.primary}` : '3px solid transparent',
+              paddingLeft: 8,
+              transition: 'border-color 0.15s',
+            }}
+            draggable
+            onDragStart={e => {
+              if ((e.target as HTMLElement).closest('[data-step-drag]')) { e.preventDefault(); return; }
+              handleStreamDragStart(procIdx);
+              e.dataTransfer.effectAllowed = 'move';
+            }}
+            onDragOver={e => handleStreamDragOver(e, procIdx)}
+            onDrop={() => handleStreamDrop(procIdx)}
+            onDragEnd={handleStreamDragEnd}
+          >
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ cursor: 'grab', fontSize: 16, opacity: 0.4, userSelect: 'none' }} title="Drag to reorder stream">☰</span>
               <ProcessTitle>{proc.title}</ProcessTitle>
               {streamOwners[proc.title] && (
                 <span style={{ fontSize: 11, color: theme.colors.textSecondary, fontWeight: 600, background: '#f0f0f0', padding: '2px 10px', borderRadius: 10 }}>
@@ -1177,8 +1279,9 @@ export default function PortalHomePage() {
               {proc.steps.map((step, i) => (
                 <StepWrapper
                   key={`${proc.title}-${i}`}
+                  data-step-drag="true"
                   draggable
-                  onDragStart={() => handleDragStart(proc.title, i)}
+                  onDragStart={e => { e.stopPropagation(); handleDragStart(proc.title, i); }}
                   onDragOver={e => handleDragOver(e, proc.title, i)}
                   onDrop={() => handleDrop(proc.title, i)}
                   onDragEnd={handleDragEnd}
@@ -1204,19 +1307,21 @@ export default function PortalHomePage() {
                       <StepTitle $active={step.active} onDoubleClick={e => { e.stopPropagation(); startEdit(proc.title, i, 'label', step.label); }} style={{ cursor: 'text' }} title="Double-click to rename">{step.label}</StepTitle>
                     )}
                     {editingStep?.proc === proc.title && editingStep.idx === i && editingStep.field === 'desc' ? (
-                      <StepEditInput
+                      <select
                         autoFocus
                         value={editingValue}
-                        onChange={e => setEditingValue(e.target.value)}
+                        onChange={e => { setEditingValue(e.target.value); }}
                         onBlur={commitEdit}
-                        onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditingStep(null); }}
                         onClick={e => e.stopPropagation()}
-                      />
+                        style={{ fontSize: 10, padding: '2px 4px', borderRadius: 4, border: `1px solid ${theme.colors.primary}`, maxWidth: 120 }}
+                      >
+                        <option value="">– Select –</option>
+                        {teamNames.map(n => <option key={n} value={n}>{n}</option>)}
+                      </select>
                     ) : (
-                      <StepDesc $active={step.active} onDoubleClick={e => { e.stopPropagation(); startEdit(proc.title, i, 'desc', findOwner(step.label) || step.desc); }} style={{ cursor: 'text' }} title="Double-click to rename">{findOwner(step.label) || step.desc}</StepDesc>
+                      <StepDesc $active={step.active} onDoubleClick={e => { e.stopPropagation(); startEdit(proc.title, i, 'desc', findOwner(step.label) || step.desc); }} style={{ cursor: 'text' }} title="Double-click to change owner">{findOwner(step.label) || step.desc}</StepDesc>
                     )}
                     <StepBadge $color={step.badgeColor}>{step.badge}</StepBadge>
-                    {step.env && <EnvBadge $env={step.env} $active={step.active}>{step.env}</EnvBadge>}
                     {(findDeadline(step.label) || step.deadline) && (
                       <StepDeadline $active={step.active}>
                         Deadline: {findDeadline(step.label) ? formatDeadlineDate(findDeadline(step.label)) : step.deadline}
@@ -1317,10 +1422,10 @@ export default function PortalHomePage() {
                 <PersonName>{person.name}</PersonName>
                 <PersonRole>{person.role}</PersonRole>
                 <ScoreBar>
-                  <ScoreFill $pct={person.score} />
+                  <ScoreFill $pct={maxLeaderboardHours > 0 ? (person.hoursSaved / maxLeaderboardHours) * 100 : 0} />
                 </ScoreBar>
-                <ScoreLabel>{person.score} pts</ScoreLabel>
-                <ScoreSubtext>Automation Score</ScoreSubtext>
+                <ScoreLabel>{person.hoursSaved.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} h</ScoreLabel>
+                <ScoreSubtext>Hours Saved</ScoreSubtext>
               </PersonCard>
             ))}
           </LeaderboardGrid>

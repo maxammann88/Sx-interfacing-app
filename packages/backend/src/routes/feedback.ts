@@ -43,6 +43,36 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
   } catch (err) { next(err); }
 });
 
+router.patch('/bulk/priority', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { items } = req.body;
+    if (!Array.isArray(items)) return res.status(400).json({ error: 'items array required' });
+    const updates = items.map((entry: { id: number; priority: number }) =>
+      prisma.feedbackItem.update({
+        where: { id: entry.id },
+        data: { priority: entry.priority },
+      })
+    );
+    await prisma.$transaction(updates);
+    res.json({ success: true, count: items.length });
+  } catch (err) { next(err); }
+});
+
+router.patch('/bulk/assignee', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { items } = req.body;
+    if (!Array.isArray(items)) return res.status(400).json({ error: 'items array required' });
+    const updates = items.map((entry: { id: number; assignee: string | null }) =>
+      prisma.feedbackItem.update({
+        where: { id: entry.id },
+        data: { assignee: entry.assignee || null },
+      })
+    );
+    await prisma.$transaction(updates);
+    res.json({ success: true, count: items.length });
+  } catch (err) { next(err); }
+});
+
 router.patch('/:id/app', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = parseInt(req.params.id as string, 10);
@@ -179,6 +209,19 @@ router.patch('/:id/peak-percent', async (req: Request, res: Response, next: Next
     const item = await prisma.feedbackItem.update({
       where: { id },
       data: { peakPercent: typeof peakPercent === 'number' ? peakPercent : 0 },
+      include: { comments: { orderBy: { createdAt: 'asc' } } },
+    });
+    res.json(item);
+  } catch (err) { next(err); }
+});
+
+router.patch('/:id/priority', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = parseInt(req.params.id as string, 10);
+    const { priority } = req.body;
+    const item = await prisma.feedbackItem.update({
+      where: { id },
+      data: { priority: typeof priority === 'number' ? priority : 0 },
       include: { comments: { orderBy: { createdAt: 'asc' } } },
     });
     res.json(item);

@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import { theme } from '../styles/theme';
 import api from '../utils/api';
 import { getSubAppRegistry } from './ApiManagementPage';
+import { getTeamMemberNames } from './CodingTeamManagementPage';
 
 interface FeedbackComment {
   id: number;
@@ -170,11 +171,7 @@ export default function SubAppFeatureRequestsPage({ appFilter }: Props) {
   const [loading, setLoading] = useState(true);
 
   const registry = useMemo(() => getSubAppRegistry(), []);
-  const teamMembers = useMemo(() => {
-    const names = new Set<string>();
-    registry.forEach(r => { if (r.owner) names.add(r.owner); if (r.streamOwner) names.add(r.streamOwner); });
-    return Array.from(names).sort();
-  }, [registry]);
+  const teamMembers = useMemo(() => getTeamMemberNames(), []);
 
   const defaultAssignee = useMemo(() => {
     const norm = (s: string) => s.toLowerCase().replace(/[-–—\s]+/g, '');
@@ -191,6 +188,14 @@ export default function SubAppFeatureRequestsPage({ appFilter }: Props) {
       const filtered = all.filter(t => {
         const tApp = norm(t.app || '');
         return tApp === normFilter || tApp.includes(normFilter) || normFilter.includes(tApp);
+      });
+      filtered.sort((a, b) => {
+        const ap = (a as any).priority || 0;
+        const bp = (b as any).priority || 0;
+        if (ap > 0 && bp > 0) return ap - bp;
+        if (ap > 0) return -1;
+        if (bp > 0) return 1;
+        return 0;
       });
       setItems(filtered);
     } catch {}

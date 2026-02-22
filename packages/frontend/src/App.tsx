@@ -73,6 +73,7 @@ import AutomationControllingPage from './pages/AutomationControllingPage';
 import ApiManagementPage from './pages/ApiManagementPage';
 import CollaborationModelPage from './pages/CollaborationModelPage';
 import GenericSubAppPage from './pages/GenericSubAppPage';
+import CodingTeamManagementPage from './pages/CodingTeamManagementPage';
 
 export default function App() {
   return (
@@ -86,6 +87,7 @@ export default function App() {
           <Route path="/automation-controlling" element={<AutomationControllingPage />} />
           <Route path="/api-management" element={<ApiManagementPage />} />
           <Route path="/collaboration-model" element={<CollaborationModelPage />} />
+          <Route path="/coding-team" element={<CodingTeamManagementPage />} />
 
           <Route path="/parameter-maintenance" element={<ParameterMaintenanceLayout />}>
             <Route index element={<StammdatenViewPage />} />

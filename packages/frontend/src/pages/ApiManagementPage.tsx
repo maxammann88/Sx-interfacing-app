@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import styled from 'styled-components';
 import { theme } from '../styles/theme';
 import api from '../utils/api';
 import DbDocumentationPage from './DbDocumentationPage';
+import { getTeamMemberNames } from './CodingTeamManagementPage';
 
 const Page = styled.div`
   min-height: 100vh;
@@ -338,39 +339,48 @@ interface SubAppOwnerEntry {
   streamOwner: string;
   app: string;
   owner: string;
-  status: 'Live' | 'Dev' | 'Planned' | 'Blocked';
+  status: 'Live & IT Approved' | 'Live' | 'Dev' | 'Planning' | 'Blocked';
   description: string;
   deadlineTarget?: string;
 }
 
 const DEFAULT_OWNERS: SubAppOwnerEntry[] = [
-  { stream: 'Franchise Controlling', streamOwner: 'Inês Boavida Couto', app: 'Partner Requests', owner: '', status: 'Planned', description: 'Partner onboarding and request handling' },
+  { stream: 'Franchise Controlling', streamOwner: 'Inês Boavida Couto', app: 'Partner Requests', owner: '', status: 'Planning', description: 'Partner onboarding and request handling' },
   { stream: 'Franchise Controlling', streamOwner: 'Inês Boavida Couto', app: 'Parameter Maintenance', owner: 'Herbert Krenn', status: 'Live', description: 'Country parameters, account mapping, payment terms' },
   { stream: 'Franchise Controlling', streamOwner: 'Inês Boavida Couto', app: 'FSM-Calculation', owner: 'Max Ammann', status: 'Dev', description: 'Franchise Statement Modernization calculation engine' },
-  { stream: 'Franchise Controlling', streamOwner: 'Inês Boavida Couto', app: 'Bookings & Invoicing', owner: '', status: 'Planned', description: 'Booking data and invoicing workflows' },
+  { stream: 'Franchise Controlling', streamOwner: 'Inês Boavida Couto', app: 'Bookings & Invoicing', owner: '', status: 'Planning', description: 'Booking data and invoicing workflows' },
   { stream: 'Franchise Controlling', streamOwner: 'Inês Boavida Couto', app: 'Interfacing', owner: 'Henning Seidel', status: 'Live', description: 'Monthly interfacing statements, SAP imports, exports' },
-  { stream: 'Franchise Controlling', streamOwner: 'Inês Boavida Couto', app: 'Controlling', owner: '', status: 'Planned', description: 'Franchise controlling dashboards & reporting' },
-  { stream: 'B2P Controlling', streamOwner: '', app: 'Partner Requests & Reconciliation', owner: '', status: 'Planned', description: 'Partner inquiries and reconciliation workflows' },
-  { stream: 'B2P Controlling', streamOwner: '', app: 'Parameter Maintenance', owner: '', status: 'Planned', description: 'B2P-specific parameter management' },
-  { stream: 'B2P Controlling', streamOwner: '', app: 'VPF', owner: '', status: 'Planned', description: 'Variable Performance Fee calculation' },
-  { stream: 'B2P Controlling', streamOwner: '', app: 'Bonus & Accruals', owner: '', status: 'Planned', description: 'Bonus tracking and accrual management' },
-  { stream: 'B2P Controlling', streamOwner: '', app: 'Month End Processes', owner: '', status: 'Planned', description: 'Month-end closing activities' },
-  { stream: 'B2P Controlling', streamOwner: '', app: 'Reporting & Controlling', owner: '', status: 'Planned', description: 'B2P dashboards and KPIs' },
+  { stream: 'Franchise Controlling', streamOwner: 'Inês Boavida Couto', app: 'Controlling', owner: '', status: 'Planning', description: 'Franchise controlling dashboards & reporting' },
+  { stream: 'B2P Controlling', streamOwner: '', app: 'Partner Requests & Reconciliation', owner: '', status: 'Planning', description: 'Partner inquiries and reconciliation workflows' },
+  { stream: 'B2P Controlling', streamOwner: '', app: 'Parameter Maintenance', owner: '', status: 'Planning', description: 'B2P-specific parameter management' },
+  { stream: 'B2P Controlling', streamOwner: '', app: 'VPF', owner: '', status: 'Planning', description: 'Variable Performance Fee calculation' },
+  { stream: 'B2P Controlling', streamOwner: '', app: 'Bonus & Accruals', owner: '', status: 'Planning', description: 'Bonus tracking and accrual management' },
+  { stream: 'B2P Controlling', streamOwner: '', app: 'Month End Processes', owner: '', status: 'Planning', description: 'Month-end closing activities' },
+  { stream: 'B2P Controlling', streamOwner: '', app: 'Reporting & Controlling', owner: '', status: 'Planning', description: 'B2P dashboards and KPIs' },
 ];
 
-const STATUS_OPTIONS: SubAppOwnerEntry['status'][] = ['Live', 'Dev', 'Planned', 'Blocked'];
+const STATUS_OPTIONS: SubAppOwnerEntry['status'][] = ['Live & IT Approved', 'Live', 'Dev', 'Planning', 'Blocked'];
 
 const STATUS_COLORS: Record<string, string> = {
+  'Live & IT Approved': '#1a7f37',
   Live: '#28a745',
   Dev: '#ff5f00',
-  Planned: '#999',
+  Planning: '#999',
   Blocked: '#dc3545',
 };
 
 function loadOwners(): SubAppOwnerEntry[] {
   try {
     const raw = localStorage.getItem('subAppOwners_v2');
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const data: SubAppOwnerEntry[] = JSON.parse(raw);
+      let migrated = false;
+      data.forEach(d => {
+        if ((d.status as string) === 'Planned') { d.status = 'Planning'; migrated = true; }
+      });
+      if (migrated) saveOwners(data);
+      return data;
+    }
   } catch {}
   return DEFAULT_OWNERS;
 }
@@ -381,6 +391,40 @@ function saveOwners(owners: SubAppOwnerEntry[]) {
 
 export function getSubAppRegistry(): SubAppOwnerEntry[] {
   return loadOwners();
+}
+
+const STREAM_ORDER_KEY = 'streamOrder_v1';
+const DEFAULT_STREAM_ORDER = ['Franchise Controlling', 'B2P Controlling', 'Business Development'];
+
+export function getStreamOrder(): string[] {
+  try {
+    const raw = localStorage.getItem(STREAM_ORDER_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return DEFAULT_STREAM_ORDER;
+}
+
+export function saveStreamOrder(order: string[]): void {
+  localStorage.setItem(STREAM_ORDER_KEY, JSON.stringify(order));
+}
+
+export function getSortedStreams(): string[] {
+  const registry = loadOwners();
+  const allStreams = Array.from(new Set(registry.map(r => r.stream)));
+  const saved = getStreamOrder();
+  const ordered = saved.filter(s => allStreams.includes(s));
+  allStreams.forEach(s => { if (!ordered.includes(s)) ordered.push(s); });
+  return ordered;
+}
+
+export function getRegistrySortedByStream(): SubAppOwnerEntry[] {
+  const registry = loadOwners();
+  const order = getSortedStreams();
+  return [...registry].sort((a, b) => {
+    const ia = order.indexOf(a.stream);
+    const ib = order.indexOf(b.stream);
+    return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+  });
 }
 
 export function slugify(name: string): string {
@@ -542,6 +586,7 @@ const StreamHeader = styled.tr`
 function SubAppOwnersTab() {
   const [owners, setOwners] = useState<SubAppOwnerEntry[]>(loadOwners);
   const [ticketDeadlines, setTicketDeadlines] = useState<Record<string, string>>({});
+  const teamNames = useMemo(() => getTeamMemberNames(), []);
   const [startedApps, setStartedApps] = useState<string[]>(getStartedApps());
 
   useEffect(() => {
@@ -586,7 +631,7 @@ function SubAppOwnersTab() {
 
   const addRow = (stream: string, streamOwner: string) => {
     setOwners(prev => {
-      const next = [...prev, { stream, streamOwner, app: '', owner: '', status: 'Planned' as const, description: '', deadlineTarget: '' }];
+      const next = [...prev, { stream, streamOwner, app: '', owner: '', status: 'Planning' as const, description: '', deadlineTarget: '' }];
       saveOwners(next);
       return next;
     });
@@ -600,7 +645,13 @@ function SubAppOwnersTab() {
     });
   };
 
-  const streams = Array.from(new Set(owners.map(o => o.stream)));
+  const streams = (() => {
+    const all = Array.from(new Set(owners.map(o => o.stream)));
+    const order = getStreamOrder();
+    const ordered = order.filter(s => all.includes(s));
+    all.forEach(s => { if (!ordered.includes(s)) ordered.push(s); });
+    return ordered;
+  })();
 
   return (
     <OwnerContent>
@@ -642,7 +693,7 @@ function SubAppOwnersTab() {
                   </td>
                   <td colSpan={4}>
                     <span style={{ fontSize: 11, opacity: 0.8 }}>Stream Owner: </span>
-                    <OwnerInput
+                    <select
                       value={streamOwner}
                       onChange={e => {
                         const val = e.target.value;
@@ -652,9 +703,11 @@ function SubAppOwnersTab() {
                           return next;
                         });
                       }}
-                      placeholder="Stream owner..."
-                      style={{ width: 180, background: 'rgba(255,255,255,0.15)', color: 'white', border: '1px solid rgba(255,255,255,0.3)' }}
-                    />
+                      style={{ width: 180, background: 'rgba(255,255,255,0.15)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', padding: '4px 8px', borderRadius: 4, fontSize: 12 }}
+                    >
+                      <option value="">– Select –</option>
+                      {teamNames.map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
                   </td>
                   <td>
                     <AddRowBtn
@@ -672,7 +725,16 @@ function SubAppOwnersTab() {
                   return (
                     <tr key={o.origIdx}>
                       <td><OwnerInput value={o.app} onChange={e => update(o.origIdx, 'app', e.target.value)} placeholder="Sub-App name..." /></td>
-                      <td><OwnerInput value={o.owner} onChange={e => update(o.origIdx, 'owner', e.target.value)} placeholder="Owner name..." /></td>
+                      <td>
+                        <select
+                          value={o.owner}
+                          onChange={e => update(o.origIdx, 'owner', e.target.value)}
+                          style={{ width: '100%', padding: '4px 8px', borderRadius: 4, border: `1px solid ${theme.colors.border}`, fontSize: 12 }}
+                        >
+                          <option value="">– Select –</option>
+                          {teamNames.map(n => <option key={n} value={n}>{n}</option>)}
+                        </select>
+                      </td>
                       <td>
                         <StatusSelect value={o.status} onChange={e => update(o.origIdx, 'status', e.target.value)}>
                           {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import styled from 'styled-components';
 import { theme } from '../styles/theme';
 import api from '../utils/api';
-import { getSubAppRegistry } from './ApiManagementPage';
+import { getSubAppRegistry, getSortedStreams } from './ApiManagementPage';
 
 const Page = styled.div`
   min-height: 100vh;
@@ -439,8 +439,8 @@ export default function AutomationControllingPage() {
   const norm = (s: string) => s.toLowerCase().replace(/[-–—\s]+/g, '');
 
   const budgetStreams = useMemo(() => {
-    const streamNames = Array.from(new Set(registry.map(r => r.stream)));
-    return streamNames.map(stream => {
+    const streamNames = getSortedStreams();
+    return streamNames.filter(s => registry.some(r => r.stream === s)).map(stream => {
       const apps = registry.filter(r => r.stream === stream);
       const streamOwner = apps[0]?.streamOwner || '';
       const subApps = apps.map(a => {
@@ -1013,8 +1013,8 @@ function StreamReporting({ tickets, budgetHours }: { tickets: TicketFTE[]; budge
   const normStr = (s: string) => s.toLowerCase().replace(/[-–—\s]+/g, '');
 
   const streams = useMemo(() => {
-    const streamNames = Array.from(new Set(registry.map(r => r.stream)));
-    return streamNames.map(stream => {
+    const streamNames = getSortedStreams();
+    return streamNames.filter(s => registry.some(r => r.stream === s)).map(stream => {
       const apps = registry.filter(r => r.stream === stream);
       const streamOwner = apps[0]?.streamOwner || '';
       return {

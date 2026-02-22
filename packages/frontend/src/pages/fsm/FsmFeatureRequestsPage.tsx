@@ -4,6 +4,7 @@ import { PageTitle } from '../../components/ui';
 import { theme } from '../../styles/theme';
 import api from '../../utils/api';
 import { getSubAppRegistry } from '../ApiManagementPage';
+import { getTeamMemberNames } from '../CodingTeamManagementPage';
 
 interface FeedbackComment {
   id: number;
@@ -38,10 +39,7 @@ interface FeedbackItem {
 }
 
 function getTeamMembers() {
-  const reg = getSubAppRegistry();
-  const names = new Set<string>();
-  reg.forEach(r => { if (r.owner) names.add(r.owner); if (r.streamOwner) names.add(r.streamOwner); });
-  return Array.from(names).sort();
+  return getTeamMemberNames();
 }
 
 function getFsmDefaultAssignee() {
@@ -517,8 +515,22 @@ export default function FsmFeatureRequestsPage() {
 
   const loadItems = useCallback(async () => {
     try {
-      const res = await api.get('/feedback', { params: { app: 'FSM' } });
-      setItems(res.data);
+      const res = await api.get('/feedback');
+      const all: FeedbackItem[] = res.data || [];
+      const norm = (s: string) => s.toLowerCase().replace(/[-–—_\s]+/g, '');
+      const filtered = all.filter(t => {
+        const tApp = norm(t.app || '');
+        return tApp === 'fsm' || tApp === 'fsmcalculation' || tApp.includes('fsm');
+      });
+      filtered.sort((a, b) => {
+        const ap = (a as any).priority || 0;
+        const bp = (b as any).priority || 0;
+        if (ap > 0 && bp > 0) return ap - bp;
+        if (ap > 0) return -1;
+        if (bp > 0) return 1;
+        return 0;
+      });
+      setItems(filtered);
     } catch { /* ignore */ }
     setLoading(false);
   }, []);
@@ -661,8 +673,8 @@ export default function FsmFeatureRequestsPage() {
       {filtered.length === 0 && (
         <EmptyState>
           No FSM tickets found. Create them on the{' '}
-          <a href="/feedback" style={{ color: theme.colors.primary }}>App Requests &amp; Bug Reports</a>{' '}
-          page with App = "FSM" and click "Start" to begin working on them.
+          <a href="/feedback" style={{ color: theme.colors.primary }}>Features &amp; Bugs</a>{' '}
+          page with App = "FSM" or "FSM-Calculation".
         </EmptyState>
       )}
 

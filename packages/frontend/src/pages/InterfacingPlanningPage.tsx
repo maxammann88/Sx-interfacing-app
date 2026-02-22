@@ -7,8 +7,7 @@ import {
   PageTitle, Card, Select, Label, Alert, Spinner, SectionTitle, Table, FormGroup, FormRow,
 } from '../components/ui';
 import { theme } from '../styles/theme';
-
-const TEAM = ['1 – Henning Seidel', '2 – Inês Boavida Couto', '3 – Herbert Krenn'];
+import { getTeamMemberNames } from './CodingTeamManagementPage';
 
 function getDefaultYear(): string {
   return String(new Date().getFullYear());
@@ -251,6 +250,7 @@ export default function InterfacingPlanningPage() {
   const [selectedYear, setSelectedYear] = useState(getDefaultYear());
   const [selectedQuarter, setSelectedQuarter] = useState(getDefaultQuarter(getDefaultYear()));
 
+  const TEAM = useMemo(() => getTeamMemberNames().map((n, i) => `${i + 1} – ${n}`), []);
   const yearOptions = useMemo(() => generateYearOptions(), []);
   const yearPeriods = useMemo(() => getPeriodsForYear(selectedYear), [selectedYear]);
   const quarterOptions = useMemo(() => generateQuarterOptions(selectedYear), [selectedYear]);
