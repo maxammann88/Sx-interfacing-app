@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { theme } from '../styles/theme';
 import api from '../utils/api';
-import { getSubAppPath, getSubAppRegistry, getStreamOrder, saveStreamOrder, getSortedStreams } from './ApiManagementPage';
+import { getSubAppPath, getSubAppRegistry, getStreamOrder, saveStreamOrder, getSortedStreams, saveRegistry } from './ApiManagementPage';
 import { getTeamMemberNames } from './CodingTeamManagementPage';
 
 const fadeIn = keyframes`
@@ -537,7 +537,7 @@ const SectionToggle = styled.div`
   max-width: 1300px;
   width: 100%;
   margin: 0 auto;
-  padding: 18px 32px 0;
+  padding: 8px 32px 0;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -576,13 +576,13 @@ const KPICard = styled.div`
   background: ${theme.colors.surface};
   border-radius: 12px;
   box-shadow: ${theme.shadow};
-  padding: 18px 20px;
+  padding: 14px 16px;
   text-align: center;
   border-top: 4px solid #3a3a3a;
 `;
 
 const KPIValue = styled.div`
-  font-size: 26px;
+  font-size: 22px;
   font-weight: 800;
   color: ${theme.colors.textPrimary};
   font-variant-numeric: tabular-nums;
@@ -674,10 +674,11 @@ const GuidanceStrip = styled.div`
   max-width: 1300px;
   width: 100%;
   margin: 0 auto;
-  padding: 12px 32px 0;
+  padding: 8px 32px 0;
   display: flex;
   gap: 24px;
   align-items: center;
+  justify-content: center;
   flex-wrap: wrap;
   animation: ${fadeIn} 0.4s ease;
 `;
@@ -709,8 +710,10 @@ const STATUS_BADGE_MAP: Record<string, { badge: string; badgeColor: string; acti
   'Live & IT Approved': { badge: 'IT Approved', badgeColor: '#1a7f37', active: true },
   Live: { badge: 'Live', badgeColor: '#28a745', active: true },
   Dev: { badge: 'Dev', badgeColor: '#ff5f00', active: true },
+  Testing: { badge: 'Testing', badgeColor: '#fd7e14', active: true },
   Planning: { badge: 'Planning', badgeColor: '#999', active: false },
   Planned: { badge: 'Planning', badgeColor: '#999', active: false },
+  Backlog: { badge: 'Backlog', badgeColor: '#6c757d', active: false },
   Blocked: { badge: 'Blocked', badgeColor: '#dc3545', active: false },
 };
 
@@ -750,26 +753,26 @@ function buildProcessesFromRegistry(): ProcessRow[] {
 
 function syncProcessToRegistry(streamTitle: string, steps: Step[]) {
   try {
-    const raw = localStorage.getItem('subAppOwners_v2');
-    const registry: any[] = raw ? JSON.parse(raw) : [];
-    const existing = registry.filter(r => r.stream === streamTitle);
+    const registry = getSubAppRegistry();
+    const existing = registry.filter((r: any) => r.stream === streamTitle);
     const streamOwner = existing.length > 0 ? existing[0].streamOwner || '' : '';
 
-    const otherEntries = registry.filter(r => r.stream !== streamTitle);
+    const otherEntries = registry.filter((r: any) => r.stream !== streamTitle);
     const newEntries = steps.map(s => {
-      const prev = existing.find(e => e.app === s.label);
+      const prev = existing.find((e: any) => e.app === s.label);
+      const status = prev?.status === 'Planned' ? 'Planning' : (prev?.status || 'Planning');
       return {
         stream: streamTitle,
         streamOwner: prev?.streamOwner || streamOwner,
         app: s.label,
         owner: prev?.owner || '',
-        status: prev?.status || 'Planned',
+        status,
         description: prev?.description || '',
         deadlineTarget: prev?.deadlineTarget || '',
       };
     });
 
-    localStorage.setItem('subAppOwners_v2', JSON.stringify([...otherEntries, ...newEntries]));
+    saveRegistry([...otherEntries, ...newEntries]);
   } catch { /* ignore */ }
 }
 
@@ -803,6 +806,7 @@ export default function PortalHomePage() {
   const [kpiOpen, setKpiOpen] = useState(true);
   const [streamsOpen, setStreamsOpen] = useState(true);
   const [leaderboardOpen, setLeaderboardOpen] = useState(true);
+  const [collapsedStreams, setCollapsedStreams] = useState<Set<string>>(new Set());
   const [codingHoursFromGit, setCodingHoursFromGit] = useState(0);
   const teamNames = useMemo(() => getTeamMemberNames(), []);
 
@@ -992,11 +996,8 @@ export default function PortalHomePage() {
   const removeProcess = (title: string) => {
     setProcesses(prev => prev.filter(p => p.title !== title));
     try {
-      const raw = localStorage.getItem('subAppOwners_v2');
-      if (raw) {
-        const registry: any[] = JSON.parse(raw);
-        localStorage.setItem('subAppOwners_v2', JSON.stringify(registry.filter(r => r.stream !== title)));
-      }
+      const registry = getSubAppRegistry();
+      saveRegistry(registry.filter((r: any) => r.stream !== title));
     } catch { /* ignore */ }
     refreshRegistryMaps();
   };
@@ -1018,13 +1019,8 @@ export default function PortalHomePage() {
       const removedLabel = p.steps[stepIdx].label;
       const updatedSteps = p.steps.filter((_, i) => i !== stepIdx);
       try {
-        const raw = localStorage.getItem('subAppOwners_v2');
-        if (raw) {
-          const registry: any[] = JSON.parse(raw);
-          localStorage.setItem('subAppOwners_v2', JSON.stringify(
-            registry.filter(r => !(r.stream === title && r.app === removedLabel))
-          ));
-        }
+        const registry = getSubAppRegistry();
+        saveRegistry(registry.filter((r: any) => !(r.stream === title && r.app === removedLabel)));
       } catch { /* ignore */ }
       return { ...p, steps: updatedSteps };
     }));
@@ -1039,29 +1035,23 @@ export default function PortalHomePage() {
 
       if (field === 'label' && value !== oldLabel) {
         try {
-          const raw = localStorage.getItem('subAppOwners_v2');
-          if (raw) {
-            const registry: any[] = JSON.parse(raw);
-            const updated = registry.map(r =>
-              r.stream === title && r.app === oldLabel ? { ...r, app: value } : r
-            );
-            localStorage.setItem('subAppOwners_v2', JSON.stringify(updated));
-          }
+          const registry = getSubAppRegistry();
+          const updated = registry.map((r: any) =>
+            r.stream === title && r.app === oldLabel ? { ...r, app: value } : r
+          );
+          saveRegistry(updated);
         } catch { /* ignore */ }
         refreshRegistryMaps();
       }
 
       if (field === 'desc') {
         try {
-          const raw = localStorage.getItem('subAppOwners_v2');
-          if (raw) {
-            const registry: any[] = JSON.parse(raw);
-            const stepLabel = p.steps[stepIdx].label;
-            const updated = registry.map(r =>
-              r.stream === title && r.app === stepLabel ? { ...r, owner: value } : r
-            );
-            localStorage.setItem('subAppOwners_v2', JSON.stringify(updated));
-          }
+          const registry = getSubAppRegistry();
+          const stepLabel = p.steps[stepIdx].label;
+          const updated = registry.map((r: any) =>
+            r.stream === title && r.app === stepLabel ? { ...r, owner: value } : r
+          );
+          saveRegistry(updated);
         } catch { /* ignore */ }
         refreshRegistryMaps();
       }
@@ -1171,7 +1161,8 @@ export default function PortalHomePage() {
       <GuidanceStrip>
         <GuidanceItem>1. If you can explain it, you can vibe-code it.</GuidanceItem>
         <GuidanceItem>2. Focus on features with impact.</GuidanceItem>
-        <GuidanceLink to="/collaboration-model">3. See Further Guidance &rarr;</GuidanceLink>
+        <GuidanceItem>3. Plan before build.</GuidanceItem>
+        <GuidanceLink to="/collaboration-model">4. See Further Guidance &rarr;</GuidanceLink>
       </GuidanceStrip>
 
       <SectionToggle onClick={() => setKpiOpen(p => !p)}>
@@ -1187,8 +1178,7 @@ export default function PortalHomePage() {
           </KPICard>
           <KPICard>
             <KPIValue>{peaktimeHours.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} h</KPIValue>
-            <KPILabel>hereof Peaktime Hours</KPILabel>
-            <KPISub>from ticket Peak % &middot; 5th–15th of month</KPISub>
+            <KPILabel>hereof Acc. Peaktime Hours (5th-15th)</KPILabel>
           </KPICard>
           <KPICard>
             <KPIValue>&mdash;</KPIValue>
@@ -1214,11 +1204,7 @@ export default function PortalHomePage() {
           <KPICard>
             <KPIValue>{codeKpis.linesOfCode.toLocaleString('de-DE')}</KPIValue>
             <KPILabel>Lines of Code</KPILabel>
-            <KPISub>Frontend + Backend + Shared</KPISub>
-            <KPISub style={{ marginTop: 2, fontStyle: 'italic' }}>
-              ~{Math.round(codeKpis.linesOfCode / 50).toLocaleString('de-DE')} h without AI
-              <span style={{ display: 'block', fontSize: 8, color: '#bbb' }}>at ~50 LOC/h avg. developer</span>
-            </KPISub>
+            <KPISub>Front/Backend, {Math.round(codeKpis.linesOfCode / 30 / 8).toLocaleString('de-DE')} Dev Mandays</KPISub>
           </KPICard>
           <KPICard>
             <KPIValue>{codeKpis.pages}</KPIValue>
@@ -1238,7 +1224,7 @@ export default function PortalHomePage() {
         </KPIStrip>
       )}
 
-      <SectionToggle onClick={() => setStreamsOpen(p => !p)} style={{ paddingTop: 28 }}>
+      <SectionToggle onClick={() => setStreamsOpen(p => !p)} style={{ paddingTop: 12 }}>
         <SectionToggleArrow $open={streamsOpen}>▶</SectionToggleArrow>
         <SectionToggleTitle>Streams &amp; Sub-Apps</SectionToggleTitle>
       </SectionToggle>
@@ -1247,7 +1233,7 @@ export default function PortalHomePage() {
           <div
             key={proc.title}
             style={{
-              marginBottom: 36,
+              marginBottom: 20,
               borderLeft: streamDragOver === procIdx ? `3px solid ${theme.colors.primary}` : '3px solid transparent',
               paddingLeft: 8,
               transition: 'border-color 0.15s',
@@ -1264,18 +1250,27 @@ export default function PortalHomePage() {
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <span style={{ cursor: 'grab', fontSize: 16, opacity: 0.4, userSelect: 'none' }} title="Drag to reorder stream">☰</span>
-              <ProcessTitle>{proc.title}</ProcessTitle>
+              <span
+                onClick={() => setCollapsedStreams(prev => { const n = new Set(prev); if (n.has(proc.title)) n.delete(proc.title); else n.add(proc.title); return n; })}
+                style={{ cursor: 'pointer', fontSize: 11, opacity: 0.5, userSelect: 'none', transition: 'transform 0.2s', display: 'inline-block', transform: collapsedStreams.has(proc.title) ? 'rotate(0deg)' : 'rotate(90deg)' }}
+              >▶</span>
+              <ProcessTitle
+                onClick={() => setCollapsedStreams(prev => { const n = new Set(prev); if (n.has(proc.title)) n.delete(proc.title); else n.add(proc.title); return n; })}
+                style={{ cursor: 'pointer' }}
+              >{proc.title}</ProcessTitle>
               {streamOwners[proc.title] && (
                 <span style={{ fontSize: 11, color: theme.colors.textSecondary, fontWeight: 600, background: '#f0f0f0', padding: '2px 10px', borderRadius: 10 }}>
                   Stream Owner: {streamOwners[proc.title]}
                 </span>
               )}
-              <AddStepBtn onClick={() => addStepToProcess(proc.title)}>+ Add Step</AddStepBtn>
-              {!['Franchise Controlling'].includes(proc.title) && (
+              {!collapsedStreams.has(proc.title) && (
+                <AddStepBtn onClick={() => addStepToProcess(proc.title)}>+ Add Step</AddStepBtn>
+              )}
+              {!collapsedStreams.has(proc.title) && !['Franchise Controlling'].includes(proc.title) && (
                 <RemoveBtn onClick={() => removeProcess(proc.title)}>Remove</RemoveBtn>
               )}
             </div>
-            <FlowRow>
+            {!collapsedStreams.has(proc.title) && <FlowRow>
               {proc.steps.map((step, i) => (
                 <StepWrapper
                   key={`${proc.title}-${i}`}
@@ -1333,8 +1328,8 @@ export default function PortalHomePage() {
                   )}
                 </StepWrapper>
               ))}
-            </FlowRow>
-            {(() => {
+            </FlowRow>}
+            {!collapsedStreams.has(proc.title) && (() => {
               const sh = getStreamHours(proc);
               const pct = HOURS_SAVED_MAX > 0 ? Math.min((sh.done / HOURS_SAVED_MAX) * 100, 100) : 0;
               return (

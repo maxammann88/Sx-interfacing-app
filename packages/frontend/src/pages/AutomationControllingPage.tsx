@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import styled from 'styled-components';
 import { theme } from '../styles/theme';
 import api from '../utils/api';
-import { getSubAppRegistry, getSortedStreams } from './ApiManagementPage';
+import { getSubAppRegistry, getSortedStreams, saveRegistry } from './ApiManagementPage';
 
 const Page = styled.div`
   min-height: 100vh;
@@ -213,19 +213,7 @@ interface TicketFTE {
   deadlineDate: string | null;
 }
 
-const BUDGET_STORAGE_KEY = 'automationBudgetHours_v1';
-
-function loadBudgetHours(): Record<string, number> {
-  try {
-    const raw = localStorage.getItem(BUDGET_STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return {};
-}
-
-function saveBudgetHours(data: Record<string, number>) {
-  localStorage.setItem(BUDGET_STORAGE_KEY, JSON.stringify(data));
-}
+// Budget hours come from registry (SubApp.budgetHours) via getSubAppRegistry()
 
 const initialKPIs: KPIWeight[] = [
   { id: 'time-saved', name: 'Time Saved', description: 'Hours saved per month through automation', weight: 30, unit: 'hrs/month' },
@@ -392,7 +380,7 @@ const ForecastMarker = styled.div<{ $left: number }>`
 
 export default function AutomationControllingPage() {
   const [tickets, setTickets] = useState<TicketFTE[]>([]);
-  const [budgetHours, setBudgetHours] = useState<Record<string, number>>(loadBudgetHours);
+  const [budgetRefreshKey, setBudgetRefreshKey] = useState(0);
   const [kpis, setKpis] = useState(initialKPIs);
   const [loading, setLoading] = useState(true);
   const [calMonth, setCalMonth] = useState(() => new Date().getMonth());
@@ -415,7 +403,8 @@ export default function AutomationControllingPage() {
     });
   };
 
-  const registry = useMemo(() => getSubAppRegistry(), []);
+  const registry = useMemo(() => getSubAppRegistry(), [budgetRefreshKey]);
+  const budgetHours = useMemo(() => Object.fromEntries(registry.map((r: { app: string; budgetHours?: number }) => [r.app, r.budgetHours ?? 0])), [registry]);
 
   const loadTickets = useCallback(async () => {
     try {
@@ -472,11 +461,12 @@ export default function AutomationControllingPage() {
   }, [budgetStreams]);
 
   const updateBudget = (appName: string, value: number) => {
-    setBudgetHours(prev => {
-      const next = { ...prev, [appName]: value };
-      saveBudgetHours(next);
-      return next;
-    });
+    const reg = getSubAppRegistry();
+    const updated = reg.map((r: { app: string; budgetHours?: number; stream: string; streamOwner: string; owner: string; status: string; description: string; deadlineTarget?: string }) =>
+      r.app === appName ? { ...r, budgetHours: value } : r
+    );
+    saveRegistry(updated);
+    setBudgetRefreshKey((k) => k + 1);
   };
 
   const updateKPIWeight = (id: string, weight: number) => {

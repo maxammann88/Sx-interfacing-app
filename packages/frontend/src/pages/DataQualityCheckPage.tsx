@@ -62,7 +62,7 @@ const Dot = styled.span<{ $color: string }>`
 export default function DataQualityCheckPage() {
   return (
     <div>
-      <PageTitle>Data Quality Check</PageTitle>
+      <PageTitle>Data Checks</PageTitle>
       <Card>
         <InfoBox>
           <InfoIcon>🔍</InfoIcon>
@@ -73,6 +73,10 @@ export default function DataQualityCheckPage() {
             flagged before statements are finalized, reducing manual review effort and preventing errors.
           </InfoText>
           <FeatureList>
+            <FeatureItem>
+              <Dot $color={theme.colors.primary} />
+              Prüfliste - Prozess
+            </FeatureItem>
             <FeatureItem>
               <Dot $color={theme.colors.danger} />
               Detect missing or duplicate invoices across periods

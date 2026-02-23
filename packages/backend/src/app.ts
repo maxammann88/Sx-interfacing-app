@@ -10,6 +10,8 @@ import billingRunRoutes from './routes/billingRuns';
 import planningRoutes from './routes/planning';
 import feedbackRoutes from './routes/feedback';
 import kpiRoutes from './routes/kpis';
+import registryRoutes from './routes/registry';
+import teamMembersRoutes from './routes/teamMembers';
 import { errorHandler } from './middleware/errorHandler';
 
 const app = express();
@@ -31,6 +33,8 @@ app.use('/api/billing-runs', billingRunRoutes);
 app.use('/api/planning', planningRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/kpis', kpiRoutes);
+app.use('/api/registry', registryRoutes);
+app.use('/api/team-members', teamMembersRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

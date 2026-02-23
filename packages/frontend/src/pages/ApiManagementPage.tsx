@@ -6,6 +6,31 @@ import api from '../utils/api';
 import DbDocumentationPage from './DbDocumentationPage';
 import { getTeamMemberNames } from './CodingTeamManagementPage';
 
+// DB-backed registry cache (set by fetchRegistry() on app load and after PUT)
+let registryCache: { streamOrder: string[]; registry: SubAppOwnerEntry[] } | null = null;
+
+export async function fetchRegistry(): Promise<void> {
+  try {
+    const res = await api.get<{ streamOrder: string[]; registry: SubAppOwnerEntry[] }>('/registry');
+    if (res.data && Array.isArray(res.data.registry)) {
+      registryCache = { streamOrder: res.data.streamOrder || [], registry: res.data.registry };
+      return;
+    }
+  } catch (_) { /* ignore */ }
+  // If API returns empty or fails, migrate from localStorage once
+  try {
+    const raw = localStorage.getItem('subAppOwners_v2');
+    if (raw && raw.length > 2) {
+      const registry = JSON.parse(raw) as SubAppOwnerEntry[];
+      registry.forEach((d: SubAppOwnerEntry) => { if ((d.status as string) === 'Planned') d.status = 'Planning'; });
+      const streamOrder = (() => { try { const o = localStorage.getItem('streamOrder_v1'); return o ? JSON.parse(o) : null; } catch { return null; } })();
+      await api.put('/registry', { registry, streamOrder: streamOrder || [...new Set(registry.map(r => r.stream))] });
+      const res = await api.get<{ streamOrder: string[]; registry: SubAppOwnerEntry[] }>('/registry');
+      registryCache = res.data;
+    }
+  } catch (_) { /* ignore */ }
+}
+
 const Page = styled.div`
   min-height: 100vh;
   background: ${theme.colors.background};
@@ -339,9 +364,10 @@ interface SubAppOwnerEntry {
   streamOwner: string;
   app: string;
   owner: string;
-  status: 'Live & IT Approved' | 'Live' | 'Dev' | 'Planning' | 'Blocked';
+  status: 'Live & IT Approved' | 'Live' | 'Dev' | 'Planning' | 'Blocked' | 'Testing' | 'Backlog';
   description: string;
   deadlineTarget?: string;
+  budgetHours?: number;
 }
 
 const DEFAULT_OWNERS: SubAppOwnerEntry[] = [
@@ -359,34 +385,45 @@ const DEFAULT_OWNERS: SubAppOwnerEntry[] = [
   { stream: 'B2P Controlling', streamOwner: '', app: 'Reporting & Controlling', owner: '', status: 'Planning', description: 'B2P dashboards and KPIs' },
 ];
 
-const STATUS_OPTIONS: SubAppOwnerEntry['status'][] = ['Live & IT Approved', 'Live', 'Dev', 'Planning', 'Blocked'];
+const STATUS_OPTIONS: SubAppOwnerEntry['status'][] = ['Live & IT Approved', 'Live', 'Dev', 'Testing', 'Planning', 'Backlog', 'Blocked'];
 
 const STATUS_COLORS: Record<string, string> = {
   'Live & IT Approved': '#1a7f37',
   Live: '#28a745',
   Dev: '#ff5f00',
+  Testing: '#fd7e14',
   Planning: '#999',
+  Backlog: '#6c757d',
   Blocked: '#dc3545',
 };
 
 function loadOwners(): SubAppOwnerEntry[] {
+  if (registryCache && registryCache.registry.length > 0) return registryCache.registry;
   try {
     const raw = localStorage.getItem('subAppOwners_v2');
     if (raw) {
       const data: SubAppOwnerEntry[] = JSON.parse(raw);
-      let migrated = false;
-      data.forEach(d => {
-        if ((d.status as string) === 'Planned') { d.status = 'Planning'; migrated = true; }
-      });
-      if (migrated) saveOwners(data);
+      data.forEach(d => { if ((d.status as string) === 'Planned') d.status = 'Planning'; });
       return data;
     }
   } catch {}
   return DEFAULT_OWNERS;
 }
 
+async function saveOwnersToApi(owners: SubAppOwnerEntry[], streamOrder: string[]): Promise<void> {
+  const res = await api.put<{ streamOrder: string[]; registry: SubAppOwnerEntry[] }>('/registry', { registry: owners, streamOrder });
+  registryCache = res.data;
+}
+
 function saveOwners(owners: SubAppOwnerEntry[]) {
-  localStorage.setItem('subAppOwners_v2', JSON.stringify(owners));
+  const order = getStreamOrder();
+  saveOwnersToApi(owners, order).catch(() => {});
+}
+
+/** Saves full registry to DB (for use by Home page when syncing streams/sub-apps). */
+export function saveRegistry(registry: SubAppOwnerEntry[]) {
+  const order = getStreamOrder();
+  api.put('/registry', { registry, streamOrder: order }).then((res) => { registryCache = res.data; }).catch(() => {});
 }
 
 export function getSubAppRegistry(): SubAppOwnerEntry[] {
@@ -397,6 +434,7 @@ const STREAM_ORDER_KEY = 'streamOrder_v1';
 const DEFAULT_STREAM_ORDER = ['Franchise Controlling', 'B2P Controlling', 'Business Development'];
 
 export function getStreamOrder(): string[] {
+  if (registryCache && registryCache.streamOrder.length > 0) return registryCache.streamOrder;
   try {
     const raw = localStorage.getItem(STREAM_ORDER_KEY);
     if (raw) return JSON.parse(raw);
@@ -405,7 +443,8 @@ export function getStreamOrder(): string[] {
 }
 
 export function saveStreamOrder(order: string[]): void {
-  localStorage.setItem(STREAM_ORDER_KEY, JSON.stringify(order));
+  const registry = loadOwners();
+  api.put('/registry', { registry, streamOrder: order }).then((res) => { registryCache = res.data; }).catch(() => {});
 }
 
 export function getSortedStreams(): string[] {
@@ -583,11 +622,17 @@ const StreamHeader = styled.tr`
   }
 `;
 
-function SubAppOwnersTab() {
+export function SubAppOwnersTab() {
   const [owners, setOwners] = useState<SubAppOwnerEntry[]>(loadOwners);
   const [ticketDeadlines, setTicketDeadlines] = useState<Record<string, string>>({});
   const teamNames = useMemo(() => getTeamMemberNames(), []);
   const [startedApps, setStartedApps] = useState<string[]>(getStartedApps());
+
+  useEffect(() => {
+    api.get<{ streamOrder: string[]; registry: SubAppOwnerEntry[] }>('/registry')
+      .then((res) => { if (res.data?.registry?.length) setOwners(res.data.registry); })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     api.get('/feedback')
@@ -781,7 +826,7 @@ function SubAppOwnersTab() {
 }
 
 export default function ApiManagementPage() {
-  const [activeTab, setActiveTab] = useState<'api' | 'db' | 'owners'>('api');
+  const [activeTab, setActiveTab] = useState<'api' | 'db'>('api');
 
   return (
     <Page>
@@ -794,12 +839,10 @@ export default function ApiManagementPage() {
       <TabBar>
         <Tab $active={activeTab === 'api'} onClick={() => setActiveTab('api')}>API Management</Tab>
         <Tab $active={activeTab === 'db'} onClick={() => setActiveTab('db')}>App &amp; DB Documentation</Tab>
-        <Tab $active={activeTab === 'owners'} onClick={() => setActiveTab('owners')}>Sub-App Owners</Tab>
       </TabBar>
 
       {activeTab === 'api' && <ApiRegistryTab />}
       {activeTab === 'db' && <DbDocumentationPage />}
-      {activeTab === 'owners' && <SubAppOwnersTab />}
     </Page>
   );
 }

@@ -188,3 +188,40 @@ model FeedbackComment {
   @@index([feedbackId])
   @@map("feedback_comments")
 }
+
+// Streams & Sub-Apps (Coding Team / Home)
+model Stream {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  sortOrder   Int      @default(0)
+  streamOwner String?
+  subApps     SubApp[]
+
+  @@map("streams")
+}
+
+model SubApp {
+  id              Int     @id @default(autoincrement())
+  streamId        Int
+  stream         Stream  @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  app            String  // display name, e.g. "Interfacing", "FSM-Calculation"
+  owner          String?
+  status         String  @default("Planning") // Live & IT Approved | Live | Dev | Testing | Planning | Backlog | Blocked
+  description    String?
+  deadlineTarget  String?
+  budgetHours    Float?  // Current Workload p.m. (Automation Controlling)
+
+  @@unique([streamId, app])
+  @@index([streamId])
+  @@map("sub_apps")
+}
+
+model TeamMember {
+  id     Int    @id @default(autoincrement())
+  name   String
+  role   String?
+  stream String?
+
+  @@unique([name])
+  @@map("team_members")
+}

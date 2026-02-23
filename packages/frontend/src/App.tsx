@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ThemeProvider } from 'styled-components';
 import styled, { keyframes } from 'styled-components';
@@ -74,8 +74,15 @@ import ApiManagementPage from './pages/ApiManagementPage';
 import CollaborationModelPage from './pages/CollaborationModelPage';
 import GenericSubAppPage from './pages/GenericSubAppPage';
 import CodingTeamManagementPage from './pages/CodingTeamManagementPage';
+import { fetchRegistry } from './pages/ApiManagementPage';
+import { fetchTeamMembers } from './pages/CodingTeamManagementPage';
 
 export default function App() {
+  const [, setRegistryReady] = useState(0);
+  useEffect(() => {
+    Promise.all([fetchRegistry(), fetchTeamMembers()]).then(() => setRegistryReady((r) => r + 1));
+  }, []);
+
   return (
     <ThemeProvider theme={theme}>
       <GlobalStyles />
@@ -98,7 +105,7 @@ export default function App() {
           </Route>
 
           <Route path="/interfacing" element={<Layout />}>
-            <Route index element={<ImportPage />} />
+            <Route index element={<Navigate to="/interfacing/overview" replace />} />
             <Route path="import" element={<ImportPage />} />
             <Route path="statement" element={<StatementPage />} />
             <Route path="overview" element={<StatementOverviewPage />} />

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import styled from 'styled-components';
 import { theme } from '../styles/theme';
 import api from '../utils/api';
-import { getSubAppRegistry, getSortedStreams } from './ApiManagementPage';
+import { getSubAppRegistry, getSortedStreams, SubAppOwnersTab } from './ApiManagementPage';
 
 const KNOWN_MEMBERS = [
   'Henning Seidel', 'Inês Boavida Couto', 'Herbert Krenn',
@@ -25,6 +25,31 @@ const TEAM_MEMBERS_KEY = 'teamMembers_v2';
 
 interface TeamMember { name: string; role: string; stream: string; }
 
+let teamMembersCache: TeamMember[] | null = null;
+
+export async function fetchTeamMembers(): Promise<void> {
+  try {
+    const res = await api.get<TeamMember[]>('/team-members');
+    if (Array.isArray(res.data) && res.data.length > 0) {
+      teamMembersCache = res.data.map((m: any) => ({ name: m.name || '', role: m.role || '', stream: m.stream || '' }));
+      return;
+    }
+  } catch (_) { /* ignore */ }
+  // Migrate from localStorage once
+  try {
+    const raw = localStorage.getItem(TEAM_MEMBERS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const mapped = parsed.map((m: any) => ({ name: m.name || '', role: m.role || '', stream: m.stream || '' }));
+        const list = dedupeMembers(mapped);
+        await api.put('/team-members', list);
+        teamMembersCache = list;
+      }
+    }
+  } catch (_) { /* ignore */ }
+}
+
 function resolveAlias(name: string): string { return NAME_ALIASES[name] || name; }
 
 function dedupeMembers(members: TeamMember[]): TeamMember[] {
@@ -43,6 +68,7 @@ function dedupeMembers(members: TeamMember[]): TeamMember[] {
 }
 
 function loadTeamMembers(): TeamMember[] {
+  if (teamMembersCache && teamMembersCache.length > 0) return teamMembersCache;
   try {
     const raw = localStorage.getItem(TEAM_MEMBERS_KEY);
     if (raw) {
@@ -62,7 +88,10 @@ function loadTeamMembers(): TeamMember[] {
   });
   return KNOWN_MEMBERS.map(n => ({ name: n, role: roleMap[n] || '', stream: streamMap[n] || '' }));
 }
-function saveTeamMembers(m: TeamMember[]) { localStorage.setItem(TEAM_MEMBERS_KEY, JSON.stringify(m)); }
+
+function saveTeamMembers(m: TeamMember[]) {
+  api.put('/team-members', m).then((res) => { teamMembersCache = res.data; }).catch(() => {});
+}
 
 export function getTeamMemberNames(): string[] {
   const members = loadTeamMembers();
@@ -272,7 +301,7 @@ function TicketDetail({ ticket, onClose, onStatusChange }: {
 export default function CodingTeamManagementPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'priority' | 'team' | 'manage'>('priority');
+  const [tab, setTab] = useState<'priority' | 'team' | 'manage' | 'owners'>('priority');
   const [dragId, setDragId] = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
   const [detailTicket, setDetailTicket] = useState<Ticket | null>(null);
@@ -285,6 +314,14 @@ export default function CodingTeamManagementPage() {
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState('');
   const [newStream, setNewStream] = useState('');
+
+  useEffect(() => {
+    if (tab === 'manage') {
+      api.get<TeamMember[]>('/team-members').then((res) => {
+        if (Array.isArray(res.data) && res.data.length > 0) setManagedMembers(res.data);
+      }).catch(() => {});
+    }
+  }, [tab]);
 
   const registry = useMemo(() => getSubAppRegistry(), []);
 
@@ -588,6 +625,7 @@ export default function CodingTeamManagementPage() {
           <Tab $active={tab === 'priority'} onClick={() => setTab('priority')}>Priority Board</Tab>
           <Tab $active={tab === 'team'} onClick={() => setTab('team')}>Team View</Tab>
           <Tab $active={tab === 'manage'} onClick={() => setTab('manage')}>Team Management</Tab>
+          <Tab $active={tab === 'owners'} onClick={() => setTab('owners')}>Sub-App Owners</Tab>
         </TabRow>
 
         {tab === 'priority' && (
@@ -769,6 +807,8 @@ export default function CodingTeamManagementPage() {
             </div>
           </Card>
         )}
+
+        {tab === 'owners' && <SubAppOwnersTab />}
       </Content>
 
       {detailTicket && (
