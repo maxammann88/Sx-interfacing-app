@@ -30,12 +30,42 @@ let teamMembersCache: TeamMember[] | null = null;
 export async function fetchTeamMembers(): Promise<void> {
   try {
     const res = await api.get<TeamMember[]>('/team-members');
-    if (Array.isArray(res.data) && res.data.length > 0) {
-      teamMembersCache = res.data.map((m: any) => ({ name: m.name || '', role: m.role || '', stream: m.stream || '' }));
-      return;
+    const apiList = Array.isArray(res.data) ? res.data.map((m: any) => ({ name: (m.name || '').trim(), role: m.role || '', stream: m.stream || '' })).filter((m) => m.name) : [];
+    const apiNames = new Set(apiList.map((m) => m.name));
+
+    // Lokale Einträge (localStorage), die in der API fehlen, in die DB übernehmen
+    try {
+      const raw = localStorage.getItem(TEAM_MEMBERS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const localList = parsed.map((m: any) => ({ name: (m.name || '').trim(), role: m.role || '', stream: m.stream || '' })).filter((m) => m.name);
+          let merged = [...apiList];
+          let added = false;
+          localList.forEach((m) => {
+            if (!apiNames.has(m.name)) {
+              merged.push(m);
+              apiNames.add(m.name);
+              added = true;
+            }
+          });
+          if (added) {
+            merged = dedupeMembers(merged);
+            await api.put('/team-members', merged);
+            const r2 = await api.get<TeamMember[]>('/team-members');
+            teamMembersCache = Array.isArray(r2.data) ? r2.data.map((x: any) => ({ name: x.name || '', role: x.role || '', stream: x.stream || '' })) : merged;
+            localStorage.removeItem(TEAM_MEMBERS_KEY);
+            return;
+          }
+        }
+      }
+    } catch (_) { /* ignore */ }
+
+    if (apiList.length > 0) {
+      teamMembersCache = dedupeMembers(apiList);
     }
   } catch (_) { /* ignore */ }
-  // Migrate from localStorage once
+  // Wenn API leer war: Migration nur aus localStorage
   try {
     const raw = localStorage.getItem(TEAM_MEMBERS_KEY);
     if (raw) {
@@ -90,7 +120,16 @@ function loadTeamMembers(): TeamMember[] {
 }
 
 function saveTeamMembers(m: TeamMember[]) {
-  api.put('/team-members', m).then((res) => { teamMembersCache = res.data; }).catch(() => {});
+  api
+    .put('/team-members', m)
+    .then((res) => { teamMembersCache = res.data; })
+    .catch((err) => {
+      const status = err?.response?.status;
+      const data = err?.response?.data;
+      const msg = typeof data === 'object' && data?.error ? data.error : (data || err.message || String(err));
+      console.error('Team-Mitglieder speichern fehlgeschlagen:', status, data || err);
+      alert(`Speichern fehlgeschlagen (${status || 'Netzwerk?'}): ${msg}`);
+    });
 }
 
 export function getTeamMemberNames(): string[] {
@@ -315,13 +354,22 @@ export default function CodingTeamManagementPage() {
   const [newRole, setNewRole] = useState('');
   const [newStream, setNewStream] = useState('');
 
+  const fetchManagedMembers = useCallback(() => {
+    api.get<TeamMember[]>('/team-members').then((res) => {
+      setManagedMembers(Array.isArray(res.data) ? res.data.map((m: any) => ({ name: m.name || '', role: m.role || '', stream: m.stream || '' })) : []);
+    }).catch(() => {});
+  }, []);
+
   useEffect(() => {
-    if (tab === 'manage') {
-      api.get<TeamMember[]>('/team-members').then((res) => {
-        if (Array.isArray(res.data) && res.data.length > 0) setManagedMembers(res.data);
-      }).catch(() => {});
-    }
-  }, [tab]);
+    if (tab === 'manage') fetchManagedMembers();
+  }, [tab, fetchManagedMembers]);
+
+  // Beim Zurückwechseln ins Fenster: Team-Liste neu laden, damit Änderungen aus anderem Browser sichtbar werden
+  useEffect(() => {
+    const onFocus = () => { if (tab === 'manage') fetchManagedMembers(); };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [tab, fetchManagedMembers]);
 
   const registry = useMemo(() => getSubAppRegistry(), []);
 

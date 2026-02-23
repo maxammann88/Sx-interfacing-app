@@ -16,7 +16,7 @@ router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
 
 router.put('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const body = req.body as { name: string; role?: string; stream?: string }[];
+    const body = req.body as { name?: string; role?: string; stream?: string }[];
     if (!Array.isArray(body)) {
       return res.status(400).json({ error: 'Array of { name, role?, stream? } required' });
     }
@@ -27,11 +27,11 @@ router.put('/', async (req: Request, res: Response, next: NextFunction) => {
         if (!name) continue;
         await tx.teamMember.upsert({
           where: { name },
-          update: { role: row.role ?? null, stream: row.stream ?? null },
+          update: { role: (row.role !== undefined && row.role !== '') ? row.role : null, stream: (row.stream !== undefined && row.stream !== '') ? row.stream : null },
           create: {
             name,
-            role: row.role ?? null,
-            stream: row.stream ?? null,
+            role: (row.role !== undefined && row.role !== '') ? row.role : null,
+            stream: (row.stream !== undefined && row.stream !== '') ? row.stream : null,
           },
         });
       }
@@ -39,6 +39,7 @@ router.put('/', async (req: Request, res: Response, next: NextFunction) => {
     const list = await prisma.teamMember.findMany({ orderBy: { name: 'asc' } });
     res.json(list.map((m) => ({ name: m.name, role: m.role || '', stream: m.stream || '' })));
   } catch (err) {
+    console.error('[team-members PUT]', err);
     next(err);
   }
 });

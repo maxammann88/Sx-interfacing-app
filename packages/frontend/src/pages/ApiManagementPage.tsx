@@ -13,7 +13,56 @@ export async function fetchRegistry(): Promise<void> {
   try {
     const res = await api.get<{ streamOrder: string[]; registry: SubAppOwnerEntry[] }>('/registry');
     if (res.data && Array.isArray(res.data.registry)) {
-      registryCache = { streamOrder: res.data.streamOrder || [], registry: res.data.registry };
+      let streamOrder = res.data.streamOrder || [];
+      let registry = [...res.data.registry];
+
+      // Lokale Einträge (localStorage), die noch nicht in der API sind, in die DB übernehmen
+      try {
+        const raw = localStorage.getItem('subAppOwners_v2');
+        if (raw && raw.length > 2) {
+          const localList = JSON.parse(raw) as SubAppOwnerEntry[];
+          const key = (r: SubAppOwnerEntry) => `${r.stream}\t${r.app}`;
+          const apiKeys = new Set(registry.map(key));
+          let merged = false;
+          localList.forEach((e) => {
+            const normalized = { ...e, status: (e.status === 'Planned' ? 'Planning' : e.status) || 'Planning', isStarted: e.isStarted ?? false };
+            if (!apiKeys.has(key(normalized))) {
+              registry.push(normalized);
+              apiKeys.add(key(normalized));
+              merged = true;
+            }
+          });
+          if (merged) {
+            const localOrder = (() => { try { const o = localStorage.getItem('streamOrder_v1'); return o ? JSON.parse(o) as string[] : null; } catch { return null; } })();
+            const orderSet = new Set(streamOrder);
+            if (Array.isArray(localOrder)) localOrder.forEach((s) => { if (!orderSet.has(s)) { streamOrder = [...streamOrder, s]; orderSet.add(s); } });
+            await api.put('/registry', { registry, streamOrder });
+            const r2 = await api.get<{ streamOrder: string[]; registry: SubAppOwnerEntry[] }>('/registry');
+            streamOrder = r2.data.streamOrder || [];
+            registry = r2.data.registry || [];
+            localStorage.removeItem('subAppOwners_v2');
+            localStorage.removeItem('streamOrder_v1');
+          }
+        }
+      } catch (_) { /* ignore */ }
+
+      registryCache = { streamOrder, registry };
+
+      // Einmal-Migration: gestartete Sub-Apps aus localStorage in DB übernehmen
+      try {
+        const startedRaw = localStorage.getItem('startedSubApps_v1');
+        if (startedRaw && registryCache!.registry.length > 0) {
+          const slugs: string[] = JSON.parse(startedRaw);
+          if (Array.isArray(slugs) && slugs.length > 0) {
+            const toSlug = (n: string) => n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+            const updated = registryCache!.registry.map((r) => ({ ...r, isStarted: r.isStarted || slugs.includes(toSlug(r.app)) }));
+            await api.put('/registry', { registry: updated, streamOrder: registryCache!.streamOrder });
+            const r2 = await api.get<{ streamOrder: string[]; registry: SubAppOwnerEntry[] }>('/registry');
+            registryCache = r2.data;
+            localStorage.removeItem('startedSubApps_v1');
+          }
+        }
+      } catch (_) { /* ignore */ }
       return;
     }
   } catch (_) { /* ignore */ }
@@ -368,6 +417,7 @@ interface SubAppOwnerEntry {
   description: string;
   deadlineTarget?: string;
   budgetHours?: number;
+  isStarted?: boolean;
 }
 
 const DEFAULT_OWNERS: SubAppOwnerEntry[] = [
@@ -484,20 +534,23 @@ export function getSubAppPath(appName: string): string | null {
   return null;
 }
 
+/** Slugs der Sub-Apps, die „gestartet“ sind (aus DB/Registry). */
 export function getStartedApps(): string[] {
-  try {
-    const raw = localStorage.getItem('startedSubApps_v1');
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return [];
+  const reg = registryCache?.registry ?? loadOwners();
+  return reg.filter((r) => r.isStarted).map((r) => slugify(r.app));
 }
 
-export function startSubApp(slug: string) {
-  const apps = getStartedApps();
-  if (!apps.includes(slug)) {
-    apps.push(slug);
-    localStorage.setItem('startedSubApps_v1', JSON.stringify(apps));
-  }
+/** Sub-App als gestartet in DB speichern; optional callback nach dem Speichern. */
+export function startSubApp(slug: string, onDone?: () => void) {
+  const reg = loadOwners();
+  const updated = reg.map((r) => (slugify(r.app) === slug ? { ...r, isStarted: true } : r));
+  api
+    .put('/registry', { registry: updated, streamOrder: getStreamOrder() })
+    .then((res) => {
+      registryCache = res.data;
+      onDone?.();
+    })
+    .catch(() => {});
 }
 
 export function isSubAppStarted(appName: string): boolean {
@@ -801,7 +854,7 @@ export function SubAppOwnersTab() {
                       <td><OwnerInput value={o.description} onChange={e => update(o.origIdx, 'description', e.target.value)} placeholder="Description..." /></td>
                       <td>
                         {o.app && !isStarted && !hasBuiltin && (
-                          <StartAppBtn onClick={() => { startSubApp(appSlug); setStartedApps(getStartedApps()); }}>
+                          <StartAppBtn onClick={() => startSubApp(appSlug, () => setStartedApps(getStartedApps()))}>
                             ▶ Start Sub-App
                           </StartAppBtn>
                         )}

@@ -769,6 +769,8 @@ function syncProcessToRegistry(streamTitle: string, steps: Step[]) {
         status,
         description: prev?.description || '',
         deadlineTarget: prev?.deadlineTarget || '',
+        budgetHours: prev?.budgetHours,
+        isStarted: prev?.isStarted ?? false,
       };
     });
 

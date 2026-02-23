@@ -210,6 +210,7 @@ model SubApp {
   description    String?
   deadlineTarget  String?
   budgetHours    Float?  // Current Workload p.m. (Automation Controlling)
+  isStarted      Boolean @default(false)  // Sub-App "gestartet" → Link/Kachel für alle sichtbar
 
   @@unique([streamId, app])
   @@index([streamId])

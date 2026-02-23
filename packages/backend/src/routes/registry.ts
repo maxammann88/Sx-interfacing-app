@@ -12,6 +12,7 @@ export type SubAppOwnerEntry = {
   description: string;
   deadlineTarget?: string;
   budgetHours?: number;
+  isStarted?: boolean;
 };
 
 // GET: full registry + stream order (for frontend)
@@ -32,6 +33,7 @@ router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
         description: a.description || '',
         deadlineTarget: a.deadlineTarget || undefined,
         budgetHours: a.budgetHours ?? undefined,
+        isStarted: a.isStarted ?? false,
       }))
     );
     res.json({ streamOrder, registry });
@@ -90,6 +92,7 @@ router.put('/', async (req: Request, res: Response, next: NextFunction) => {
               description: e.description || null,
               deadlineTarget: e.deadlineTarget || null,
               budgetHours: typeof e.budgetHours === 'number' ? e.budgetHours : null,
+              isStarted: e.isStarted === true,
             },
           });
         }
@@ -111,6 +114,7 @@ router.put('/', async (req: Request, res: Response, next: NextFunction) => {
         description: a.description || '',
         deadlineTarget: a.deadlineTarget || undefined,
         budgetHours: a.budgetHours ?? undefined,
+        isStarted: a.isStarted ?? false,
       }))
     );
     res.json({ streamOrder: newOrder, registry: newRegistry });

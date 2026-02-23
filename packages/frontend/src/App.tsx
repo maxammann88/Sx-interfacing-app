@@ -83,6 +83,15 @@ export default function App() {
     Promise.all([fetchRegistry(), fetchTeamMembers()]).then(() => setRegistryReady((r) => r + 1));
   }, []);
 
+  // Beim Zurückwechseln ins Tab (z. B. anderer Browser) Registry + Team neu laden
+  useEffect(() => {
+    const onFocus = () => {
+      Promise.all([fetchRegistry(), fetchTeamMembers()]).then(() => setRegistryReady((r) => r + 1));
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, []);
+
   return (
     <ThemeProvider theme={theme}>
       <GlobalStyles />
