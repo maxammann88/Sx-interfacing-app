@@ -33,6 +33,20 @@ function formatPeriod(period: string): string {
   return `${MONTH_NAMES[month - 1]} ${year}`;
 }
 
+function formatPeriodRange(period: string): string {
+  const y = parseInt(period.substring(0, 4), 10);
+  const m = parseInt(period.substring(4, 6), 10);
+  const first = new Date(Date.UTC(y, m - 1, 1));
+  const last = new Date(Date.UTC(y, m, 0));
+  const fmt = (d: Date) => {
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const yy = String(d.getUTCFullYear()).slice(-2);
+    return `${dd}.${mm}.${yy}`;
+  };
+  return `${fmt(first)}-${fmt(last)}`;
+}
+
 function periodMonthName(period: string): string {
   return MONTH_NAMES[parseInt(period.substring(4, 6), 10) - 1] || '';
 }
@@ -53,9 +67,10 @@ function sectionHeader(ws: ExcelJS.Worksheet, text: string, bgColor: string, col
 
 function tableHeader(ws: ExcelJS.Worksheet, headers: string[]) {
   const row = ws.addRow(headers);
-  row.eachCell((cell) => {
+  row.eachCell((cell, colNumber) => {
     cell.font = { ...whiteFont(), size: 9 };
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_BG } };
+    if (colNumber === 3) cell.alignment = { horizontal: 'center' };
     cell.alignment = { vertical: 'middle' };
   });
   row.height = 18;
@@ -84,9 +99,9 @@ export async function generateStatementXlsx(data: StatementData): Promise<Buffer
   const ws = wb.addWorksheet(`Statement ${formatPeriod(data.accountingPeriod)}`);
 
   ws.columns = [
-    { width: 14 },
-    { width: 30 },
-    { width: 24 },
+    { width: 12 },
+    { width: 38 },
+    { width: 22 },
     { width: 14 },
     { width: 18 },
   ];
@@ -106,13 +121,17 @@ export async function generateStatementXlsx(data: StatementData): Promise<Buffer
 
   // --- Meta ---
   const metaRow = ws.addRow([
-    `Accounting Period: ${formatPeriod(data.accountingPeriod)}`,
-    `Release Date: ${data.releaseDate}`,
+    `Accounting Period: ${formatPeriodRange(data.accountingPeriod)}`,
     `Payment Term: ${data.paymentTermDays} days`,
     `FIR: ${data.country.fir}`,
-    `Country: ${data.country.name} (${data.country.iso})`,
+    '',
+    `Release Date: ${formatDateDE(data.releaseDate)}`,
   ]);
   metaRow.eachCell((cell) => { cell.font = { size: 9 }; });
+  const relDateCell = metaRow.getCell(5);
+  relDateCell.font = { size: 9, bold: true, color: { argb: 'FFFFFF' } };
+  relDateCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ORANGE } };
+  relDateCell.alignment = { horizontal: 'right', vertical: 'middle' };
   ws.addRow([]);
 
   // --- CLEARING STATEMENT ---
@@ -121,6 +140,7 @@ export async function generateStatementXlsx(data: StatementData): Promise<Buffer
   for (const line of data.clearing) {
     const row = ws.addRow([line.type, line.description, line.reference, '', eurFormat(line.amount)]);
     row.eachCell((c) => { c.font = { size: 9 }; });
+    row.getCell(3).alignment = { horizontal: 'center' };
     amountCell(row.getCell(5));
   }
   if (data.clearing.length === 0) {
@@ -147,6 +167,7 @@ export async function generateStatementXlsx(data: StatementData): Promise<Buffer
     const bd = bdMap.get(line.description.toLowerCase());
     const row = ws.addRow([line.type, line.description, line.reference, line.date || '', eurFormat(line.amount)]);
     row.eachCell((c) => { c.font = { size: 9 }; });
+    row.getCell(3).alignment = { horizontal: 'center' };
     amountCell(row.getCell(5));
     if (bd?.hasDeviation) {
       row.eachCell((c) => {
@@ -257,7 +278,7 @@ export async function generateStatementXlsx(data: StatementData): Promise<Buffer
     row.eachCell((c) => { c.font = { size: 9 }; });
     row.getCell(5).alignment = { horizontal: 'right' };
   };
-  addDepositRow('Deposit held', 'XXX EUR');
+  addDepositRow('Deposit held', eurFormat(data.depositHeld));
   addDepositRow('Deposit due', 'XXX EUR');
 
   const buffer = await wb.xlsx.writeBuffer();

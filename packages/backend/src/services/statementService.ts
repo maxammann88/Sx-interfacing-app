@@ -271,6 +271,12 @@ export async function generateStatement(
     });
   }
 
+  // --- DEPOSIT HELD ---
+  const depositRows = await prisma.depositImport.findMany({
+    where: { offsettingAcctNo: country.debitor1 },
+  });
+  const depositHeld = depositRows.reduce((sum, row) => sum - row.amountLocalCurrency, 0);
+
   return {
     country: {
       ...country,
@@ -287,5 +293,6 @@ export async function generateStatement(
     billingBreakdowns,
     totalInterfacingDue,
     accountStatement,
+    depositHeld,
   };
 }

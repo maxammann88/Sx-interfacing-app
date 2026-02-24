@@ -246,6 +246,10 @@ export default function StammdatenViewPage() {
   const [search, setSearch] = useState('');
   const [balanceMap, setBalanceMap] = useState<Record<number, number>>({});
   const [overdueMap, setOverdueMap] = useState<Record<number, number>>({});
+  const [depositMap, setDepositMap] = useState<Record<string, number>>({});
+  const [guaranteeMap, setGuaranteeMap] = useState<Record<string, number>>({});
+  const [editingGuarantee, setEditingGuarantee] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [cutoffDate, setCutoffDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [payoutOverrides, setPayoutOverrides] = useState<Record<number, boolean>>({});
@@ -258,6 +262,14 @@ export default function StammdatenViewPage() {
       })
       .catch((err) => setError(err.response?.data?.error || 'Error loading data'))
       .finally(() => setLoading(false));
+
+    api.get('/uploads/deposit-summary')
+      .then((res) => setDepositMap(res.data.data || {}))
+      .catch(() => {});
+
+    api.get('/uploads/bank-guarantees')
+      .then((res) => setGuaranteeMap(res.data.data || {}))
+      .catch(() => {});
   }, []);
 
   const loadOverview = useCallback((releaseDate: string) => {
@@ -339,7 +351,7 @@ export default function StammdatenViewPage() {
           <SmallTable>
             <thead>
               <HeaderRow1>
-                <SectionHeader colSpan={23}>COUNTRY LIST</SectionHeader>
+                <SectionHeader colSpan={21}>COUNTRY LIST</SectionHeader>
                 <SectionHeader colSpan={9} style={{ background: theme.colors.secondary }}>MASTER DATA</SectionHeader>
               </HeaderRow1>
               <HeaderRow2>
@@ -367,11 +379,10 @@ export default function StammdatenViewPage() {
                   />
                 </th>
                 <th>Deposit Held</th>
+                <th>Bank Guarantees</th>
                 <th>O-OP% Deposit</th>
                 <th>DSO Deviation</th>
                 <th>Overaged 90d Ratio</th>
-                <th>D/C</th>
-                <th>Approval Amount</th>
                 <th>Payout Blocked</th>
                 <th>Comment</th>
                 <th>VERRKTO</th>
@@ -395,7 +406,7 @@ export default function StammdatenViewPage() {
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan={32} style={{ textAlign: 'center', color: '#999', padding: 20 }}>No data available</td></tr>
+                <tr><td colSpan={30} style={{ textAlign: 'center', color: '#999', padding: 20 }}>No data available</td></tr>
               )}
               {filtered.filter((c) => c.fir !== 0).map((c) => {
                 const md = c.masterData;
@@ -416,42 +427,72 @@ export default function StammdatenViewPage() {
                     <BalanceCell>
                       {balanceLoading ? '...' : formatEur(overdueAmt)}
                     </BalanceCell>
-                    <td style={{ textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                      {formatEur(kpi.depositHeld)}
-                    </td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, color: kpiColor(kpi.opDepositIn, 30, 80) }}>
-                      {kpi.opDepositIn}%
-                    </td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, color: kpiColor(Math.abs(kpi.dsoDeviation), 5, 25) }}>
-                      {kpi.dsoDeviation > 0 ? '+' : ''}{kpi.dsoDeviation} days
-                    </td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, color: kpiColor(kpi.overaged90d, 10, 30) }}>
-                      {kpi.overaged90d}%
-                    </td>
                     {(() => {
-                      const ps = paymentStatusByFir[c.fir];
-                      if (!ps) return (<><td style={{ textAlign: 'center', color: '#ccc' }}>-</td><td style={{ textAlign: 'right', color: '#ccc' }}>-</td><td style={{ textAlign: 'center', cursor: 'pointer', userSelect: 'none' }} onClick={() => setPayoutOverrides(prev => ({ ...prev, [c.fir]: !(prev[c.fir] ?? false) }))} title="Click to toggle Payout Block">{(payoutOverrides[c.fir] ?? false) ? <span style={{ color: theme.colors.danger, fontWeight: 700 }}>Y</span> : <span style={{ color: theme.colors.textLight }}>N</span>}</td></>);
+                      const depHeld = depositMap[c.debitor1] ?? 0;
+                      const bgAmount = guaranteeMap[c.debitor1] ?? 0;
+                      const opPct = depHeld !== 0 ? Math.round((overdueAmt / Math.abs(depHeld)) * 100) : 0;
+                      const isEditing = editingGuarantee === c.debitor1;
                       return (
                         <>
-                          <td style={{ textAlign: 'center', fontWeight: 700, color: ps.dc === 'C' ? theme.colors.success : theme.colors.danger }}>
-                            {ps.dc}
-                          </td>
                           <td style={{ textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                            {formatEur(ps.amount)}
+                            {formatEur(depHeld)}
                           </td>
                           <td
-                            style={{ textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}
+                            style={{ textAlign: 'right', whiteSpace: 'nowrap', cursor: 'pointer', minWidth: 90 }}
                             onClick={() => {
-                              const current = payoutOverrides[c.fir] ?? ps.payoutBlocked;
-                              setPayoutOverrides(prev => ({ ...prev, [c.fir]: !current }));
+                              if (!isEditing) {
+                                setEditingGuarantee(c.debitor1);
+                                setEditValue(bgAmount ? String(bgAmount) : '');
+                              }
                             }}
-                            title="Click to toggle Payout Block"
                           >
-                            {(payoutOverrides[c.fir] ?? ps.payoutBlocked)
-                              ? <span style={{ color: theme.colors.danger, fontWeight: 700 }}>Y</span>
-                              : <span style={{ color: theme.colors.textLight }}>N</span>}
+                            {isEditing ? (
+                              <input
+                                type="number"
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                onBlur={() => {
+                                  const val = parseFloat(editValue) || 0;
+                                  setGuaranteeMap(prev => ({ ...prev, [c.debitor1]: val }));
+                                  setEditingGuarantee(null);
+                                  api.put('/uploads/bank-guarantees', { debitor1: c.debitor1, amount: val }).catch(() => {});
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                  if (e.key === 'Escape') setEditingGuarantee(null);
+                                }}
+                                autoFocus
+                                style={{ width: 80, textAlign: 'right', fontSize: 11, padding: '1px 4px', border: '1px solid #ccc', borderRadius: 3 }}
+                              />
+                            ) : (
+                              <span style={{ fontWeight: 600, color: bgAmount ? undefined : '#bbb' }}>
+                                {bgAmount ? formatEur(bgAmount) : '–'}
+                              </span>
+                            )}
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 700, color: kpiColor(Math.abs(opPct), 30, 80) }}>
+                            {opPct}%
                           </td>
                         </>
+                      );
+                    })()}
+                    <td style={{ textAlign: 'center', color: '#999' }}>TBD</td>
+                    <td style={{ textAlign: 'center', color: '#999' }}>TBD</td>
+                    {(() => {
+                      const ps = paymentStatusByFir[c.fir];
+                      const blocked = payoutOverrides[c.fir] ?? ps?.payoutBlocked ?? false;
+                      return (
+                        <td
+                          style={{ textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}
+                          onClick={() => {
+                            setPayoutOverrides(prev => ({ ...prev, [c.fir]: !blocked }));
+                          }}
+                          title="Click to toggle Payout Block"
+                        >
+                          {blocked
+                            ? <span style={{ color: theme.colors.danger, fontWeight: 700 }}>Y</span>
+                            : <span style={{ color: theme.colors.textLight }}>N</span>}
+                        </td>
                       );
                     })()}
                     <td>{c.comment || ''}</td>

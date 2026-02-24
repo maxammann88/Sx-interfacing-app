@@ -107,6 +107,7 @@ export interface StatementData {
   billingBreakdowns?: BillingBreakdown[];
   totalInterfacingDue: number;
   accountStatement: AccountStatement;
+  depositHeld: number;
 }
 
 export interface StatementLine {

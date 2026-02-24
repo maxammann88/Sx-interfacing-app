@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import prisma from '../prismaClient';
-import { parseSapCsv, parseCountryCsv, parseBillingCostCsv } from '../services/csvParser';
+import { parseSapCsv, parseCountryCsv, parseBillingCostCsv, parseDepositCsv } from '../services/csvParser';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
@@ -247,30 +247,106 @@ router.post('/deposit', upload.single('file'), async (req: Request, res: Respons
   try {
     if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
 
-    let content = req.file.buffer.toString('utf-8');
-    if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
-    const { parse } = require('csv-parse/sync');
-    const records = parse(content, {
-      delimiter: ';',
-      columns: true,
-      skip_empty_lines: true,
-      trim: true,
-      relax_column_count: true,
-    });
+    const content = req.file.buffer.toString('utf-8');
+    const rows = parseDepositCsv(content);
+
+    // Delete all previous deposit data on re-upload
+    await prisma.depositImport.deleteMany();
+    const oldUploads = await prisma.upload.findMany({ where: { uploadType: 'deposit' } });
+    for (const old of oldUploads) {
+      await prisma.upload.delete({ where: { id: old.id } });
+    }
 
     const uploadRecord = await prisma.upload.create({
       data: {
         filename: req.file.originalname,
         uploadType: 'deposit',
-        recordCount: records.length,
+        recordCount: rows.length,
       },
     });
+
+    const BATCH_SIZE = 500;
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+      const batch = rows.slice(i, i + BATCH_SIZE);
+      await prisma.depositImport.createMany({
+        data: batch.map((row) => ({
+          uploadId: uploadRecord.id,
+          yearMonth: row.yearMonth || null,
+          companyCode: row.companyCode,
+          postingDate: row.postingDate,
+          clearedOpenSymbol: row.clearedOpenSymbol || null,
+          refKeyHeader1: row.refKeyHeader1 || null,
+          referenceKey3: row.referenceKey3 || null,
+          reference: row.reference || null,
+          assignment: row.assignment || null,
+          documentNumber: row.documentNumber || null,
+          documentDate: row.documentDate,
+          postingKey: row.postingKey || null,
+          amountLocalCurrency: row.amountLocalCurrency,
+          localCurrency: row.localCurrency || null,
+          text: row.text || null,
+          postingPeriod: row.postingPeriod || null,
+          bookingProgram: row.bookingProgram || null,
+          servicePeriodFrom: row.servicePeriodFrom,
+          servicePeriodTo: row.servicePeriodTo,
+          offsettingAcctNo: row.offsettingAcctNo || null,
+          account: row.account || null,
+          clearingDate: row.clearingDate,
+          clearingDocument: row.clearingDocument || null,
+        })),
+      });
+    }
 
     res.json({
       success: true,
       data: uploadRecord,
-      message: `${records.length} deposit records imported`,
+      message: `${rows.length} Deposit-Datensätze importiert (vorherige ersetzt)`,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/deposit-summary', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const rows = await prisma.depositImport.findMany({
+      select: { offsettingAcctNo: true, amountLocalCurrency: true },
+    });
+    const map: Record<string, number> = {};
+    for (const r of rows) {
+      const key = r.offsettingAcctNo || '';
+      map[key] = (map[key] || 0) - r.amountLocalCurrency;
+    }
+    res.json({ success: true, data: map });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/bank-guarantees', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const rows = await prisma.bankGuarantee.findMany();
+    const map: Record<string, number> = {};
+    for (const r of rows) {
+      map[r.debitor1] = r.amount;
+    }
+    res.json({ success: true, data: map });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/bank-guarantees', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { debitor1, amount } = req.body;
+    if (!debitor1) return res.status(400).json({ success: false, error: 'debitor1 required' });
+    const numAmount = parseFloat(amount) || 0;
+    await prisma.bankGuarantee.upsert({
+      where: { debitor1 },
+      update: { amount: numAmount },
+      create: { debitor1, amount: numAmount },
+    });
+    res.json({ success: true });
   } catch (err) {
     next(err);
   }

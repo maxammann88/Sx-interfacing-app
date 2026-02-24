@@ -122,6 +122,39 @@ model BillingCostImport {
   @@map("billing_cost_imports")
 }
 
+model DepositImport {
+  id                    Int       @id @default(autoincrement())
+  uploadId              Int
+  upload                Upload    @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  yearMonth             String?
+  companyCode           String
+  postingDate           DateTime?
+  clearedOpenSymbol     String?
+  refKeyHeader1         String?
+  referenceKey3         String?
+  reference             String?
+  assignment            String?
+  documentNumber        String?
+  documentDate          DateTime?
+  postingKey            String?
+  amountLocalCurrency   Float     @default(0)
+  localCurrency         String?
+  text                  String?
+  postingPeriod         String?
+  bookingProgram        String?
+  servicePeriodFrom     DateTime?
+  servicePeriodTo       DateTime?
+  offsettingAcctNo      String?
+  account               String?
+  clearingDate          DateTime?
+  clearingDocument      String?
+
+  @@index([uploadId])
+  @@index([offsettingAcctNo])
+  @@index([account])
+  @@map("deposit_imports")
+}
+
 model Upload {
   id               Int                 @id @default(autoincrement())
   filename         String
@@ -131,6 +164,7 @@ model Upload {
   recordCount      Int                 @default(0)
   sapImports       SapImport[]
   billingCostImports BillingCostImport[]
+  depositImports   DepositImport[]
 
   @@map("uploads")
 }
@@ -248,6 +282,15 @@ model SubApp {
   @@unique([streamId, app])
   @@index([streamId])
   @@map("sub_apps")
+}
+
+model BankGuarantee {
+  id        Int    @id @default(autoincrement())
+  debitor1  String @unique
+  amount    Float  @default(0)
+  currency  String @default("EUR")
+
+  @@map("bank_guarantees")
 }
 
 model TeamMember {

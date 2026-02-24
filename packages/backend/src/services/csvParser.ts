@@ -162,6 +162,66 @@ export function parseCountryCsv(content: string): ParsedCountryRow[] {
   }));
 }
 
+export interface ParsedDepositRow {
+  yearMonth: string;
+  companyCode: string;
+  postingDate: Date | null;
+  clearedOpenSymbol: string;
+  refKeyHeader1: string;
+  referenceKey3: string;
+  reference: string;
+  assignment: string;
+  documentNumber: string;
+  documentDate: Date | null;
+  postingKey: string;
+  amountLocalCurrency: number;
+  localCurrency: string;
+  text: string;
+  postingPeriod: string;
+  bookingProgram: string;
+  servicePeriodFrom: Date | null;
+  servicePeriodTo: Date | null;
+  offsettingAcctNo: string;
+  account: string;
+  clearingDate: Date | null;
+  clearingDocument: string;
+}
+
+export function parseDepositCsv(content: string): ParsedDepositRow[] {
+  const records = parse(stripBom(content), {
+    delimiter: ';',
+    columns: true,
+    skip_empty_lines: true,
+    trim: true,
+    relax_column_count: true,
+  });
+
+  return records.map((row: any) => ({
+    yearMonth: (row['Year/month'] || '').trim(),
+    companyCode: (row['Company Code'] || '').trim(),
+    postingDate: parseGermanDate(row['Posting Date'] || ''),
+    clearedOpenSymbol: (row['Cleared/open items symbol'] || '').trim(),
+    refKeyHeader1: (row['Ref.key (header) 1'] || '').trim(),
+    referenceKey3: (row['Reference Key 3'] || '').trim(),
+    reference: (row['Reference'] || '').trim(),
+    assignment: (row['Assignment'] || '').trim(),
+    documentNumber: (row['Document Number'] || '').trim(),
+    documentDate: parseGermanDate(row['Document Date'] || ''),
+    postingKey: (row['Posting Key'] || '').trim(),
+    amountLocalCurrency: parseGermanNumber(row['Amount in local currency'] || '0'),
+    localCurrency: (row['Local Currency'] || 'EUR').trim(),
+    text: (row['Text'] || '').trim(),
+    postingPeriod: (row['Posting Period'] || '').trim(),
+    bookingProgram: (row['Booking program'] || '').trim(),
+    servicePeriodFrom: parseGermanDate(row['Service period from'] || ''),
+    servicePeriodTo: parseGermanDate(row['Service period to'] || ''),
+    offsettingAcctNo: (row['Offsetting acct no.'] || '').trim(),
+    account: (row['Account'] || '').trim(),
+    clearingDate: parseGermanDate(row['Clearing date'] || ''),
+    clearingDocument: (row['Clearing Document'] || '').trim(),
+  }));
+}
+
 export function parseBillingCostCsv(content: string): ParsedBillingCostRow[] {
   const records = parse(stripBom(content), {
     delimiter: ';',

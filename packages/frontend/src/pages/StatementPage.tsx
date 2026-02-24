@@ -589,7 +589,7 @@ export default function StatementPage() {
               <tbody>
                 <tr>
                   <td>Deposit held</td>
-                  <AmountCell>XXX EUR</AmountCell>
+                  <AmountCell>{formatEur(statement.depositHeld)}</AmountCell>
                 </tr>
                 <tr>
                   <td>Deposit due</td>

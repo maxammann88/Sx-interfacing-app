@@ -32,6 +32,20 @@ function formatPeriod(period: string): string {
   return `${MONTH_NAMES[month - 1]} ${year}`;
 }
 
+function formatPeriodRange(period: string): string {
+  const y = parseInt(period.substring(0, 4), 10);
+  const m = parseInt(period.substring(4, 6), 10);
+  const first = new Date(Date.UTC(y, m - 1, 1));
+  const last = new Date(Date.UTC(y, m, 0));
+  const fmt = (d: Date) => {
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const yy = String(d.getUTCFullYear()).slice(-2);
+    return `${dd}.${mm}.${yy}`;
+  };
+  return `${fmt(first)}-${fmt(last)}`;
+}
+
 function periodMonthName(period: string): string {
   return MONTH_NAMES[parseInt(period.substring(4, 6), 10) - 1] || '';
 }
@@ -53,7 +67,8 @@ export function generateStatementHtml(data: StatementData): string {
       <tr>
         <td>${line.type}</td>
         <td>${line.description}</td>
-        <td>${line.reference}</td>
+        <td class="col-ref">${line.reference}</td>
+        <td></td>
         <td class="amount">${formatEur(line.amount)}</td>
       </tr>`
     )
@@ -73,7 +88,7 @@ export function generateStatementHtml(data: StatementData): string {
       <tr${bd?.hasDeviation ? ' class="deviation-row"' : ''}>
         <td>${line.type}</td>
         <td>${line.description}</td>
-        <td>${line.reference}</td>
+        <td class="col-ref">${line.reference}</td>
         <td>${line.date || ''}</td>
         <td class="amount">${formatEur(line.amount)}${bd?.hasDeviation ? ' <span class="flag">⚠</span>' : ''}</td>
       </tr>`;
@@ -116,6 +131,12 @@ export function generateStatementHtml(data: StatementData): string {
     table { width: 100%; border-collapse: collapse; margin-bottom: 6px; font-size: 8px; }
     th { background: #333; color: white; padding: 3px 6px; text-align: left; font-weight: 600; }
     td { padding: 2px 6px; border-bottom: 1px solid #eee; }
+    .col-type { width: 10%; }
+    .col-desc { width: 42%; }
+    .col-ref { width: 18%; text-align: center; }
+    .col-date { width: 12%; }
+    .col-amount { width: 18%; }
+    th.col-ref, td.col-ref { text-align: center; }
     tr:nth-child(even) { background: #f9f9f9; }
     .amount { text-align: right; font-variant-numeric: tabular-nums; }
     .subtotal { background: #f0f0f0; font-weight: 700; }
@@ -148,20 +169,19 @@ export function generateStatementHtml(data: StatementData): string {
     <span>${data.country.name}</span>
   </div>
   <div class="meta">
-    <div>Accounting Period: <span>${formatPeriod(data.accountingPeriod)}</span></div>
-    <div>Release Date: <span>${data.releaseDate}</span></div>
+    <div>Accounting Period: <span>${formatPeriodRange(data.accountingPeriod)}</span></div>
     <div>Payment Term: <span>${data.paymentTermDays} days</span></div>
     <div>FIR: <span>${data.country.fir}</span></div>
-    <div>Country: <span>${data.country.name} (${data.country.iso})</span></div>
+    <div style="margin-left:auto;background:#FF5F00;color:white;padding:2px 10px;font-weight:700;border-radius:2px;">Release Date: ${formatDateDE(data.releaseDate)}</div>
   </div>
 
   <div class="section">
     <div class="title-clearing">CLEARING STATEMENT</div>
     <table>
-      <thead><tr><th>Type</th><th>Description</th><th>Reference</th><th class="amount">EUR Amount</th></tr></thead>
+      <thead><tr><th class="col-type">Type</th><th class="col-desc">Description</th><th class="col-ref">Reference</th><th class="col-date"></th><th class="amount col-amount">EUR Amount</th></tr></thead>
       <tbody>
-        ${clearingRows || '<tr><td colspan="4" style="text-align:center;color:#999;">No clearing items</td></tr>'}
-        <tr class="subtotal"><td colspan="3">SUBTOTAL</td><td class="amount">${formatEur(data.clearingSubtotal)}</td></tr>
+        ${clearingRows || '<tr><td colspan="5" style="text-align:center;color:#999;">No clearing items</td></tr>'}
+        <tr class="subtotal"><td colspan="4">SUBTOTAL</td><td class="amount">${formatEur(data.clearingSubtotal)}</td></tr>
       </tbody>
     </table>
   </div>
@@ -169,7 +189,7 @@ export function generateStatementHtml(data: StatementData): string {
   <div class="section">
     <div class="title-billing">BILLING STATEMENT</div>
     <table>
-      <thead><tr><th>Type</th><th>Description</th><th>Reference</th><th>Date</th><th class="amount">EUR Amount</th></tr></thead>
+      <thead><tr><th class="col-type">Type</th><th class="col-desc">Description</th><th class="col-ref">Reference</th><th class="col-date">Date</th><th class="amount col-amount">EUR Amount</th></tr></thead>
       <tbody>
         ${billingRows || '<tr><td colspan="5" style="text-align:center;color:#999;">No billing items</td></tr>'}
         <tr class="subtotal"><td colspan="4">SUBTOTAL</td><td class="amount">${formatEur(data.billingSubtotal)}</td></tr>
@@ -215,7 +235,7 @@ export function generateStatementHtml(data: StatementData): string {
     <div class="title-deposit">DEPOSIT</div>
     <table class="account-table">
       <tbody>
-        <tr><td>Deposit held</td><td class="amount">XXX EUR</td></tr>
+        <tr><td>Deposit held</td><td class="amount">${formatEur(data.depositHeld)}</td></tr>
         <tr><td>Deposit due</td><td class="amount">XXX EUR</td></tr>
       </tbody>
     </table>
