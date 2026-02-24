@@ -248,6 +248,73 @@ export default function StatementPage() {
     return map;
   }, [statement?.billingBreakdowns]);
 
+  const updateBreakdownLine = useCallback((sapDesc: string, lineIdx: number, field: 'description' | 'amount', value: string) => {
+    setStatement(prev => {
+      if (!prev || !prev.billingBreakdowns) return prev;
+      const bds = prev.billingBreakdowns.map(bd => {
+        if (bd.sapDescription.toLowerCase() !== sapDesc.toLowerCase()) return bd;
+        const lines = bd.lines.map((l, j) =>
+          j === lineIdx
+            ? { ...l, [field]: field === 'amount' ? (parseFloat(value) || 0) : value }
+            : l
+        );
+        const uploadAmount = lines.reduce((s, l) => s + l.amount, 0);
+        return { ...bd, lines, uploadAmount, hasDeviation: Math.abs(uploadAmount - bd.sapAmount) > 0.01 };
+      });
+      return { ...prev, billingBreakdowns: bds };
+    });
+  }, []);
+
+  const deleteBreakdownLine = useCallback((sapDesc: string, lineIdx: number) => {
+    setStatement(prev => {
+      if (!prev || !prev.billingBreakdowns) return prev;
+      const bds = prev.billingBreakdowns.map(bd => {
+        if (bd.sapDescription.toLowerCase() !== sapDesc.toLowerCase()) return bd;
+        const lines = bd.lines.filter((_, j) => j !== lineIdx);
+        const uploadAmount = lines.reduce((s, l) => s + l.amount, 0);
+        return { ...bd, lines, uploadAmount, hasDeviation: Math.abs(uploadAmount - bd.sapAmount) > 0.01 };
+      });
+      return { ...prev, billingBreakdowns: bds };
+    });
+  }, []);
+
+  const addBreakdownLine = useCallback((sapDesc: string) => {
+    setStatement(prev => {
+      if (!prev || !prev.billingBreakdowns) return prev;
+      const bds = prev.billingBreakdowns.map(bd => {
+        if (bd.sapDescription.toLowerCase() !== sapDesc.toLowerCase()) return bd;
+        const lines = [...bd.lines, { description: '', amount: 0 }];
+        const uploadAmount = lines.reduce((s, l) => s + l.amount, 0);
+        return { ...bd, lines, uploadAmount, hasDeviation: Math.abs(uploadAmount - bd.sapAmount) > 0.01 };
+      });
+      return { ...prev, billingBreakdowns: bds };
+    });
+  }, []);
+
+  const [dragState, setDragState] = useState<{ sapDesc: string; fromIdx: number } | null>(null);
+
+  const handleBreakdownDragStart = useCallback((sapDesc: string, fromIdx: number) => {
+    setDragState({ sapDesc, fromIdx });
+  }, []);
+
+  const handleBreakdownDrop = useCallback((sapDesc: string, toIdx: number) => {
+    if (!dragState || dragState.sapDesc.toLowerCase() !== sapDesc.toLowerCase()) return;
+    const fromIdx = dragState.fromIdx;
+    setDragState(null);
+    if (fromIdx === toIdx) return;
+    setStatement(prev => {
+      if (!prev || !prev.billingBreakdowns) return prev;
+      const bds = prev.billingBreakdowns.map(bd => {
+        if (bd.sapDescription.toLowerCase() !== sapDesc.toLowerCase()) return bd;
+        const lines = [...bd.lines];
+        const [moved] = lines.splice(fromIdx, 1);
+        lines.splice(toIdx, 0, moved);
+        return { ...bd, lines };
+      });
+      return { ...prev, billingBreakdowns: bds };
+    });
+  }, [dragState]);
+
   const getExportData = useCallback((): any | null => {
     if (!statement) return null;
     return {
@@ -489,12 +556,48 @@ export default function StatementPage() {
                         </td>
                       </BillingTr>
                       {bd && bd.lines.length > 0 && bd.lines.map((sub, j) => (
-                        <BreakdownRow key={`bd-${i}-${j}`}>
-                          <td></td>
-                          <td colSpan={4} style={{ paddingLeft: 24 }}>{sub.description}</td>
-                          <AmountCell style={{ fontSize: 11, color: '#555' }}>{formatEur(sub.amount)}</AmountCell>
+                        <BreakdownRow
+                          key={`bd-${i}-${j}`}
+                          draggable
+                          onDragStart={() => handleBreakdownDragStart(bd.sapDescription, j)}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={() => handleBreakdownDrop(bd.sapDescription, j)}
+                          style={{ cursor: 'grab' }}
+                        >
+                          <td style={{ paddingLeft: 4, width: 30 }}>
+                            <DeleteBtn onClick={() => deleteBreakdownLine(bd.sapDescription, j)} title="Delete sub-line">×</DeleteBtn>
+                          </td>
+                          <td style={{ width: 20, color: '#bbb', cursor: 'grab', fontSize: 14 }} title="Drag to reorder">⠿</td>
+                          <td colSpan={3} style={{ paddingLeft: 8 }}>
+                            <EditInput
+                              value={sub.description}
+                              onChange={e => updateBreakdownLine(bd.sapDescription, j, 'description', e.target.value)}
+                              style={{ fontSize: 11, background: '#fafafa' }}
+                            />
+                          </td>
+                          <td>
+                            <AmountInput
+                              type="number"
+                              step="0.01"
+                              value={sub.amount}
+                              onChange={e => updateBreakdownLine(bd.sapDescription, j, 'amount', e.target.value)}
+                              style={{ fontSize: 11, background: '#fafafa', width: 100 }}
+                            />
+                          </td>
                         </BreakdownRow>
                       ))}
+                      {bd && (
+                        <BreakdownRow>
+                          <td colSpan={6} style={{ paddingLeft: 24, paddingTop: 2, paddingBottom: 2 }}>
+                            <Button
+                              onClick={() => addBreakdownLine(bd.sapDescription)}
+                              style={{ padding: '1px 8px', fontSize: 10, background: '#aaa', lineHeight: '16px' }}
+                            >
+                              + Add row
+                            </Button>
+                          </td>
+                        </BreakdownRow>
+                      )}
                     </React.Fragment>
                   );
                 })}
