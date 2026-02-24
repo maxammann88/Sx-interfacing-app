@@ -9,6 +9,7 @@ const ACCOUNT_ORANGE = 'FF5F00';
 const DEPOSIT_GRAY = '7A7A7A';
 const HEADER_BG = '333333';
 const SUBTOTAL_BG = 'F0F0F0';
+const BALANCE_BG = 'F0C8A0';
 
 function eurFormat(v: number): number {
   return Math.round(v * 100) / 100;
@@ -21,14 +22,19 @@ function formatDateDE(dateStr: string): string {
   return `${parts[2]}.${parts[1]}.${parts[0]}`;
 }
 
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
 function formatPeriod(period: string): string {
   const year = period.substring(0, 4);
   const month = parseInt(period.substring(4, 6), 10);
-  const months = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
-  ];
-  return `${months[month - 1]} ${year}`;
+  return `${MONTH_NAMES[month - 1]} ${year}`;
+}
+
+function periodMonthName(period: string): string {
+  return MONTH_NAMES[parseInt(period.substring(4, 6), 10) - 1] || '';
 }
 
 function whiteFont(): Partial<ExcelJS.Font> {
@@ -110,30 +116,54 @@ export async function generateStatementXlsx(data: StatementData): Promise<Buffer
   ws.addRow([]);
 
   // --- CLEARING STATEMENT ---
-  sectionHeader(ws, 'CLEARING STATEMENT', DARK_GRAY, 4);
-  tableHeader(ws, ['Type', 'Description', 'Reference', 'EUR Amount']);
+  sectionHeader(ws, 'CLEARING STATEMENT', DARK_GRAY, 5);
+  tableHeader(ws, ['Type', 'Description', 'Reference', '', 'EUR Amount']);
   for (const line of data.clearing) {
-    const row = ws.addRow([line.type, line.description, line.reference, eurFormat(line.amount)]);
+    const row = ws.addRow([line.type, line.description, line.reference, '', eurFormat(line.amount)]);
     row.eachCell((c) => { c.font = { size: 9 }; });
-    amountCell(row.getCell(4));
+    amountCell(row.getCell(5));
   }
   if (data.clearing.length === 0) {
     const row = ws.addRow(['No clearing items']);
-    ws.mergeCells(row.number, 1, row.number, 4);
+    ws.mergeCells(row.number, 1, row.number, 5);
     row.getCell(1).font = { size: 9, color: { argb: '999999' } };
     row.getCell(1).alignment = { horizontal: 'center' };
   }
-  subtotalRow(ws, 'SUBTOTAL', data.clearingSubtotal, 4);
+  subtotalRow(ws, 'SUBTOTAL', data.clearingSubtotal, 5);
   ws.addRow([]);
 
   // --- BILLING STATEMENT ---
   sectionHeader(ws, 'BILLING STATEMENT', MID_GRAY, 5);
   tableHeader(ws, ['Type', 'Description', 'Reference', 'Date', 'EUR Amount']);
+
+  const bdMap = new Map<string, NonNullable<typeof data.billingBreakdowns>[number]>();
+  if (data.billingBreakdowns) {
+    for (const bd of data.billingBreakdowns) {
+      bdMap.set(bd.sapDescription.toLowerCase(), bd);
+    }
+  }
+
   for (const line of data.billing) {
+    const bd = bdMap.get(line.description.toLowerCase());
     const row = ws.addRow([line.type, line.description, line.reference, line.date || '', eurFormat(line.amount)]);
     row.eachCell((c) => { c.font = { size: 9 }; });
     amountCell(row.getCell(5));
+    if (bd?.hasDeviation) {
+      row.eachCell((c) => {
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3E0' } };
+      });
+      row.getCell(5).font = { size: 9, color: { argb: 'CC0000' }, bold: true };
+    }
+
+    if (bd && bd.lines.length > 0) {
+      for (const sub of bd.lines) {
+        const subRow = ws.addRow(['', `  ${sub.description}`, '', '', eurFormat(sub.amount)]);
+        subRow.eachCell((c) => { c.font = { size: 8, color: { argb: '555555' } }; });
+        amountCell(subRow.getCell(5));
+      }
+    }
   }
+
   if (data.billing.length === 0) {
     const row = ws.addRow(['No billing items']);
     ws.mergeCells(row.number, 1, row.number, 5);
@@ -160,36 +190,63 @@ export async function generateStatementXlsx(data: StatementData): Promise<Buffer
   sectionHeader(ws, 'ACCOUNT STATEMENT', ACCOUNT_ORANGE, 5);
 
   const acct = data.accountStatement;
-  const addAccountRow = (label: string, value: number) => {
-    const row = ws.addRow([label, '', '', '', eurFormat(value)]);
+  const addAccountRow = (label: string, value: number, bold = false, indent = false) => {
+    const displayLabel = indent ? `        ${label}` : label;
+    const row = ws.addRow([displayLabel, '', '', '', eurFormat(value)]);
     ws.mergeCells(row.number, 1, row.number, 4);
-    row.eachCell((c) => { c.font = { size: 9 }; });
+    row.eachCell((c) => { c.font = { size: 9, bold }; });
     amountCell(row.getCell(5));
+    if (bold) row.getCell(5).font = { ...row.getCell(5).font, bold: true };
   };
 
-  addAccountRow('Account Balance Previous Month - Overdue (excl. Interest Amount)', acct.overdueBalance);
-  addAccountRow(`Account Balance Previous Month - due until ${formatDateDE(acct.dueUntilDate)}`, acct.dueBalance);
+  {
+    const cols: any[] = ['', '', '', '', eurFormat(acct.previousPeriodBalance)];
+    cols[0] = `Balance as of ${formatDateDE(acct.lastSubmissionDate)}`;
+    const row = ws.addRow(cols);
+    row.eachCell((cell) => {
+      cell.font = { bold: true, size: 9 };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: BALANCE_BG } };
+      cell.border = { bottom: { style: 'medium', color: { argb: '333333' } } };
+    });
+    amountCell(row.getCell(5));
+    row.height = 18;
+  }
+  addAccountRow('Overdue', acct.overdueBalance, false, true);
+  addAccountRow(`Due until ${formatDateDE(acct.dueUntilDate)}`, acct.dueBalance, false, true);
 
   if ((acct.paymentBySixtItems || []).length > 0) {
     for (const item of acct.paymentBySixtItems) {
       addAccountRow(`Payment by Sixt – ${item.date}`, item.amount);
     }
-  } else {
-    addAccountRow('Payment by Sixt', 0);
   }
 
   if ((acct.paymentByPartnerItems || []).length > 0) {
     for (const item of acct.paymentByPartnerItems) {
       addAccountRow(`Payment by you – ${item.date}`, item.amount);
     }
-  } else {
-    addAccountRow('Payment by you', 0);
   }
 
-  addAccountRow(`Total Interfacing Amount – due ${formatDateDE(acct.totalInterfacingDueDate)}`, acct.totalInterfacingAmount);
+  addAccountRow(`Interfacing ${periodMonthName(data.accountingPeriod)} due until ${formatDateDE(acct.totalInterfacingDueDate)}`, acct.totalInterfacingAmount);
   const balanceSuffix = (data as any).balanceLabel
     || (acct.balanceOpenItems < 0 ? 'Payment is kindly requested' : 'Payment will be initiated by Sixt');
-  subtotalRow(ws, `Balance (Open Items) – ${balanceSuffix}`, acct.balanceOpenItems, 5);
+  {
+    const cols: any[] = ['', '', '', '', eurFormat(acct.balanceOpenItems)];
+    cols[0] = `Balance as of ${formatDateDE(data.accountStatement.periodEndDate)} – ${balanceSuffix}`;
+    const row = ws.addRow(cols);
+    row.eachCell((cell) => {
+      cell.font = { bold: true, size: 9 };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: BALANCE_BG } };
+      cell.border = { top: { style: 'medium', color: { argb: '333333' } } };
+    });
+    amountCell(row.getCell(5));
+    row.height = 18;
+  }
+
+  const footnoteRow = ws.addRow(['Payments that are received while processing the Interfacing (usually between 1st–15th per month) will be credited and listed in the following Interfacing.']);
+  ws.mergeCells(footnoteRow.number, 1, footnoteRow.number, 5);
+  footnoteRow.getCell(1).font = { size: 8, italic: true, color: { argb: '777777' } };
+  footnoteRow.getCell(1).alignment = { wrapText: true };
+
   ws.addRow([]);
 
   // --- DEPOSIT ---

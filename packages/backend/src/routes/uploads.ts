@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import prisma from '../prismaClient';
-import { parseSapCsv, parseCountryCsv } from '../services/csvParser';
+import { parseSapCsv, parseCountryCsv, parseBillingCostCsv } from '../services/csvParser';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
@@ -183,6 +183,60 @@ router.post('/master-data', upload.single('file'), async (req: Request, res: Res
       success: true,
       data: uploadRecord,
       message: `${records.length} Stammdaten importiert`,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/billing-costs', upload.single('file'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, error: 'Keine Datei hochgeladen' });
+
+    const content = req.file.buffer.toString('utf-8');
+    const rows = parseBillingCostCsv(content);
+
+    const uploadRecord = await prisma.upload.create({
+      data: {
+        filename: req.file.originalname,
+        uploadType: 'billing-costs',
+        accountingPeriod: req.body.accountingPeriod || null,
+        recordCount: rows.length,
+      },
+    });
+
+    const BATCH_SIZE = 500;
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+      const batch = rows.slice(i, i + BATCH_SIZE);
+      await prisma.billingCostImport.createMany({
+        data: batch.map((row) => ({
+          uploadId: uploadRecord.id,
+          yearMonth: row.yearMonth || null,
+          companyCode: row.companyCode,
+          postingDate: row.postingDate,
+          offsettingAcctNo: row.offsettingAcctNo || null,
+          assignment: row.assignment || null,
+          documentType: row.documentType || null,
+          documentDate: row.documentDate,
+          postingKey: row.postingKey || null,
+          debitCreditInd: row.debitCreditInd || null,
+          amountLocalCurrency: row.amountLocalCurrency,
+          localCurrency: row.localCurrency || null,
+          taxCode: row.taxCode || null,
+          text: row.text || null,
+          postingPeriod: row.postingPeriod || null,
+          costCenter: row.costCenter || null,
+          bookingProgram: row.bookingProgram || null,
+          account: row.account || null,
+          entryDate: row.entryDate,
+        })),
+      });
+    }
+
+    res.json({
+      success: true,
+      data: uploadRecord,
+      message: `${rows.length} Datensätze importiert (Daten angehängt)`,
     });
   } catch (err) {
     next(err);

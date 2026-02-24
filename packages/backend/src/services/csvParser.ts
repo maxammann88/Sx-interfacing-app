@@ -53,6 +53,27 @@ export interface ParsedCountryRow {
   debitor10: string;
 }
 
+export interface ParsedBillingCostRow {
+  yearMonth: string;
+  companyCode: string;
+  postingDate: Date | null;
+  offsettingAcctNo: string;
+  assignment: string;
+  documentType: string;
+  documentDate: Date | null;
+  postingKey: string;
+  debitCreditInd: string;
+  amountLocalCurrency: number;
+  localCurrency: string;
+  taxCode: string;
+  text: string;
+  postingPeriod: string;
+  costCenter: string;
+  bookingProgram: string;
+  account: string;
+  entryDate: Date | null;
+}
+
 function parseGermanDate(dateStr: string): Date | null {
   if (!dateStr || dateStr.trim() === '') return null;
   const parts = dateStr.trim().split('.');
@@ -138,5 +159,36 @@ export function parseCountryCsv(content: string): ParsedCountryRow[] {
     finalInterfacing: row['Final Interfacing'] || '',
     vertragsende: parseGermanDate(row['aktuelles Vertragsende'] || ''),
     debitor10: row['DEBITOR (10)'] || '',
+  }));
+}
+
+export function parseBillingCostCsv(content: string): ParsedBillingCostRow[] {
+  const records = parse(stripBom(content), {
+    delimiter: ';',
+    columns: true,
+    skip_empty_lines: true,
+    trim: true,
+    relax_column_count: true,
+  });
+
+  return records.map((row: any) => ({
+    yearMonth: (row['Year/month'] || row['Year/month '] || '').trim(),
+    companyCode: (row['Company Code'] || row['Company code'] || '').trim(),
+    postingDate: parseGermanDate(row['Posting Date'] || ''),
+    offsettingAcctNo: (row['Offsetting acct no.'] || '').trim(),
+    assignment: (row['Assignment'] || '').trim(),
+    documentType: (row['Document Type'] || '').trim(),
+    documentDate: parseGermanDate(row['Document Date'] || ''),
+    postingKey: (row['Posting Key'] || '').trim(),
+    debitCreditInd: (row['Debit/Credit Ind.'] || '').trim(),
+    amountLocalCurrency: parseGermanNumber(row['Amount in local currency'] || '0'),
+    localCurrency: (row['Local Currency'] || 'EUR').trim(),
+    taxCode: (row['Tax Code'] || '').trim(),
+    text: (row['Text'] || '').trim(),
+    postingPeriod: (row['Posting Period'] || '').trim(),
+    costCenter: (row['Cost Center'] || '').trim(),
+    bookingProgram: (row['Booking program'] || '').trim(),
+    account: (row['Account'] || '').trim(),
+    entryDate: parseGermanDate(row['Entry Date'] || ''),
   }));
 }

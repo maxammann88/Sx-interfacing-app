@@ -2,14 +2,17 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import ReactSelect from 'react-select';
 import api from '../utils/api';
 import { formatEur, formatDateDE, generatePeriodOptions, getDefaultPeriod } from '../utils/format';
-import type { StatementData, StatementLine, Country } from '@sixt/shared';
+import type { StatementData, StatementLine, Country, BillingBreakdown } from '@sixt/shared';
 import styled from 'styled-components';
 import {
   PageTitle, Card, Button, Select, Label, FormGroup, FormRow,
-  Table, AmountCell, SubtotalRow, TotalRow, SectionTitle,
+  Table, AmountCell, SubtotalRow, BalanceRow, TotalRow, SectionTitle,
   Spinner, Alert,
 } from '../components/ui';
 import { theme } from '../styles/theme';
+
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const periodMonthName = (p: string) => MONTH_NAMES[parseInt(p.substring(4, 6), 10) - 1] || '';
 
 const GraySectionTitle = styled(SectionTitle)<{ shade?: string }>`
   background: ${({ shade }) => shade || '#555'};
@@ -52,6 +55,21 @@ const ExportBar = styled.div`
   display: flex;
   gap: 8px;
   margin: 16px 0;
+`;
+
+const BreakdownRow = styled.tr`
+  background: #fafafa !important;
+  td { font-size: 11px; color: #555; border-bottom: 1px solid #f0f0f0 !important; }
+`;
+
+const DeviationFlag = styled.span`
+  color: #c00;
+  font-weight: 700;
+  margin-left: 4px;
+`;
+
+const DeviationBillingRow = styled.tr`
+  background: #fff3e0 !important;
 `;
 
 export default function StatementPage() {
@@ -219,6 +237,16 @@ export default function StatementPage() {
       return { ...prev, billing: [...prev.billing, newLine] };
     });
   }, []);
+
+  const breakdownMap = useMemo(() => {
+    const map = new Map<string, BillingBreakdown>();
+    if (statement?.billingBreakdowns) {
+      for (const bd of statement.billingBreakdowns) {
+        map.set(bd.sapDescription.toLowerCase(), bd);
+      }
+    }
+    return map;
+  }, [statement?.billingBreakdowns]);
 
   const getExportData = useCallback((): any | null => {
     if (!statement) return null;
@@ -431,31 +459,45 @@ export default function StatementPage() {
                 {statement.billing.length === 0 && (
                   <tr><td colSpan={6} style={{ textAlign: 'center', color: '#999' }}>No billing items</td></tr>
                 )}
-                {statement.billing.map((line, i) => (
-                  <tr key={i}>
-                    <td><DeleteBtn onClick={() => deleteBillingLine(i)} title="Delete line">×</DeleteBtn></td>
-                    <td>
-                      <EditInput value={line.type} onChange={e => updateBillingLine(i, 'type', e.target.value)} />
-                    </td>
-                    <td>
-                      <EditInput value={line.description} onChange={e => updateBillingLine(i, 'description', e.target.value)} />
-                    </td>
-                    <td>
-                      <EditInput value={line.reference} onChange={e => updateBillingLine(i, 'reference', e.target.value)} />
-                    </td>
-                    <td>
-                      <EditInput value={line.date || ''} onChange={e => updateBillingLine(i, 'date', e.target.value)} />
-                    </td>
-                    <td>
-                      <AmountInput
-                        type="number"
-                        step="0.01"
-                        value={line.amount}
-                        onChange={e => updateBillingLine(i, 'amount', e.target.value)}
-                      />
-                    </td>
-                  </tr>
-                ))}
+                {statement.billing.map((line, i) => {
+                  const bd = breakdownMap.get(line.description.toLowerCase());
+                  const BillingTr = bd?.hasDeviation ? DeviationBillingRow : 'tr' as any;
+                  return (
+                    <React.Fragment key={i}>
+                      <BillingTr>
+                        <td><DeleteBtn onClick={() => deleteBillingLine(i)} title="Delete line">×</DeleteBtn></td>
+                        <td>
+                          <EditInput value={line.type} onChange={e => updateBillingLine(i, 'type', e.target.value)} />
+                        </td>
+                        <td>
+                          <EditInput value={line.description} onChange={e => updateBillingLine(i, 'description', e.target.value)} />
+                        </td>
+                        <td>
+                          <EditInput value={line.reference} onChange={e => updateBillingLine(i, 'reference', e.target.value)} />
+                        </td>
+                        <td>
+                          <EditInput value={line.date || ''} onChange={e => updateBillingLine(i, 'date', e.target.value)} />
+                        </td>
+                        <td>
+                          <AmountInput
+                            type="number"
+                            step="0.01"
+                            value={line.amount}
+                            onChange={e => updateBillingLine(i, 'amount', e.target.value)}
+                          />
+                          {bd?.hasDeviation && <DeviationFlag>⚠</DeviationFlag>}
+                        </td>
+                      </BillingTr>
+                      {bd && bd.lines.length > 0 && bd.lines.map((sub, j) => (
+                        <BreakdownRow key={`bd-${i}-${j}`}>
+                          <td></td>
+                          <td colSpan={4} style={{ paddingLeft: 24 }}>{sub.description}</td>
+                          <AmountCell style={{ fontSize: 11, color: '#555' }}>{formatEur(sub.amount)}</AmountCell>
+                        </BreakdownRow>
+                      ))}
+                    </React.Fragment>
+                  );
+                })}
                 <tr>
                   <td colSpan={6} style={{ padding: '4px 6px' }}>
                     <Button onClick={addBillingLine} style={{ padding: '3px 12px', fontSize: 11, background: '#888' }}>
@@ -489,55 +531,54 @@ export default function StatementPage() {
           <Card style={{ borderTopLeftRadius: 0, borderTopRightRadius: 0, marginTop: 0 }}>
             <Table>
               <tbody>
+                <BalanceRow>
+                  <td style={{ borderBottom: '2px solid #333' }}><strong>Balance as of {formatDateDE(statement.accountStatement.lastSubmissionDate)}</strong></td>
+                  <AmountCell style={{ borderBottom: '2px solid #333' }}><strong>{formatEur(statement.accountStatement.previousPeriodBalance)}</strong></AmountCell>
+                </BalanceRow>
                 <tr>
-                  <td>Account Balance Previous Month - Overdue (excl. Interest Amount)</td>
+                  <td style={{ paddingLeft: 48 }}>Overdue</td>
                   <AmountCell>{formatEur(computedAccount?.overdueBalance ?? 0)}</AmountCell>
                 </tr>
                 <tr>
-                  <td>Account Balance Previous Month - due until <span style={{ color: '#c00', fontWeight: 600 }}>{formatDateDE(dueUntilLabel)}</span></td>
+                  <td style={{ paddingLeft: 48 }}>Due until {formatDateDE(dueUntilLabel)}</td>
                   <AmountCell>{formatEur(computedAccount?.dueBalance ?? 0)}</AmountCell>
                 </tr>
-                {(statement.accountStatement.paymentBySixtItems || []).length > 0 ? (
+                {(statement.accountStatement.paymentBySixtItems || []).length > 0 &&
                   statement.accountStatement.paymentBySixtItems.map((item, i) => (
                     <tr key={`sixt-${i}`}>
                       <td>Payment by Sixt – {formatDateDE(item.date)}</td>
                       <AmountCell>{formatEur(item.amount)}</AmountCell>
                     </tr>
                   ))
-                ) : (
-                  <tr>
-                    <td>Payment by Sixt – {formatDateDE(dueUntilLabel)}</td>
-                    <AmountCell>{formatEur(0)}</AmountCell>
-                  </tr>
-                )}
-                {(statement.accountStatement.paymentByPartnerItems || []).length > 0 ? (
+                }
+                {(statement.accountStatement.paymentByPartnerItems || []).length > 0 &&
                   statement.accountStatement.paymentByPartnerItems.map((item, i) => (
                     <tr key={`partner-${i}`}>
                       <td>Payment by you – {formatDateDE(item.date)}</td>
                       <AmountCell>{formatEur(item.amount)}</AmountCell>
                     </tr>
                   ))
-                ) : (
-                  <tr>
-                    <td>Payment by you – {formatDateDE(dueUntilLabel)}</td>
-                    <AmountCell>{formatEur(0)}</AmountCell>
-                  </tr>
-                )}
+                }
                 <tr>
-                  <td>Total Interfacing Amount – due <span style={{ color: '#c00', fontWeight: 600 }}>{formatDateDE(statement.accountStatement.totalInterfacingDueDate)}</span></td>
+                  <td>Interfacing {periodMonthName(period)} due until {formatDateDE(statement.accountStatement.totalInterfacingDueDate)}</td>
                   <AmountCell>{formatEur(totalInterfacingDue)}</AmountCell>
                 </tr>
-                <SubtotalRow>
-                  <td>
-                    <strong>Balance (Open Items) – </strong>
+                <BalanceRow>
+                  <td style={{ borderTop: '2px solid #333' }}>
+                    <strong>Balance as of {formatDateDE(statement.accountStatement.periodEndDate)} – </strong>
                     <EditInput
                       value={balanceLabel}
                       onChange={e => setBalanceLabel(e.target.value)}
                       style={{ display: 'inline-block', width: 280, fontWeight: 600 }}
                     />
                   </td>
-                  <AmountCell><strong>{formatEur(computedAccount?.balanceOpenItems ?? 0)}</strong></AmountCell>
-                </SubtotalRow>
+                  <AmountCell style={{ borderTop: '2px solid #333' }}><strong>{formatEur(computedAccount?.balanceOpenItems ?? 0)}</strong></AmountCell>
+                </BalanceRow>
+                <tr>
+                  <td colSpan={2} style={{ fontSize: 11, color: '#777', fontStyle: 'italic', paddingTop: 6, borderBottom: 'none' }}>
+                    Payments that are received while processing the Interfacing (usually between 1st–15th per month) will be credited and listed in the following Interfacing.
+                  </td>
+                </tr>
               </tbody>
             </Table>
           </Card>

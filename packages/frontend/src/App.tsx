@@ -60,6 +60,7 @@ import StatementOverviewPage from './pages/StatementOverviewPage';
 import ExportPage from './pages/ExportPage';
 import ApprovalFlowPage from './pages/ApprovalFlowPage';
 import DataQualityCheckPage from './pages/DataQualityCheckPage';
+import FixVarPage from './pages/FixVarPage';
 import FsmFeatureRequestsPage from './pages/fsm/FsmFeatureRequestsPage';
 import FsmBudgetPage from './pages/fsm/FsmBudgetPage';
 import FsmParametersPage from './pages/fsm/FsmParametersPage';
@@ -122,6 +123,7 @@ export default function App() {
             <Route path="export" element={<ExportPage />} />
             <Route path="approval" element={<ApprovalFlowPage />} />
             <Route path="data-quality" element={<DataQualityCheckPage />} />
+            <Route path="fix-var" element={<FixVarPage />} />
           </Route>
 
           <Route path="/fsm" element={<FsmLayout />}>

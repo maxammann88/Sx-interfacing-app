@@ -1,5 +1,6 @@
 import prisma from '../prismaClient';
-import type { StatementData, StatementLine, AccountStatement } from '@sixt/shared';
+import type { StatementData, StatementLine, AccountStatement, BillingBreakdown, BillingBreakdownLine } from '@sixt/shared';
+import { BILLING_BOOKING_PROGRAM } from '@sixt/shared';
 
 function getMonthRange(period: string): { start: Date; end: Date } {
   const year = parseInt(period.substring(0, 4), 10);
@@ -17,6 +18,15 @@ function addDays(date: Date, days: number): Date {
 
 function formatDate(date: Date): string {
   return date.toISOString().split('T')[0];
+}
+
+function buildReference(key3: string | null | undefined, ref: string | null | undefined): string {
+  const a = (key3 || '').trim();
+  const b = (ref || '').trim();
+  if (!a && !b) return '';
+  if (!a) return b;
+  if (!b || a === b || a.endsWith(b) || b.endsWith(a)) return a;
+  return `${a} ${b}`;
 }
 
 export async function generateStatement(
@@ -111,7 +121,7 @@ export async function generateStatement(
   const billingLines: StatementLine[] = billingRows
     .map(row => ({
       type: row.type || '',
-      reference: `${row.referenzschluessel3 || ''}${row.referenz ? ' ' + row.referenz : ''}`.trim(),
+      reference: buildReference(row.referenzschluessel3, row.referenz),
       documentType: row.belegart || '',
       date: row.belegdatum ? formatDate(row.belegdatum) : '',
       description: cleanText(row.text || ''),
@@ -177,7 +187,17 @@ export async function generateStatement(
   const balanceOpenItems =
     overdueBalance + dueBalance + paymentBySixt + paymentByPartner + totalInterfacingDue;
 
+  const previousPeriodBalance = overdueBalance + dueBalance;
+
+  const periodYear = parseInt(period.substring(0, 4), 10);
+  const periodMonth = parseInt(period.substring(4, 6), 10);
+  const lastDayPrevMonth = new Date(Date.UTC(periodYear, periodMonth - 1, 0));
+  const lastDayCurrentMonth = new Date(Date.UTC(periodYear, periodMonth, 0));
+
   const accountStatement: AccountStatement = {
+    previousPeriodBalance,
+    lastSubmissionDate: formatDate(lastDayPrevMonth),
+    periodEndDate: formatDate(lastDayCurrentMonth),
     overdueBalance,
     dueBalance,
     dueUntilDate: formatDate(prevDueDate),
@@ -190,6 +210,66 @@ export async function generateStatement(
     balanceOpenItems,
     previousMonthItems,
   };
+
+  // --- BILLING BREAKDOWN from BillingCostImport ---
+  const billingBreakdowns: BillingBreakdown[] = [];
+  const yearMonthMatch = `${period.substring(0, 4)}/${period.substring(4, 6)}`;
+  const costCenterMatch = country.kst != null ? String(country.kst) : null;
+
+  if (costCenterMatch) {
+    const billingCostRows = await prisma.billingCostImport.findMany({
+      where: { costCenter: costCenterMatch, yearMonth: yearMonthMatch },
+    });
+
+    const normBP = (v: string | null) => v ? v.replace(/\s+/g, '').toUpperCase() : '';
+
+    const variableLines: BillingBreakdownLine[] = [];
+    const fixLines: BillingBreakdownLine[] = [];
+    let variableUploadSum = 0;
+    let fixUploadSum = 0;
+
+    for (const row of billingCostRows) {
+      const amount = row.amountLocalCurrency ?? 0;
+      const desc = (row.text || '').replace(/^\*/, '').trim();
+      const norm = normBP(row.bookingProgram);
+      if (norm === BILLING_BOOKING_PROGRAM.VARIABLE) {
+        variableLines.push({ description: desc, amount });
+        variableUploadSum += amount;
+      } else if (norm === BILLING_BOOKING_PROGRAM.FIX) {
+        fixLines.push({ description: desc, amount });
+        fixUploadSum += amount;
+      }
+    }
+
+    variableLines.sort((a, b) => a.amount - b.amount);
+    fixLines.sort((a, b) => a.amount - b.amount);
+
+    const operationalBilling = billingLines.find(l =>
+      l.description.toLowerCase().includes('operational costs billing')
+    );
+    const contractualBilling = billingLines.find(l =>
+      l.description.toLowerCase().includes('contractual costs billing')
+    );
+
+    const operationalSapAmount = operationalBilling?.amount ?? 0;
+    const contractualSapAmount = contractualBilling?.amount ?? 0;
+
+    billingBreakdowns.push({
+      sapDescription: 'Operational costs billing',
+      sapAmount: operationalSapAmount,
+      uploadAmount: variableUploadSum,
+      hasDeviation: Math.abs(operationalSapAmount - variableUploadSum) > 0.01,
+      lines: variableLines,
+    });
+
+    billingBreakdowns.push({
+      sapDescription: 'Contractual costs billing',
+      sapAmount: contractualSapAmount,
+      uploadAmount: fixUploadSum,
+      hasDeviation: Math.abs(contractualSapAmount - fixUploadSum) > 0.01,
+      lines: fixLines,
+    });
+  }
 
   return {
     country: {
@@ -204,6 +284,7 @@ export async function generateStatement(
     clearingSubtotal,
     billing: billingLines,
     billingSubtotal,
+    billingBreakdowns,
     totalInterfacingDue,
     accountStatement,
   };

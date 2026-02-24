@@ -67,3 +67,9 @@ export const SAP_TYPES = {
   CREDIT_NOTE: 'Credit Note',
   PAYMENT: 'Payment',
 } as const;
+
+/** Booking program: BU89 = Operational costs billing (Variable), BU88 = Contractual costs billing (Fix) */
+export const BILLING_BOOKING_PROGRAM = {
+  VARIABLE: 'BU89', // Operational costs billing
+  FIX: 'BU88',      // Contractual costs billing
+} as const;

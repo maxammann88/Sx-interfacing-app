@@ -1,9 +1,36 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import prisma from '../prismaClient';
 import { generateStatement } from '../services/statementService';
-import type { OverviewRow } from '@sixt/shared';
+import type { OverviewRow, OverviewSubBreakdown } from '@sixt/shared';
 
 const router = Router();
+
+const KNOWN_CLEARING = ['Prepaid', 'Corporate Cards', 'Voucher', 'Franchise Agent Commission'];
+
+function groupByLabel(items: { description: string; amount: number }[], knownLabels?: string[]): OverviewSubBreakdown[] {
+  const map = new Map<string, number>();
+  for (const item of items) {
+    const label = item.description || 'Other';
+    map.set(label, (map.get(label) || 0) + item.amount);
+  }
+  if (knownLabels) {
+    const result: OverviewSubBreakdown[] = [];
+    let restAmount = 0;
+    for (const [label, amount] of map) {
+      if (knownLabels.includes(label)) {
+        result.push({ label, amount });
+      } else {
+        restAmount += amount;
+      }
+    }
+    result.sort((a, b) => knownLabels.indexOf(a.label) - knownLabels.indexOf(b.label));
+    result.push({ label: 'Rest', amount: restAmount });
+    return result;
+  }
+  return Array.from(map.entries())
+    .map(([label, amount]) => ({ label, amount }))
+    .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+}
 
 router.get('/overview', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -27,6 +54,26 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
     for (const country of countries) {
       try {
         const st = await generateStatement(country.id, period, releaseDate, paymentTermDays);
+
+        const clearingBreakdown = groupByLabel(
+          st.clearing.map(l => ({ description: l.description, amount: l.amount })),
+          KNOWN_CLEARING,
+        );
+
+        const operationalBd = st.billingBreakdowns?.find(b =>
+          b.sapDescription.toLowerCase().includes('operational')
+        );
+        const contractualBd = st.billingBreakdowns?.find(b =>
+          b.sapDescription.toLowerCase().includes('contractual')
+        );
+
+        const operationalBreakdown = operationalBd
+          ? groupByLabel(operationalBd.lines.map(l => ({ description: l.description, amount: l.amount })))
+          : [];
+        const contractualBreakdown = contractualBd
+          ? groupByLabel(contractualBd.lines.map(l => ({ description: l.description, amount: l.amount })))
+          : [];
+
         rows.push({
           countryId: country.id,
           fir: country.fir,
@@ -36,11 +83,15 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
           clearingSubtotal: st.clearingSubtotal,
           billingSubtotal: st.billingSubtotal,
           totalInterfacingDue: st.totalInterfacingDue,
+          previousPeriodBalance: st.accountStatement.previousPeriodBalance,
           overdueBalance: st.accountStatement.overdueBalance,
           dueBalance: st.accountStatement.dueBalance,
           paymentBySixt: st.accountStatement.paymentBySixt,
           paymentByPartner: st.accountStatement.paymentByPartner,
           balanceOpenItems: st.accountStatement.balanceOpenItems,
+          clearingBreakdown,
+          operationalBreakdown,
+          contractualBreakdown,
         });
       } catch {
         rows.push({
@@ -52,11 +103,15 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
           clearingSubtotal: 0,
           billingSubtotal: 0,
           totalInterfacingDue: 0,
+          previousPeriodBalance: 0,
           overdueBalance: 0,
           dueBalance: 0,
           paymentBySixt: 0,
           paymentByPartner: 0,
           balanceOpenItems: 0,
+          clearingBreakdown: [],
+          operationalBreakdown: [],
+          contractualBreakdown: [],
         });
       }
     }

@@ -2,12 +2,16 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import styled from 'styled-components';
 import api from '../utils/api';
 import { formatEur, generatePeriodOptions, getDefaultPeriod, formatPeriodLabel } from '../utils/format';
-import type { OverviewRow, StatementData, StatementLine, PaymentItem } from '@sixt/shared';
+import type { OverviewRow, OverviewSubBreakdown, StatementData, StatementLine, PaymentItem } from '@sixt/shared';
 import {
   PageTitle, Card, Button, Select, Label, FormGroup, FormRow,
   Table, Spinner, Alert, AmountCell, SubtotalRow, Input, SectionTitle,
 } from '../components/ui';
 import { theme } from '../styles/theme';
+
+const DARK_COL_BG = '#3a3a3a';
+const DARK_COL_BG_ROW = '#e8e5de';
+const DARK_COL_BG_TOTAL = '#dbd8d0';
 
 const TableScroll = styled.div`
   max-height: 75vh;
@@ -24,6 +28,8 @@ const CompactTable = styled(Table)`
     position: sticky;
     top: 0;
     z-index: 3;
+    background: #222 !important;
+    color: #fff !important;
     box-shadow: 0 1px 2px rgba(0,0,0,0.15);
   }
   td { padding: 3px 6px; font-size: 11px; }
@@ -39,15 +45,10 @@ const StickyTotalRow = styled(SubtotalRow)`
   }
 `;
 
-const SmallButton = styled(Button)`
-  padding: 3px 7px;
-  font-size: 10px;
-  margin: 0 1px;
-`;
-
-const DownloadGroup = styled.div`
-  display: flex;
-  gap: 1px;
+const SearchInput = styled(Input)`
+  width: 240px;
+  padding: 5px 10px;
+  font-size: 12px;
 `;
 
 const ThresholdRow = styled.div`
@@ -172,16 +173,35 @@ const DeltaSpan = styled.span<{ $level: 'normal' | 'warning' | 'danger' }>`
     theme.colors.textSecondary};
 `;
 
-type CategoryKey = 'clearing' | 'billing' | 'total' | 'overdue' | 'due' | 'sixt' | 'partner' | 'balance';
+const GroupToggle = styled.span`
+  cursor: pointer;
+  user-select: none;
+  font-size: 9px;
+  margin-right: 3px;
+  opacity: 0.8;
+`;
+
+const SubColHeader = styled.th`
+  font-size: 9px !important;
+  font-weight: 500 !important;
+  padding: 3px 5px !important;
+  background: #444 !important;
+  border-left: 1px solid #555 !important;
+`;
+
+type CategoryKey = 'clearing' | 'billing' | 'total' | 'prevBalance' | 'overdue' | 'due' | 'sixt' | 'partner' | 'interfacing' | 'balance';
+type ExpandGroup = 'clearing' | 'operational' | 'contractual';
 
 const CATEGORIES: { key: CategoryKey; label: string }[] = [
   { key: 'clearing', label: 'Clearing' },
   { key: 'billing', label: 'Billing' },
   { key: 'total', label: 'Total' },
+  { key: 'prevBalance', label: 'Bal. prev.' },
   { key: 'overdue', label: 'Overdue' },
   { key: 'due', label: 'Due' },
   { key: 'sixt', label: 'Pmt Sixt' },
   { key: 'partner', label: 'Pmt Partner' },
+  { key: 'interfacing', label: 'Interfacing' },
   { key: 'balance', label: 'Balance' },
 ];
 
@@ -189,12 +209,16 @@ const DEFAULT_THRESHOLDS: Record<CategoryKey, { warn: number; danger: number }> 
   clearing: { warn: 50, danger: 100 },
   billing: { warn: 50, danger: 100 },
   total: { warn: 50, danger: 100 },
+  prevBalance: { warn: 50, danger: 100 },
   overdue: { warn: 50, danger: 100 },
   due: { warn: 50, danger: 100 },
   sixt: { warn: 50, danger: 100 },
   partner: { warn: 50, danger: 100 },
+  interfacing: { warn: 50, danger: 100 },
   balance: { warn: 50, danger: 100 },
 };
+
+const CLEARING_SUB_LABELS = ['Prepaid', 'Corporate Cards', 'Voucher', 'Franchise Agent Commission', 'Rest'];
 
 function getPreviousPeriod(period: string): string {
   const year = parseInt(period.substring(0, 4), 10);
@@ -203,35 +227,24 @@ function getPreviousPeriod(period: string): string {
   return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-function getPreviousPeriods(period: string, count: number): string[] {
-  const year = parseInt(period.substring(0, 4), 10);
-  const month = parseInt(period.substring(4, 6), 10);
-  const result: string[] = [];
-  for (let i = 0; i < count; i++) {
-    const d = new Date(year, month - 1 - i, 1);
-    result.push(`${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}`);
-  }
-  return result;
-}
-
-function shortPeriod(p: string): string {
-  const m = parseInt(p.substring(4, 6), 10);
-  const y = p.substring(2, 4);
-  const abbr = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${abbr[m - 1]} ${y}`;
-}
-
 function rowValue(row: OverviewRow, key: CategoryKey): number {
   switch (key) {
     case 'clearing': return row.clearingSubtotal;
     case 'billing': return row.billingSubtotal;
     case 'total': return row.totalInterfacingDue;
+    case 'prevBalance': return row.previousPeriodBalance;
     case 'overdue': return row.overdueBalance;
     case 'due': return row.dueBalance;
     case 'sixt': return row.paymentBySixt;
     case 'partner': return row.paymentByPartner;
+    case 'interfacing': return row.totalInterfacingDue;
     case 'balance': return row.balanceOpenItems;
   }
+}
+
+const MONTH_NAMES_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function periodMonthName(p: string): string {
+  return MONTH_NAMES_SHORT[parseInt(p.substring(4, 6), 10) - 1] || '';
 }
 
 function pctChange(current: number, previous: number): number | null {
@@ -254,6 +267,21 @@ function formatPct(pct: number | null): string {
   return `${sign}${Math.round(pct)}%`;
 }
 
+function getBreakdownAmount(breakdown: OverviewSubBreakdown[], label: string): number {
+  const item = breakdown.find(b => b.label === label);
+  return item ? item.amount : 0;
+}
+
+function collectUniqueLabels(rows: OverviewRow[], field: 'operationalBreakdown' | 'contractualBreakdown'): string[] {
+  const set = new Set<string>();
+  for (const r of rows) {
+    for (const b of r[field] || []) {
+      set.add(b.label);
+    }
+  }
+  return Array.from(set).sort();
+}
+
 export default function StatementOverviewPage() {
   const [rows, setRows] = useState<OverviewRow[]>([]);
   const [prevRows, setPrevRows] = useState<OverviewRow[]>([]);
@@ -262,10 +290,14 @@ export default function StatementOverviewPage() {
   const [prevReleaseDate, setPrevReleaseDate] = useState('');
   const [statusFilter, setStatusFilter] = useState('aktiv');
   const [loading, setLoading] = useState(false);
-  const [downloading, setDownloading] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [thresholds, setThresholds] = useState(DEFAULT_THRESHOLDS);
   const [showThresholds, setShowThresholds] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortCol, setSortCol] = useState<CategoryKey | 'fir' | 'name' | 'iso' | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
+  const [expandedGroups, setExpandedGroups] = useState<Set<ExpandGroup>>(new Set());
 
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const [breakdownLoading, setBreakdownLoading] = useState(false);
@@ -273,8 +305,19 @@ export default function StatementOverviewPage() {
   const [breakdownTitle, setBreakdownTitle] = useState('');
 
   const periods = generatePeriodOptions();
-  const last3 = getPreviousPeriods(period, 3);
   const prevPeriod = getPreviousPeriod(period);
+
+  const toggleGroup = useCallback((g: ExpandGroup) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(g)) next.delete(g);
+      else next.add(g);
+      return next;
+    });
+  }, []);
+
+  const operationalLabels = useMemo(() => collectUniqueLabels(rows, 'operationalBreakdown'), [rows]);
+  const contractualLabels = useMemo(() => collectUniqueLabels(rows, 'contractualBreakdown'), [rows]);
 
   const prevMap = useMemo(() => {
     const map: Record<number, OverviewRow> = {};
@@ -353,58 +396,43 @@ export default function StatementOverviewPage() {
     return () => window.removeEventListener('keydown', handler);
   }, [navigatePeriod]);
 
-  const handleDownloadPdf = async (countryId: number, fir: number, iso: string, dlPeriod: string) => {
-    const key = `${countryId}-${dlPeriod}`;
-    setDownloading(key);
-    try {
-      const res = await api.get(`/export/${countryId}/pdf`, {
-        params: { period: dlPeriod, releaseDate },
-        responseType: 'blob',
-      });
-      const disposition = res.headers['content-disposition'];
-      const filename = disposition
-        ? decodeURIComponent(disposition.split('filename=')[1]?.replace(/"/g, ''))
-        : `Interfacing_${fir}_${iso}_${dlPeriod}.pdf`;
-      const url = window.URL.createObjectURL(new Blob([res.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', filename);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-    } catch {
-      setError(`Error downloading PDF for ${iso} ${dlPeriod}`);
-    } finally {
-      setDownloading(null);
+  const handleSort = useCallback((col: CategoryKey | 'fir' | 'name' | 'iso') => {
+    if (sortCol === col) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortCol(col);
+      setSortDir('asc');
     }
-  };
+  }, [sortCol]);
 
-  const handleDownloadXlsx = async (countryId: number, fir: number, iso: string, dlPeriod: string) => {
-    const key = `xlsx-${countryId}-${dlPeriod}`;
-    setDownloading(key);
-    try {
-      const res = await api.get(`/export/${countryId}/xlsx`, {
-        params: { period: dlPeriod, releaseDate },
-        responseType: 'blob',
-      });
-      const disposition = res.headers['content-disposition'];
-      const filename = disposition
-        ? decodeURIComponent(disposition.split('filename=')[1]?.replace(/"/g, ''))
-        : `Interfacing_${fir}_${iso}_${dlPeriod}.xlsx`;
-      const url = window.URL.createObjectURL(new Blob([res.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', filename);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-    } catch {
-      setError(`Error downloading XLSX for ${iso} ${dlPeriod}`);
-    } finally {
-      setDownloading(null);
+  const filteredAndSortedRows = useMemo(() => {
+    let result = rows;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(r =>
+        r.name.toLowerCase().includes(q) ||
+        r.iso.toLowerCase().includes(q) ||
+        String(r.fir).includes(q)
+      );
     }
+    if (sortCol) {
+      result = [...result].sort((a, b) => {
+        let va: any, vb: any;
+        if (sortCol === 'fir') { va = a.fir; vb = b.fir; }
+        else if (sortCol === 'name') { va = a.name.toLowerCase(); vb = b.name.toLowerCase(); }
+        else if (sortCol === 'iso') { va = a.iso; vb = b.iso; }
+        else { va = rowValue(a, sortCol); vb = rowValue(b, sortCol); }
+        if (va < vb) return sortDir === 'asc' ? -1 : 1;
+        if (va > vb) return sortDir === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return result;
+  }, [rows, searchQuery, sortCol, sortDir]);
+
+  const sortIndicator = (col: CategoryKey | 'fir' | 'name' | 'iso') => {
+    if (sortCol !== col) return '';
+    return sortDir === 'asc' ? ' \u25B2' : ' \u25BC';
   };
 
   const openBreakdown = useCallback(async (countryId: number, countryName: string, catKey: CategoryKey) => {
@@ -416,13 +444,15 @@ export default function StatementOverviewPage() {
       clearing: 'Clearing Statement',
       billing: 'Billing Statement',
       total: 'Total Interfacing Due',
+      prevBalance: 'Balance Previous Period',
       overdue: 'Overdue Balance',
       due: 'Due Balance',
       sixt: 'Payment by Sixt',
       partner: 'Payment by Partner',
+      interfacing: 'Interfacing Amount',
       balance: 'Balance (Open Items)',
     };
-    setBreakdownTitle(`${countryName} – ${catLabels[catKey]}`);
+    setBreakdownTitle(`${countryName} \u2013 ${catLabels[catKey]}`);
 
     try {
       const res = await api.get(`/statement/${countryId}`, {
@@ -443,11 +473,19 @@ export default function StatementOverviewPage() {
           total = st.billingSubtotal;
           break;
         case 'total':
+        case 'interfacing':
           lines = [
             { desc: 'Clearing Subtotal', ref: '', amount: st.clearingSubtotal },
             { desc: 'Billing Subtotal', ref: '', amount: st.billingSubtotal },
           ];
           total = st.totalInterfacingDue;
+          break;
+        case 'prevBalance':
+          lines = [
+            { desc: 'Overdue Balance', ref: '', amount: st.accountStatement.overdueBalance },
+            { desc: 'Due Balance', ref: '', amount: st.accountStatement.dueBalance },
+          ];
+          total = st.accountStatement.previousPeriodBalance;
           break;
         case 'overdue': {
           const overdueItems = (st.accountStatement.previousMonthItems || [])
@@ -519,29 +557,58 @@ export default function StatementOverviewPage() {
     setThresholds(prev => ({ ...prev, [key]: { ...prev[key], [field]: num } }));
   };
 
-  const totals = rows.reduce(
-    (acc, r) => ({
-      clearing: acc.clearing + r.clearingSubtotal,
-      billing: acc.billing + r.billingSubtotal,
-      total: acc.total + r.totalInterfacingDue,
-      overdue: acc.overdue + r.overdueBalance,
-      due: acc.due + r.dueBalance,
-      sixt: acc.sixt + r.paymentBySixt,
-      partner: acc.partner + r.paymentByPartner,
-      balance: acc.balance + r.balanceOpenItems,
-    }),
-    { clearing: 0, billing: 0, total: 0, overdue: 0, due: 0, sixt: 0, partner: 0, balance: 0 },
-  );
+  const totals = useMemo(() => {
+    const base = filteredAndSortedRows.reduce(
+      (acc, r) => ({
+        clearing: acc.clearing + r.clearingSubtotal,
+        billing: acc.billing + r.billingSubtotal,
+        total: acc.total + r.totalInterfacingDue,
+        prevBalance: acc.prevBalance + r.previousPeriodBalance,
+        overdue: acc.overdue + r.overdueBalance,
+        due: acc.due + r.dueBalance,
+        sixt: acc.sixt + r.paymentBySixt,
+        partner: acc.partner + r.paymentByPartner,
+        interfacing: acc.interfacing + r.totalInterfacingDue,
+        balance: acc.balance + r.balanceOpenItems,
+      }),
+      { clearing: 0, billing: 0, total: 0, prevBalance: 0, overdue: 0, due: 0, sixt: 0, partner: 0, interfacing: 0, balance: 0 },
+    );
+    return base;
+  }, [filteredAndSortedRows]);
 
-  function renderAmountWithDelta(currentVal: number, countryId: number, catKey: CategoryKey, bold?: boolean, countryName?: string) {
+  const subTotals = useMemo(() => {
+    const clrMap = new Map<string, number>();
+    CLEARING_SUB_LABELS.forEach(l => clrMap.set(l, 0));
+    const opMap = new Map<string, number>();
+    operationalLabels.forEach(l => opMap.set(l, 0));
+    const ctMap = new Map<string, number>();
+    contractualLabels.forEach(l => ctMap.set(l, 0));
+
+    for (const r of filteredAndSortedRows) {
+      for (const b of r.clearingBreakdown || []) {
+        clrMap.set(b.label, (clrMap.get(b.label) || 0) + b.amount);
+      }
+      for (const b of r.operationalBreakdown || []) {
+        opMap.set(b.label, (opMap.get(b.label) || 0) + b.amount);
+      }
+      for (const b of r.contractualBreakdown || []) {
+        ctMap.set(b.label, (ctMap.get(b.label) || 0) + b.amount);
+      }
+    }
+    return { clearing: clrMap, operational: opMap, contractual: ctMap };
+  }, [filteredAndSortedRows, operationalLabels, contractualLabels]);
+
+  function renderAmountWithDelta(currentVal: number, countryId: number, catKey: CategoryKey, bold?: boolean, countryName?: string, extraStyle?: React.CSSProperties) {
     const prev = prevMap[countryId];
     const prevVal = prev ? rowValue(prev, catKey) : null;
     const pct = prevVal !== null ? pctChange(currentVal, prevVal) : null;
     const t = thresholds[catKey];
     const level = getDeltaLevel(pct, t.warn, t.danger);
 
+    const cellStyle: React.CSSProperties = { ...(bold ? { fontWeight: 600 } : {}), ...extraStyle };
+
     return (
-      <AmountCell style={bold ? { fontWeight: 600 } : undefined}>
+      <AmountCell style={Object.keys(cellStyle).length ? cellStyle : undefined}>
         <ClickableAmount onClick={() => openBreakdown(countryId, countryName || '', catKey)}>
           {formatEur(currentVal)}
         </ClickableAmount>
@@ -554,6 +621,48 @@ export default function StatementOverviewPage() {
       </AmountCell>
     );
   }
+
+  const isClrExpanded = expandedGroups.has('clearing');
+  const isOpExpanded = expandedGroups.has('operational');
+  const isCtExpanded = expandedGroups.has('contractual');
+
+  const clearingColCount = isClrExpanded ? CLEARING_SUB_LABELS.length : 0;
+  const opColCount = isOpExpanded ? operationalLabels.length : 0;
+  const ctColCount = isCtExpanded ? contractualLabels.length : 0;
+
+  function renderGroupHeader(group: ExpandGroup, label: string, subLabels: string[], expanded: boolean) {
+    const subCount = subLabels.length;
+    if (expanded && subCount > 0) {
+      return (
+        <th
+          colSpan={subCount + 1}
+          style={{ textAlign: 'center', cursor: 'pointer', borderLeft: '2px solid #555' }}
+          onClick={() => toggleGroup(group)}
+        >
+          <GroupToggle>{'\u25BC'}</GroupToggle>{label}
+        </th>
+      );
+    }
+    return (
+      <th
+        style={{ textAlign: 'right', cursor: 'pointer', borderLeft: '2px solid #555' }}
+        onClick={() => toggleGroup(group)}
+      >
+        <GroupToggle>{subLabels.length > 0 ? '\u25B6' : ''}</GroupToggle>{label}
+      </th>
+    );
+  }
+
+  function renderSubHeaders(subLabels: string[], expanded: boolean) {
+    if (!expanded || subLabels.length === 0) return null;
+    return subLabels.map((label, i) => (
+      <SubColHeader key={label} style={{ textAlign: 'right' }}>
+        {label.length > 18 ? label.substring(0, 16) + '..' : label}
+      </SubColHeader>
+    ));
+  }
+
+  const needsSubRow = isClrExpanded || isOpExpanded || isCtExpanded;
 
   return (
     <div>
@@ -593,8 +702,8 @@ export default function StatementOverviewPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: showThresholds ? 10 : 0 }}>
             <span style={{ fontSize: 12, color: theme.colors.textSecondary }}>
               % change vs. {formatPeriodLabel(prevPeriod)} &nbsp;
-              <span style={{ color: '#e6a800', fontWeight: 600 }}>■</span> warning &nbsp;
-              <span style={{ color: theme.colors.danger, fontWeight: 600 }}>■</span> critical
+              <span style={{ color: '#e6a800', fontWeight: 600 }}>{'\u25A0'}</span> warning &nbsp;
+              <span style={{ color: theme.colors.danger, fontWeight: 600 }}>{'\u25A0'}</span> critical
             </span>
             <Button
               onClick={() => setShowThresholds(!showThresholds)}
@@ -608,14 +717,14 @@ export default function StatementOverviewPage() {
               {CATEGORIES.map(cat => (
                 <ThresholdItem key={cat.key}>
                   <strong>{cat.label}:</strong>
-                  <span style={{ color: '#e6a800' }}>⚠</span>
+                  <span style={{ color: '#e6a800' }}>{'\u26A0'}</span>
                   <ThresholdInput
                     type="number"
                     min="0"
                     value={thresholds[cat.key].warn}
                     onChange={e => updateThreshold(cat.key, 'warn', e.target.value)}
                   />%
-                  <span style={{ color: theme.colors.danger }}>⬤</span>
+                  <span style={{ color: theme.colors.danger }}>{'\u2B24'}</span>
                   <ThresholdInput
                     type="number"
                     min="0"
@@ -633,83 +742,112 @@ export default function StatementOverviewPage() {
 
       {!loading && rows.length > 0 && (
         <Card style={{ padding: 8 }}>
+          <div style={{ marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center' }}>
+            <SearchInput
+              placeholder="Search country, ISO, FIR..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <span style={{ fontSize: 11, color: theme.colors.textSecondary }}>
+                {filteredAndSortedRows.length} of {rows.length} countries
+              </span>
+            )}
+          </div>
           <TableScroll>
           <CompactTable>
             <thead>
               <tr>
-                <th>FIR</th>
-                <th>Country</th>
-                <th>ISO</th>
-                <th style={{ textAlign: 'right' }}>Clearing</th>
-                <th style={{ textAlign: 'right' }}>Billing</th>
-                <th style={{ textAlign: 'right' }}>Total</th>
-                <th style={{ textAlign: 'right' }}>Overdue</th>
-                <th style={{ textAlign: 'right' }}>Due</th>
-                <th style={{ textAlign: 'right' }}>Pmt Sixt</th>
-                <th style={{ textAlign: 'right' }}>Pmt Partner</th>
-                <th style={{ textAlign: 'right' }}>Balance</th>
-                <th>PDF</th>
-                <th>XLSX</th>
+                <th rowSpan={needsSubRow ? 2 : 1} style={{ cursor: 'pointer' }} onClick={() => handleSort('fir')}>FIR{sortIndicator('fir')}</th>
+                <th rowSpan={needsSubRow ? 2 : 1} style={{ cursor: 'pointer' }} onClick={() => handleSort('name')}>Country{sortIndicator('name')}</th>
+                <th rowSpan={needsSubRow ? 2 : 1} style={{ textAlign: 'right', cursor: 'pointer', background: `${DARK_COL_BG} !important` }} onClick={() => handleSort('prevBalance')}>Bal. prev.{sortIndicator('prevBalance')}</th>
+                <th rowSpan={needsSubRow ? 2 : 1} style={{ textAlign: 'right', cursor: 'pointer', paddingLeft: 14 }} onClick={() => handleSort('overdue')}>Overdue{sortIndicator('overdue')}</th>
+                <th rowSpan={needsSubRow ? 2 : 1} style={{ textAlign: 'right', cursor: 'pointer', paddingLeft: 14 }} onClick={() => handleSort('due')}>Due{sortIndicator('due')}</th>
+                <th rowSpan={needsSubRow ? 2 : 1} style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('sixt')}>Pmt Sixt{sortIndicator('sixt')}</th>
+                <th rowSpan={needsSubRow ? 2 : 1} style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('partner')}>Pmt Partner{sortIndicator('partner')}</th>
+                <th rowSpan={needsSubRow ? 2 : 1} style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('interfacing')}>Interfac. {periodMonthName(period)}{sortIndicator('interfacing')}</th>
+                {renderGroupHeader('clearing', 'Clearing', CLEARING_SUB_LABELS, isClrExpanded)}
+                {renderGroupHeader('operational', 'Oper. Costs', operationalLabels, isOpExpanded)}
+                {renderGroupHeader('contractual', 'Contr. Costs', contractualLabels, isCtExpanded)}
+                <th rowSpan={needsSubRow ? 2 : 1} style={{ textAlign: 'right', cursor: 'pointer', fontWeight: 700, background: `${DARK_COL_BG} !important` }} onClick={() => handleSort('balance')}>Balance{sortIndicator('balance')}</th>
               </tr>
+              {needsSubRow && (
+                <tr>
+                  {isClrExpanded && <>
+                    <SubColHeader style={{ textAlign: 'right', borderLeft: '2px solid #555' }}>{'\u03A3'}</SubColHeader>
+                    {renderSubHeaders(CLEARING_SUB_LABELS, isClrExpanded)}
+                  </>}
+                  {isOpExpanded && <>
+                    <SubColHeader style={{ textAlign: 'right', borderLeft: '2px solid #555' }}>{'\u03A3'}</SubColHeader>
+                    {renderSubHeaders(operationalLabels, isOpExpanded)}
+                  </>}
+                  {isCtExpanded && <>
+                    <SubColHeader style={{ textAlign: 'right', borderLeft: '2px solid #555' }}>{'\u03A3'}</SubColHeader>
+                    {renderSubHeaders(contractualLabels, isCtExpanded)}
+                  </>}
+                </tr>
+              )}
             </thead>
             <tbody>
               <StickyTotalRow>
-                <td colSpan={3}><strong>TOTAL ({rows.length} countries)</strong></td>
-                <AmountCell><strong>{formatEur(totals.clearing)}</strong></AmountCell>
-                <AmountCell><strong>{formatEur(totals.billing)}</strong></AmountCell>
-                <AmountCell><strong>{formatEur(totals.total)}</strong></AmountCell>
+                <td colSpan={2}><strong>TOTAL ({filteredAndSortedRows.length} countries)</strong></td>
+                <AmountCell style={{ background: DARK_COL_BG_TOTAL }}><strong>{formatEur(totals.prevBalance)}</strong></AmountCell>
                 <AmountCell><strong>{formatEur(totals.overdue)}</strong></AmountCell>
                 <AmountCell><strong>{formatEur(totals.due)}</strong></AmountCell>
                 <AmountCell><strong>{formatEur(totals.sixt)}</strong></AmountCell>
                 <AmountCell><strong>{formatEur(totals.partner)}</strong></AmountCell>
-                <AmountCell><strong>{formatEur(totals.balance)}</strong></AmountCell>
-                <td></td>
-                <td></td>
+                <AmountCell><strong>{formatEur(totals.interfacing)}</strong></AmountCell>
+                <AmountCell style={{ borderLeft: '2px solid #ccc' }}><strong>{formatEur(totals.clearing)}</strong></AmountCell>
+                {isClrExpanded && CLEARING_SUB_LABELS.map(label => (
+                  <AmountCell key={label} style={{ fontSize: 10 }}><strong>{formatEur(subTotals.clearing.get(label) || 0)}</strong></AmountCell>
+                ))}
+                <AmountCell style={{ borderLeft: '2px solid #ccc' }}><strong>{formatEur(totals.billing - (totals.clearing || 0))}</strong></AmountCell>
+                {isOpExpanded && operationalLabels.map(label => (
+                  <AmountCell key={label} style={{ fontSize: 10 }}><strong>{formatEur(subTotals.operational.get(label) || 0)}</strong></AmountCell>
+                ))}
+                <AmountCell style={{ borderLeft: '2px solid #ccc' }}><strong>{formatEur(0)}</strong></AmountCell>
+                {isCtExpanded && contractualLabels.map(label => (
+                  <AmountCell key={label} style={{ fontSize: 10 }}><strong>{formatEur(subTotals.contractual.get(label) || 0)}</strong></AmountCell>
+                ))}
+                <AmountCell style={{ background: DARK_COL_BG_TOTAL }}><strong>{formatEur(totals.balance)}</strong></AmountCell>
               </StickyTotalRow>
-              {rows.map((r) => (
-                <tr key={r.countryId}>
-                  <td>{r.fir}</td>
-                  <td><strong>{r.name}</strong></td>
-                  <td>{r.iso}</td>
-                  {renderAmountWithDelta(r.clearingSubtotal, r.countryId, 'clearing', false, r.name)}
-                  {renderAmountWithDelta(r.billingSubtotal, r.countryId, 'billing', false, r.name)}
-                  {renderAmountWithDelta(r.totalInterfacingDue, r.countryId, 'total', true, r.name)}
-                  {renderAmountWithDelta(r.overdueBalance, r.countryId, 'overdue', false, r.name)}
-                  {renderAmountWithDelta(r.dueBalance, r.countryId, 'due', false, r.name)}
-                  {renderAmountWithDelta(r.paymentBySixt, r.countryId, 'sixt', false, r.name)}
-                  {renderAmountWithDelta(r.paymentByPartner, r.countryId, 'partner', false, r.name)}
-                  {renderAmountWithDelta(r.balanceOpenItems, r.countryId, 'balance', true, r.name)}
-                  <td>
-                    <DownloadGroup>
-                      {last3.map((p) => (
-                        <SmallButton
-                          key={p}
-                          onClick={() => handleDownloadPdf(r.countryId, r.fir, r.iso, p)}
-                          disabled={downloading === `${r.countryId}-${p}`}
-                          title={formatPeriodLabel(p)}
-                        >
-                          {downloading === `${r.countryId}-${p}` ? '...' : shortPeriod(p)}
-                        </SmallButton>
-                      ))}
-                    </DownloadGroup>
-                  </td>
-                  <td>
-                    <DownloadGroup>
-                      {last3.map((p) => (
-                        <SmallButton
-                          key={p}
-                          onClick={() => handleDownloadXlsx(r.countryId, r.fir, r.iso, p)}
-                          disabled={downloading === `xlsx-${r.countryId}-${p}`}
-                          title={`XLSX ${formatPeriodLabel(p)}`}
-                          style={{ background: '#217346' }}
-                        >
-                          {downloading === `xlsx-${r.countryId}-${p}` ? '...' : shortPeriod(p)}
-                        </SmallButton>
-                      ))}
-                    </DownloadGroup>
-                  </td>
-                </tr>
-              ))}
+              {filteredAndSortedRows.map((r) => {
+                const opSum = (r.operationalBreakdown || []).reduce((s, b) => s + b.amount, 0);
+                const ctSum = (r.contractualBreakdown || []).reduce((s, b) => s + b.amount, 0);
+                return (
+                  <tr key={r.countryId}>
+                    <td>{r.fir}</td>
+                    <td><strong>{r.name}</strong></td>
+                    {renderAmountWithDelta(r.previousPeriodBalance, r.countryId, 'prevBalance', true, r.name, { background: DARK_COL_BG_ROW })}
+                    {renderAmountWithDelta(r.overdueBalance, r.countryId, 'overdue', false, r.name, { paddingLeft: 14 })}
+                    {renderAmountWithDelta(r.dueBalance, r.countryId, 'due', false, r.name, { paddingLeft: 14 })}
+                    {renderAmountWithDelta(r.paymentBySixt, r.countryId, 'sixt', false, r.name)}
+                    {renderAmountWithDelta(r.paymentByPartner, r.countryId, 'partner', false, r.name)}
+                    {renderAmountWithDelta(r.totalInterfacingDue, r.countryId, 'interfacing', false, r.name)}
+                    {renderAmountWithDelta(r.clearingSubtotal, r.countryId, 'clearing', false, r.name, { borderLeft: '2px solid #e0e0e0' })}
+                    {isClrExpanded && CLEARING_SUB_LABELS.map(label => (
+                      <AmountCell key={label} style={{ fontSize: 10, color: '#555' }}>
+                        {formatEur(getBreakdownAmount(r.clearingBreakdown || [], label))}
+                      </AmountCell>
+                    ))}
+                    {renderAmountWithDelta(opSum, r.countryId, 'billing', false, r.name, { borderLeft: '2px solid #e0e0e0' })}
+                    {isOpExpanded && operationalLabels.map(label => (
+                      <AmountCell key={label} style={{ fontSize: 10, color: '#555' }}>
+                        {formatEur(getBreakdownAmount(r.operationalBreakdown || [], label))}
+                      </AmountCell>
+                    ))}
+                    <AmountCell style={{ borderLeft: '2px solid #e0e0e0' }}>
+                      {formatEur(ctSum)}
+                    </AmountCell>
+                    {isCtExpanded && contractualLabels.map(label => (
+                      <AmountCell key={label} style={{ fontSize: 10, color: '#555' }}>
+                        {formatEur(getBreakdownAmount(r.contractualBreakdown || [], label))}
+                      </AmountCell>
+                    ))}
+                    {renderAmountWithDelta(r.balanceOpenItems, r.countryId, 'balance', true, r.name, { background: DARK_COL_BG_ROW })}
+                  </tr>
+                );
+              })}
             </tbody>
           </CompactTable>
           </TableScroll>

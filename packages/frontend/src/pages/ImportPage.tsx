@@ -23,10 +23,11 @@ const UploadRow = styled.div`
 `;
 
 const typeLabels: Record<string, string> = {
-  sap: 'SAP Import',
-  countries: 'Country List',
-  'master-data': 'Master Data',
-  deposit: 'Deposit',
+  sap: 'SAP Post Booking Debitor/Kreditor (Herbert)',
+  countries: 'Country List (Henning)',
+  'master-data': 'Master Data (Henning)',
+  deposit: 'Deposit (Henning)',
+  'billing-costs': 'SAP BU88/BU89 (Vroni)',
 };
 
 const typeColors: Record<string, string> = {
@@ -34,6 +35,7 @@ const typeColors: Record<string, string> = {
   countries: theme.colors.info,
   'master-data': theme.colors.success,
   deposit: '#6f42c1',
+  'billing-costs': '#0d9488',
 };
 
 export default function ImportPage() {
@@ -42,6 +44,7 @@ export default function ImportPage() {
   const [countryFile, setCountryFile] = useState<File | null>(null);
   const [masterFile, setMasterFile] = useState<File | null>(null);
   const [depositFile, setDepositFile] = useState<File | null>(null);
+  const [billingCostsFile, setBillingCostsFile] = useState<File | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [uploads, setUploads] = useState<Upload[]>([]);
@@ -52,6 +55,7 @@ export default function ImportPage() {
   const countryRef = useRef<HTMLInputElement>(null);
   const masterRef = useRef<HTMLInputElement>(null);
   const depositRef = useRef<HTMLInputElement>(null);
+  const billingCostsRef = useRef<HTMLInputElement>(null);
 
   const periods = generatePeriodOptions();
 
@@ -128,7 +132,7 @@ export default function ImportPage() {
       {message && <Alert $type={message.type}>{message.text}</Alert>}
 
       {/* SAP Import */}
-      <SectionTitle>SAP Data (Monthly)</SectionTitle>
+      <SectionTitle>SAP Post Booking Debitor/Kreditor CSV (from Herbert)</SectionTitle>
       <UploadCard>
         <UploadRow>
           <FormGroup style={{ marginBottom: 0 }}>
@@ -159,7 +163,7 @@ export default function ImportPage() {
       </UploadCard>
 
       {/* Country List */}
-      <SectionTitle style={{ marginTop: 28 }}>Country List</SectionTitle>
+      <SectionTitle style={{ marginTop: 28 }}>Country List (from Henning)</SectionTitle>
       <UploadCard>
         <UploadRow>
           <FormGroup style={{ flex: 1, marginBottom: 0 }}>
@@ -184,7 +188,7 @@ export default function ImportPage() {
       </UploadCard>
 
       {/* Master Data */}
-      <SectionTitle style={{ marginTop: 28 }}>Master Data</SectionTitle>
+      <SectionTitle style={{ marginTop: 28 }}>Master Data (from Henning)</SectionTitle>
       <UploadCard>
         <UploadRow>
           <FormGroup style={{ flex: 1, marginBottom: 0 }}>
@@ -208,8 +212,36 @@ export default function ImportPage() {
         </UploadRow>
       </UploadCard>
 
+      {/* SAP BU88/BU89 */}
+      <SectionTitle style={{ marginTop: 28 }}>SAP BU88/BU89 CSV (from Vroni)</SectionTitle>
+      <UploadCard>
+        <UploadRow>
+          <FormGroup style={{ flex: 1, marginBottom: 0 }}>
+            <Label>Billing CSV (Semikolon; Daten werden angehängt, bestehende Einträge bleiben erhalten)</Label>
+            <FileInput onClick={() => billingCostsRef.current?.click()} style={{ padding: 16 }}>
+              <input
+                ref={billingCostsRef}
+                type="file"
+                accept=".csv"
+                onChange={(e) => setBillingCostsFile(e.target.files?.[0] || null)}
+              />
+              <p style={{ margin: 0 }}>{billingCostsFile ? billingCostsFile.name : 'Select CSV'}</p>
+            </FileInput>
+          </FormGroup>
+          <Button
+            onClick={() => billingCostsFile && handleFileUpload('/uploads/billing-costs', billingCostsFile, 'Billing Costs')}
+            disabled={loading !== null || !billingCostsFile}
+          >
+            {loading === 'Billing Costs' ? 'Importing...' : 'Import BU88/BU89'}
+          </Button>
+        </UploadRow>
+        <p style={{ margin: '8px 0 0', fontSize: 12, color: '#666' }}>
+          Daten werden angehängt, bestehende Einträge bleiben erhalten.
+        </p>
+      </UploadCard>
+
       {/* Deposit */}
-      <SectionTitle style={{ marginTop: 28 }}>Deposit</SectionTitle>
+      <SectionTitle style={{ marginTop: 28 }}>Deposit (from Henning)</SectionTitle>
       <UploadCard>
         <UploadRow>
           <FormGroup style={{ flex: 1, marginBottom: 0 }}>

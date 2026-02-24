@@ -148,6 +148,11 @@ export const SubtotalRow = styled.tr`
   }
 `;
 
+export const BalanceRow = styled.tr`
+  background: #f0c8a0 !important;
+  font-weight: 700;
+`;
+
 export const TotalRow = styled.tr`
   background: ${theme.colors.primary} !important;
   color: ${theme.colors.white};

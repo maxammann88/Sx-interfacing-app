@@ -81,6 +81,19 @@ export interface BillingRun {
   createdAt: string;
 }
 
+export interface BillingBreakdownLine {
+  description: string;
+  amount: number;
+}
+
+export interface BillingBreakdown {
+  sapDescription: string;
+  sapAmount: number;
+  uploadAmount: number;
+  hasDeviation: boolean;
+  lines: BillingBreakdownLine[];
+}
+
 export interface StatementData {
   country: Country;
   masterData: MasterData | null;
@@ -91,6 +104,7 @@ export interface StatementData {
   clearingSubtotal: number;
   billing: StatementLine[];
   billingSubtotal: number;
+  billingBreakdowns?: BillingBreakdown[];
   totalInterfacingDue: number;
   accountStatement: AccountStatement;
 }
@@ -117,6 +131,9 @@ export interface PaymentItem {
 }
 
 export interface AccountStatement {
+  previousPeriodBalance: number;
+  lastSubmissionDate: string;
+  periodEndDate: string;
   overdueBalance: number;
   dueBalance: number;
   dueUntilDate: string;
@@ -134,6 +151,11 @@ export interface CountryWithMasterData extends Country {
   masterData?: MasterData | null;
 }
 
+export interface OverviewSubBreakdown {
+  label: string;
+  amount: number;
+}
+
 export interface OverviewRow {
   countryId: number;
   fir: number;
@@ -143,11 +165,15 @@ export interface OverviewRow {
   clearingSubtotal: number;
   billingSubtotal: number;
   totalInterfacingDue: number;
+  previousPeriodBalance: number;
   overdueBalance: number;
   dueBalance: number;
   paymentBySixt: number;
   paymentByPartner: number;
   balanceOpenItems: number;
+  clearingBreakdown: OverviewSubBreakdown[];
+  operationalBreakdown: OverviewSubBreakdown[];
+  contractualBreakdown: OverviewSubBreakdown[];
 }
 
 export interface InterfacingPlan {

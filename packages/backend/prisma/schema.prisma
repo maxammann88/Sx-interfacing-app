@@ -90,14 +90,47 @@ model SapImport {
   @@map("sap_imports")
 }
 
+model BillingCostImport {
+  id                    Int       @id @default(autoincrement())
+  uploadId              Int
+  upload                Upload    @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  yearMonth             String?
+  companyCode           String
+  postingDate           DateTime?
+  offsettingAcctNo      String?
+  assignment           String?
+  documentType         String?
+  documentDate         DateTime?
+  postingKey           String?
+  debitCreditInd       String?
+  amountLocalCurrency   Float     @default(0)
+  localCurrency        String?
+  taxCode              String?
+  text                 String?
+  postingPeriod        String?
+  costCenter           String?
+  bookingProgram       String?
+  account              String?
+  entryDate            DateTime?
+
+  @@index([uploadId])
+  @@index([companyCode])
+  @@index([costCenter])
+  @@index([yearMonth])
+  @@index([postingDate])
+  @@index([bookingProgram])
+  @@map("billing_cost_imports")
+}
+
 model Upload {
-  id               Int         @id @default(autoincrement())
+  id               Int                 @id @default(autoincrement())
   filename         String
   uploadType       String
   accountingPeriod String?
-  uploadedAt       DateTime    @default(now())
-  recordCount      Int         @default(0)
+  uploadedAt       DateTime            @default(now())
+  recordCount      Int                 @default(0)
   sapImports       SapImport[]
+  billingCostImports BillingCostImport[]
 
   @@map("uploads")
 }
