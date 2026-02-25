@@ -4,8 +4,8 @@ import { Link } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { theme } from '../styles/theme';
 import api from '../utils/api';
-import { getSubAppPath, getSubAppRegistry, getStreamOrder, saveStreamOrder, getSortedStreams, saveRegistry } from './ApiManagementPage';
-import { getTeamMemberNames } from './CodingTeamManagementPage';
+import { getSubAppPath, getSubAppRegistry, getStreamOrder, saveStreamOrder, getSortedStreams, saveRegistry } from './core/ApiManagementPage';
+import { getTeamMemberNames } from './core/CodingTeamManagementPage';
 
 const fadeIn = keyframes`
   from { opacity: 0; transform: translateY(12px); }
@@ -1152,7 +1152,7 @@ export default function PortalHomePage() {
         <LogoImg src="/sixt-logo.png" alt="SIXT" />
         <HeaderRight>
           <FeedbackLink to="/automation-controlling">Automation Controlling</FeedbackLink>
-          <FeedbackLink to="/coding-team">Coding Team</FeedbackLink>
+          <FeedbackLink to="/coding-team">Team</FeedbackLink>
           <FeedbackLink to="/api-management">API &amp; DB Docu</FeedbackLink>
           <FeedbackLink to="/collaboration-model">Collaboration Model</FeedbackLink>
           <FeedbackLink to="/feedback">Features &amp; Bugs</FeedbackLink>

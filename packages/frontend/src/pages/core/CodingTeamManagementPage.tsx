@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import styled from 'styled-components';
-import { theme } from '../styles/theme';
-import api from '../utils/api';
+import { theme } from '../../styles/theme';
+import api from '../../utils/api';
 import { getSubAppRegistry, getSortedStreams, SubAppOwnersTab } from './ApiManagementPage';
+import DeleteConfirmModal from '../../components/DeleteConfirmModal';
 
 const KNOWN_MEMBERS = [
   'Henning Seidel', 'Inês Boavida Couto', 'Herbert Krenn',
@@ -340,12 +341,13 @@ function TicketDetail({ ticket, onClose, onStatusChange }: {
 export default function CodingTeamManagementPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'priority' | 'team' | 'manage' | 'owners'>('priority');
+  const [tab, setTab] = useState<'priority' | 'team' | 'manage' | 'owners'>('owners');
   const [dragId, setDragId] = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
   const [detailTicket, setDetailTicket] = useState<Ticket | null>(null);
   const assigneeFixRan = useRef(false);
   const [managedMembers, setManagedMembers] = useState<TeamMember[]>(loadTeamMembers);
+  const [deleteModal, setDeleteModal] = useState<{ message: string; action: () => void } | null>(null);
   const [editIdx, setEditIdx] = useState<number | null>(null);
   const [editName, setEditName] = useState('');
   const [editRole, setEditRole] = useState('');
@@ -355,8 +357,8 @@ export default function CodingTeamManagementPage() {
   const [newStream, setNewStream] = useState('');
 
   const fetchManagedMembers = useCallback(() => {
-    api.get<TeamMember[]>('/team-members').then((res) => {
-      setManagedMembers(Array.isArray(res.data) ? res.data.map((m: any) => ({ name: m.name || '', role: m.role || '', stream: m.stream || '' })) : []);
+    api.get('/team-members').then((res) => {
+      setManagedMembers(Array.isArray(res.data) ? res.data.map((m: any) => ({ name: m.name || '', role: m.role || '', stream: m.stream || '', hasDeletePassword: !!m.hasDeletePassword })) : []);
     }).catch(() => {});
   }, []);
 
@@ -641,33 +643,14 @@ export default function CodingTeamManagementPage() {
       <Header>
         <Link to="/"><LogoImg src="/sixt-logo.png" alt="SIXT" /></Link>
         <BackLink to="/">&larr;</BackLink>
-        <HeaderTitle>Coding Team Management</HeaderTitle>
+        <HeaderTitle>Team Management</HeaderTitle>
       </Header>
 
       <Content>
-        <PageTitle>Coding Team Management</PageTitle>
+        <PageTitle>Team Management</PageTitle>
         <PageSub>Prioritize tickets together and track individual workloads. Priority numbers are shared across both views.</PageSub>
 
         {loading && <p style={{ color: theme.colors.textLight }}>Loading...</p>}
-
-        <SummaryRow>
-          <SummaryCard $color={theme.colors.primary}>
-            <SummaryValue>{stats.active}</SummaryValue>
-            <SummaryLabel>Active Tickets</SummaryLabel>
-          </SummaryCard>
-          <SummaryCard $color={theme.colors.success}>
-            <SummaryValue>{stats.done}</SummaryValue>
-            <SummaryLabel>Done</SummaryLabel>
-          </SummaryCard>
-          <SummaryCard $color={theme.colors.warning}>
-            <SummaryValue>{stats.totalHours.toFixed(1)} h</SummaryValue>
-            <SummaryLabel>Total Hours Saved</SummaryLabel>
-          </SummaryCard>
-          <SummaryCard $color={theme.colors.info}>
-            <SummaryValue>{stats.members}</SummaryValue>
-            <SummaryLabel>Team Members</SummaryLabel>
-          </SummaryCard>
-        </SummaryRow>
 
         <TabRow>
           <Tab $active={tab === 'priority'} onClick={() => setTab('priority')}>Priority Board</Tab>
@@ -754,10 +737,11 @@ export default function CodingTeamManagementPage() {
             <div style={{ fontSize: 14, fontWeight: 700, color: theme.colors.textPrimary, marginBottom: 16 }}>
               Team Members
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 160px', gap: '8px 12px', alignItems: 'center', marginBottom: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 140px 160px', gap: '8px 12px', alignItems: 'center', marginBottom: 16 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: theme.colors.textSecondary }}>Name</div>
               <div style={{ fontSize: 11, fontWeight: 700, color: theme.colors.textSecondary }}>Role / Sub-App</div>
               <div style={{ fontSize: 11, fontWeight: 700, color: theme.colors.textSecondary }}>Stream</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: theme.colors.textSecondary }}>Delete PW</div>
               <div style={{ fontSize: 11, fontWeight: 700, color: theme.colors.textSecondary }}>Actions</div>
 
               {managedMembers.map((m, idx) => (
@@ -779,6 +763,7 @@ export default function CodingTeamManagementPage() {
                         <option value="">– No Stream –</option>
                         {streamNames.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
+                      <div />
                       <div style={{ display: 'flex', gap: 6 }}>
                         <button
                           onClick={() => {
@@ -802,6 +787,25 @@ export default function CodingTeamManagementPage() {
                       <div style={{ fontSize: 13, fontWeight: 600, color: theme.colors.textPrimary }}>{m.name}</div>
                       <div style={{ fontSize: 13, color: theme.colors.textSecondary }}>{m.role || '–'}</div>
                       <div style={{ fontSize: 13, color: theme.colors.textSecondary }}>{m.stream || '–'}</div>
+                      <div>
+                        <input
+                          type="password"
+                          placeholder={(m as any).hasDeletePassword ? '••••' : 'Set PW'}
+                          style={{ padding: '4px 8px', borderRadius: 6, border: `1px solid ${theme.colors.border}`, fontSize: 12, width: '100%' }}
+                          onBlur={e => {
+                            const val = e.target.value.trim();
+                            if (val) {
+                              api.patch(`/team-members/${encodeURIComponent(m.name)}/delete-password`, { password: val }).then(() => {
+                                const updated = [...managedMembers];
+                                (updated[idx] as any).hasDeletePassword = true;
+                                setManagedMembers(updated);
+                              }).catch(() => {});
+                              e.target.value = '';
+                            }
+                          }}
+                          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                        />
+                      </div>
                       <div style={{ display: 'flex', gap: 6 }}>
                         <button
                           onClick={() => { setEditIdx(idx); setEditName(m.name); setEditRole(m.role); setEditStream(m.stream || ''); }}
@@ -809,9 +813,14 @@ export default function CodingTeamManagementPage() {
                         >Edit</button>
                         <button
                           onClick={() => {
-                            const updated = managedMembers.filter((_, i) => i !== idx);
-                            setManagedMembers(updated);
-                            saveTeamMembers(updated);
+                            setDeleteModal({
+                              message: `Team-Member "${m.name}" löschen?`,
+                              action: () => {
+                                const updated = managedMembers.filter((_, i) => i !== idx);
+                                setManagedMembers(updated);
+                                saveTeamMembers(updated);
+                              },
+                            });
                           }}
                           style={{ padding: '4px 12px', borderRadius: 6, border: 'none', background: theme.colors.danger, color: 'white', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
                         >Delete</button>
@@ -822,7 +831,7 @@ export default function CodingTeamManagementPage() {
               ))}
             </div>
 
-            <div style={{ borderTop: `1px solid ${theme.colors.border}`, paddingTop: 16, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 160px', gap: '8px 12px', alignItems: 'center' }}>
+            <div style={{ borderTop: `1px solid ${theme.colors.border}`, paddingTop: 16, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 140px 160px', gap: '8px 12px', alignItems: 'center' }}>
               <input
                 value={newName} onChange={e => setNewName(e.target.value)}
                 placeholder="Name"
@@ -840,6 +849,7 @@ export default function CodingTeamManagementPage() {
                 <option value="">– No Stream –</option>
                 {streamNames.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
+              <div />
               <button
                 onClick={() => {
                   if (!newName.trim()) return;
@@ -864,6 +874,14 @@ export default function CodingTeamManagementPage() {
           ticket={detailTicket}
           onClose={() => setDetailTicket(null)}
           onStatusChange={handleStatusChange}
+        />
+      )}
+
+      {deleteModal && (
+        <DeleteConfirmModal
+          message={deleteModal.message}
+          onConfirm={() => { deleteModal.action(); setDeleteModal(null); }}
+          onCancel={() => setDeleteModal(null)}
         />
       )}
     </Page>

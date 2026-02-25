@@ -118,6 +118,19 @@ router.get('/corrections', async (req: Request, res: Response, next: NextFunctio
   }
 });
 
+router.delete('/corrections', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const period = req.query.period as string;
+    if (!period) {
+      return res.status(400).json({ success: false, error: 'period is required' });
+    }
+    const result = await prisma.correctedStatement.deleteMany({ where: { period } });
+    res.json({ success: true, deleted: result.count });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.delete('/corrections/:countryId', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const countryId = parseInt(req.params.countryId as string, 10);

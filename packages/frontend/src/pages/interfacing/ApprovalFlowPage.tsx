@@ -1,7 +1,7 @@
 import React from 'react';
 import styled from 'styled-components';
-import { PageTitle, Card } from '../components/ui';
-import { theme } from '../styles/theme';
+import { PageTitle, Card } from '../../components/ui';
+import { theme } from '../../styles/theme';
 
 const InfoBox = styled.div`
   background: #f0f7ff;

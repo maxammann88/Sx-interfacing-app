@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
-import { PageTitle, Card } from '../components/ui';
-import { theme } from '../styles/theme';
-import FixVarPage from './FixVarPage';
+import { PageTitle, Card } from '../../components/ui';
+import { theme } from '../../styles/theme';
+import FixVarPage from './data-checks/FixVarPage';
 
 const TabBar = styled.div`
   display: flex;

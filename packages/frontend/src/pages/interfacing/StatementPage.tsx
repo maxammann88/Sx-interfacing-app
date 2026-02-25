@@ -1,15 +1,15 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import ReactSelect from 'react-select';
-import api from '../utils/api';
-import { formatEur, formatDateDE, generatePeriodOptions, getDefaultPeriod } from '../utils/format';
+import api from '../../utils/api';
+import { formatEur, formatDateDE, generatePeriodOptions, getDefaultPeriod } from '../../utils/format';
 import type { StatementData, StatementLine, Country, BillingBreakdown } from '@sixt/shared';
 import styled from 'styled-components';
 import {
   PageTitle, Card, Button, Select, Label, FormGroup, FormRow,
   Table, AmountCell, SubtotalRow, BalanceRow, TotalRow, SectionTitle,
   Spinner, Alert,
-} from '../components/ui';
-import { theme } from '../styles/theme';
+} from '../../components/ui';
+import { theme } from '../../styles/theme';
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const periodMonthName = (p: string) => MONTH_NAMES[parseInt(p.substring(4, 6), 10) - 1] || '';

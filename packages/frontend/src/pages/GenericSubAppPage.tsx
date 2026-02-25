@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { Link, useLocation, useParams, Navigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { theme } from '../styles/theme';
-import { getSubAppRegistry, slugify } from './ApiManagementPage';
+import { getSubAppRegistry, slugify } from './core/ApiManagementPage';
 import SubAppFeatureRequestsPage from './SubAppFeatureRequestsPage';
 
 const Wrapper = styled.div`

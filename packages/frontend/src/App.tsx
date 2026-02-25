@@ -51,32 +51,36 @@ import Layout from './components/Layout';
 import FsmLayout from './components/FsmLayout';
 import ParameterMaintenanceLayout from './components/ParameterMaintenanceLayout';
 import PortalHomePage from './pages/PortalHomePage';
-import FeedbackPage from './pages/FeedbackPage';
-import ImportPage from './pages/ImportPage';
-import StammdatenViewPage from './pages/StammdatenViewPage';
-import StatementPage from './pages/StatementPage';
-import InterfacingPlanningPage from './pages/InterfacingPlanningPage';
-import StatementOverviewPage from './pages/StatementOverviewPage';
-import ExportPage from './pages/ExportPage';
-import ApprovalFlowPage from './pages/ApprovalFlowPage';
-import DataQualityCheckPage from './pages/DataQualityCheckPage';
-import FixVarPage from './pages/FixVarPage';
-import FsmFeatureRequestsPage from './pages/fsm/FsmFeatureRequestsPage';
-import FsmBudgetPage from './pages/fsm/FsmBudgetPage';
-import FsmParametersPage from './pages/fsm/FsmParametersPage';
-import FsmCalculationPage from './pages/fsm/FsmCalculationPage';
-import FsmBookingsPage from './pages/fsm/FsmBookingsPage';
-import FsmReportingPage from './pages/fsm/FsmReportingPage';
+import GenericSubAppPage from './pages/GenericSubAppPage';
+
+import AutomationControllingPage from './pages/core/AutomationControllingPage';
+import CodingTeamManagementPage from './pages/core/CodingTeamManagementPage';
+import ApiManagementPage from './pages/core/ApiManagementPage';
+import CollaborationModelPage from './pages/core/CollaborationModelPage';
+import FeedbackPage from './pages/core/FeedbackPage';
+import { fetchRegistry } from './pages/core/ApiManagementPage';
+import { fetchTeamMembers } from './pages/core/CodingTeamManagementPage';
+
+import DataQualityCheckPage from './pages/interfacing/DataQualityCheckPage';
+import FixVarPage from './pages/interfacing/data-checks/FixVarPage';
+import ImportPage from './pages/interfacing/ImportPage';
+import StatementPage from './pages/interfacing/StatementPage';
+import StatementOverviewPage from './pages/interfacing/StatementOverviewPage';
+import InterfacingPlanningPage from './pages/interfacing/InterfacingPlanningPage';
+import ExportPage from './pages/interfacing/ExportPage';
+import ApprovalFlowPage from './pages/interfacing/ApprovalFlowPage';
+
+import MandantManagementPage from './pages/parameter-maintenance/MandantManagementPage';
 import CountryParametersPage from './pages/parameter-maintenance/CountryParametersPage';
 import AccountMappingPage from './pages/parameter-maintenance/AccountMappingPage';
 import PaymentTermsPage from './pages/parameter-maintenance/PaymentTermsPage';
-import AutomationControllingPage from './pages/AutomationControllingPage';
-import ApiManagementPage from './pages/ApiManagementPage';
-import CollaborationModelPage from './pages/CollaborationModelPage';
-import GenericSubAppPage from './pages/GenericSubAppPage';
-import CodingTeamManagementPage from './pages/CodingTeamManagementPage';
-import { fetchRegistry } from './pages/ApiManagementPage';
-import { fetchTeamMembers } from './pages/CodingTeamManagementPage';
+
+import FsmFeatureRequestsPage from './pages/fsm-calculation/FsmFeatureRequestsPage';
+import FsmBudgetPage from './pages/fsm-calculation/FsmBudgetPage';
+import FsmParametersPage from './pages/fsm-calculation/FsmParametersPage';
+import FsmCalculationPage from './pages/fsm-calculation/FsmCalculationPage';
+import FsmBookingsPage from './pages/fsm-calculation/FsmBookingsPage';
+import FsmReportingPage from './pages/fsm-calculation/FsmReportingPage';
 
 export default function App() {
   const [, setRegistryReady] = useState(0);
@@ -107,8 +111,8 @@ export default function App() {
           <Route path="/coding-team" element={<CodingTeamManagementPage />} />
 
           <Route path="/parameter-maintenance" element={<ParameterMaintenanceLayout />}>
-            <Route index element={<StammdatenViewPage />} />
-            <Route path="mandant" element={<StammdatenViewPage />} />
+            <Route index element={<MandantManagementPage />} />
+            <Route path="mandant" element={<MandantManagementPage />} />
             <Route path="countries" element={<CountryParametersPage />} />
             <Route path="accounts" element={<AccountMappingPage />} />
             <Route path="payment-terms" element={<PaymentTermsPage />} />

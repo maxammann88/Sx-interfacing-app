@@ -1,13 +1,13 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import styled from 'styled-components';
-import api from '../utils/api';
-import { formatPeriodLabel } from '../utils/format';
+import api from '../../utils/api';
+import { formatPeriodLabel } from '../../utils/format';
 import type { InterfacingPlan, Country } from '@sixt/shared';
 import {
   PageTitle, Card, Select, Label, Alert, Spinner, SectionTitle, Table, FormGroup, FormRow,
-} from '../components/ui';
-import { theme } from '../styles/theme';
-import { getTeamMemberNames } from './CodingTeamManagementPage';
+} from '../../components/ui';
+import { theme } from '../../styles/theme';
+import { getTeamMemberNames } from '../core/CodingTeamManagementPage';
 
 function getDefaultYear(): string {
   return String(new Date().getFullYear());
@@ -434,6 +434,9 @@ export default function InterfacingPlanningPage() {
                               onChange={e => saveAssignment(p, c.id, 'creator', e.target.value)}
                             >
                               <option value="">–</option>
+                              {a?.creator && !TEAM.includes(a.creator) && (
+                                <option key={a.creator} value={a.creator}>{a.creator}</option>
+                              )}
                               {TEAM.map(name => (
                                 <option key={name} value={name}>{name}</option>
                               ))}
@@ -445,6 +448,9 @@ export default function InterfacingPlanningPage() {
                               onChange={e => saveAssignment(p, c.id, 'reviewer', e.target.value)}
                             >
                               <option value="">–</option>
+                              {a?.reviewer && !TEAM.includes(a.reviewer) && (
+                                <option key={a.reviewer} value={a.reviewer}>{a.reviewer}</option>
+                              )}
                               {TEAM.map(name => (
                                 <option key={name} value={name}>{name}</option>
                               ))}

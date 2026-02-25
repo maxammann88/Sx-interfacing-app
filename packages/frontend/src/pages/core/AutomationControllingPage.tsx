@@ -1,8 +1,8 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import styled from 'styled-components';
-import { theme } from '../styles/theme';
-import api from '../utils/api';
+import { theme } from '../../styles/theme';
+import api from '../../utils/api';
 import { getSubAppRegistry, getSortedStreams, saveRegistry } from './ApiManagementPage';
 
 const Page = styled.div`

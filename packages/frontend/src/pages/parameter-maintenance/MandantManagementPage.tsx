@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import api from '../utils/api';
-import { formatDate, formatEur, getDefaultPeriod } from '../utils/format';
+import api from '../../utils/api';
+import { formatDate, formatEur, getDefaultPeriod } from '../../utils/format';
 import {
   PageTitle, Card, Table, Spinner, Alert, Select, FormRow, FormGroup, Label, Input, Badge,
-} from '../components/ui';
-import { theme } from '../styles/theme';
+} from '../../components/ui';
+import { theme } from '../../styles/theme';
 import styled from 'styled-components';
 
 const ScrollWrapper = styled.div`

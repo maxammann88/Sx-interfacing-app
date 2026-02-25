@@ -1,13 +1,14 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import styled from 'styled-components';
-import api from '../utils/api';
-import { generatePeriodOptions, formatDate } from '../utils/format';
+import api from '../../utils/api';
+import DeleteConfirmModal from '../../components/DeleteConfirmModal';
+import { generatePeriodOptions, formatDate } from '../../utils/format';
 import type { Upload } from '@sixt/shared';
 import {
   PageTitle, Card, Button, Select, Label, FormGroup, FormRow,
   FileInput, Alert, Spinner, SectionTitle, Table, Badge,
-} from '../components/ui';
-import { theme } from '../styles/theme';
+} from '../../components/ui';
+import { theme } from '../../styles/theme';
 
 const UploadCard = styled(Card)`
   border-top-left-radius: 0;
@@ -50,6 +51,7 @@ export default function ImportPage() {
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [uploadsLoading, setUploadsLoading] = useState(true);
   const [deleting, setDeleting] = useState<number | null>(null);
+  const [deleteModal, setDeleteModal] = useState<{ message: string; action: () => void } | null>(null);
 
   const sapRef = useRef<HTMLInputElement>(null);
   const countryRef = useRef<HTMLInputElement>(null);
@@ -69,17 +71,21 @@ export default function ImportPage() {
 
   useEffect(() => { loadUploads(); }, [loadUploads]);
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Delete this upload? All associated data will be removed.')) return;
-    setDeleting(id);
-    try {
-      await api.delete(`/uploads/${id}`);
-      loadUploads();
-    } catch (err: any) {
-      setMessage({ type: 'error', text: err.response?.data?.error || 'Error deleting upload' });
-    } finally {
-      setDeleting(null);
-    }
+  const handleDelete = (id: number) => {
+    setDeleteModal({
+      message: 'Upload und alle zugehörigen Daten löschen?',
+      action: async () => {
+        setDeleting(id);
+        try {
+          await api.delete(`/uploads/${id}`);
+          loadUploads();
+        } catch (err: any) {
+          setMessage({ type: 'error', text: err.response?.data?.error || 'Error deleting upload' });
+        } finally {
+          setDeleting(null);
+        }
+      },
+    });
   };
 
   const handleSapUpload = async () => {
@@ -315,6 +321,14 @@ export default function ImportPage() {
           </Table>
         )}
       </UploadCard>
+
+      {deleteModal && (
+        <DeleteConfirmModal
+          message={deleteModal.message}
+          onConfirm={() => { deleteModal.action(); setDeleteModal(null); }}
+          onCancel={() => setDeleteModal(null)}
+        />
+      )}
     </div>
   );
 }

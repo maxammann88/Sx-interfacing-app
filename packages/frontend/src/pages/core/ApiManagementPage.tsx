@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import styled from 'styled-components';
-import { theme } from '../styles/theme';
-import api from '../utils/api';
+import { theme } from '../../styles/theme';
+import api from '../../utils/api';
 import DbDocumentationPage from './DbDocumentationPage';
 import { getTeamMemberNames } from './CodingTeamManagementPage';
 

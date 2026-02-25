@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import styled from 'styled-components';
-import { theme } from '../styles/theme';
-import api from '../utils/api';
+import { theme } from '../../styles/theme';
+import api from '../../utils/api';
 import { getTeamMemberNames } from './CodingTeamManagementPage';
+import DeleteConfirmModal from '../../components/DeleteConfirmModal';
 
 interface FeedbackComment {
   id: number;
@@ -752,6 +753,7 @@ export default function FeedbackPage() {
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [saving, setSaving] = useState(false);
+  const [deleteModal, setDeleteModal] = useState<{ message: string; action: () => void } | null>(null);
 
   const [commentTexts, setCommentTexts] = useState<Record<number, string>>({});
   const [commentSaving, setCommentSaving] = useState<number | null>(null);
@@ -839,12 +841,16 @@ export default function FeedbackPage() {
     } catch { /* ignore */ }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!window.confirm('Delete this item?')) return;
-    try {
-      await api.delete(`/feedback/${id}`);
-      await loadItems();
-    } catch { /* ignore */ }
+  const handleDelete = (id: number) => {
+    setDeleteModal({
+      message: 'Dieses Ticket löschen?',
+      action: async () => {
+        try {
+          await api.delete(`/feedback/${id}`);
+          await loadItems();
+        } catch { /* ignore */ }
+      },
+    });
   };
 
   const handleAddComment = async (id: number) => {
@@ -1426,6 +1432,14 @@ export default function FeedbackPage() {
             <CloseBtn onClick={() => setHistoryModalItem(null)}>Close</CloseBtn>
           </ModalBox>
         </ModalOverlay>
+      )}
+
+      {deleteModal && (
+        <DeleteConfirmModal
+          message={deleteModal.message}
+          onConfirm={() => { deleteModal.action(); setDeleteModal(null); }}
+          onCancel={() => setDeleteModal(null)}
+        />
       )}
     </Page>
   );

@@ -1,13 +1,13 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import styled from 'styled-components';
-import api from '../utils/api';
-import { formatEur, generatePeriodOptions, getDefaultPeriod, formatPeriodLabel } from '../utils/format';
+import api from '../../utils/api';
+import { formatEur, generatePeriodOptions, getDefaultPeriod, formatPeriodLabel } from '../../utils/format';
 import type { OverviewRow, OverviewSubBreakdown, StatementData, StatementLine, PaymentItem } from '@sixt/shared';
 import {
   PageTitle, Card, Button, Select, Label, FormGroup, FormRow,
   Table, Spinner, Alert, AmountCell, SubtotalRow, Input, SectionTitle,
-} from '../components/ui';
-import { theme } from '../styles/theme';
+} from '../../components/ui';
+import { theme } from '../../styles/theme';
 
 const DARK_COL_BG = '#3a3a3a';
 const DARK_COL_BG_ROW = '#e8e5de';

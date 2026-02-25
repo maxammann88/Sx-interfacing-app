@@ -3,8 +3,8 @@ import styled from 'styled-components';
 import { PageTitle } from '../../components/ui';
 import { theme } from '../../styles/theme';
 import api from '../../utils/api';
-import { getSubAppRegistry } from '../ApiManagementPage';
-import { getTeamMemberNames } from '../CodingTeamManagementPage';
+import { getSubAppRegistry } from '../core/ApiManagementPage';
+import { getTeamMemberNames } from '../core/CodingTeamManagementPage';
 
 interface FeedbackComment {
   id: number;

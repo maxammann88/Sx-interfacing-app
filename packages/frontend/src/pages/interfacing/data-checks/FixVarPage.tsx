@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import ReactSelect from 'react-select';
-import api from '../utils/api';
-import { formatEur, generatePeriodOptions, getDefaultPeriod } from '../utils/format';
+import api from '../../../utils/api';
+import { formatEur, generatePeriodOptions, getDefaultPeriod } from '../../../utils/format';
 import type { Country } from '@sixt/shared';
 import styled from 'styled-components';
 import {
@@ -16,8 +16,8 @@ import {
   SectionTitle,
   Spinner,
   Alert,
-} from '../components/ui';
-import { theme } from '../styles/theme';
+} from '../../../components/ui';
+import { theme } from '../../../styles/theme';
 
 interface BillingLine {
   id: number;

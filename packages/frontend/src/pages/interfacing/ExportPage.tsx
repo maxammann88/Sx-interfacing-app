@@ -1,13 +1,14 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import styled from 'styled-components';
-import api from '../utils/api';
-import { generatePeriodOptions, getDefaultPeriod } from '../utils/format';
+import api from '../../utils/api';
+import DeleteConfirmModal from '../../components/DeleteConfirmModal';
+import { generatePeriodOptions, getDefaultPeriod } from '../../utils/format';
 import type { Country } from '@sixt/shared';
 import {
   PageTitle, Card, Table, Button, Select, Input, Label, FormGroup, FormRow,
   Spinner, Alert, Badge,
-} from '../components/ui';
-import { theme } from '../styles/theme';
+} from '../../components/ui';
+import { theme } from '../../styles/theme';
 
 const BulkButton = styled(Button)`
   background: ${theme.colors.primary};
@@ -101,6 +102,20 @@ const OriginalBadge = styled(Badge)`
   margin-left: 6px;
 `;
 
+const DeleteBtn = styled.button`
+  padding: 4px 10px;
+  border: 1px solid ${theme.colors.danger};
+  background: white;
+  color: ${theme.colors.danger};
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-left: 4px;
+  &:hover { background: ${theme.colors.danger}; color: white; }
+  &:disabled { opacity: 0.4; cursor: default; }
+`;
+
 export default function ExportPage() {
   const [countries, setCountries] = useState<Country[]>([]);
   const [period, setPeriod] = useState(getDefaultPeriod());
@@ -122,6 +137,7 @@ export default function ExportPage() {
   const [exportingCorrXlsx, setExportingCorrXlsx] = useState<string | null>(null);
   const [rawDataExporting, setRawDataExporting] = useState(false);
   const [rawDataProgress, setRawDataProgress] = useState(0);
+  const [deleteModal, setDeleteModal] = useState<{ message: string; action: () => void } | null>(null);
 
   const periods = generatePeriodOptions();
 
@@ -384,6 +400,42 @@ export default function ExportPage() {
     }
   };
 
+  const reloadCorrections = useCallback(() => {
+    if (!period) return;
+    api.get('/export/corrections', { params: { period } })
+      .then(res => setCorrections(res.data.data || {}))
+      .catch(() => setCorrections({}));
+  }, [period]);
+
+  const handleDeleteCorrection = (countryId: number) => {
+    setDeleteModal({
+      message: 'Corrected statement(s) für dieses Land löschen?',
+      action: async () => {
+        try {
+          await api.delete(`/export/corrections/${countryId}`, { params: { period } });
+          reloadCorrections();
+        } catch {
+          setError('Error deleting correction.');
+        }
+      },
+    });
+  };
+
+  const handleDeleteAllCorrections = () => {
+    const count = Object.values(corrections).reduce((sum, arr) => sum + arr.length, 0);
+    setDeleteModal({
+      message: `Alle ${count} Corrected Statements für Periode ${period} löschen?`,
+      action: async () => {
+        try {
+          await api.delete('/export/corrections', { params: { period } });
+          reloadCorrections();
+        } catch {
+          setError('Error deleting corrections.');
+        }
+      },
+    });
+  };
+
   const closePreview = () => {
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl);
@@ -440,6 +492,18 @@ export default function ExportPage() {
               {rawDataExporting ? 'Exporting...' : 'Export Raw Data (XLSX)'}
             </BulkButton>
           </FormGroup>
+          {Object.values(corrections).some(arr => arr.length > 0) && (
+            <FormGroup>
+              <Label>&nbsp;</Label>
+              <BulkButton
+                onClick={handleDeleteAllCorrections}
+                disabled={!period}
+                style={{ background: theme.colors.danger }}
+              >
+                Delete All Corrections ({Object.values(corrections).reduce((s, a) => s + a.length, 0)})
+              </BulkButton>
+            </FormGroup>
+          )}
         </FormRow>
         {bulkExporting && (
           <>
@@ -566,6 +630,9 @@ export default function ExportPage() {
                           >
                             {exportingCorrXlsx === corrKey ? 'Exporting...' : 'XLSX'}
                           </Button>
+                          <DeleteBtn onClick={() => handleDeleteCorrection(c.id)}>
+                            Delete
+                          </DeleteBtn>
                         </td>
                       </tr>
                     );
@@ -591,6 +658,14 @@ export default function ExportPage() {
             />
           </ModalContainer>
         </Overlay>
+      )}
+
+      {deleteModal && (
+        <DeleteConfirmModal
+          message={deleteModal.message}
+          onConfirm={() => { deleteModal.action(); setDeleteModal(null); }}
+          onCancel={() => setDeleteModal(null)}
+        />
       )}
     </div>
   );
