@@ -1151,7 +1151,7 @@ export default function PortalHomePage() {
       <Header>
         <LogoImg src="/sixt-logo.png" alt="SIXT" />
         <HeaderRight>
-          <FeedbackLink to="/automation-controlling">Automation Controlling</FeedbackLink>
+          <FeedbackLink to="/automation-controlling">Automation CO</FeedbackLink>
           <FeedbackLink to="/coding-team">Team</FeedbackLink>
           <FeedbackLink to="/api-management">API &amp; DB Docu</FeedbackLink>
           <FeedbackLink to="/collaboration-model">Collaboration Model</FeedbackLink>

@@ -1,13 +1,13 @@
 import React from 'react';
 import { PageTitle, Card } from '../../components/ui';
 
-export default function FsmCalculationPage() {
+export default function FsmDataUploadPage() {
   return (
     <div>
-      <PageTitle>Calculation Rules</PageTitle>
+      <PageTitle>Data Upload</PageTitle>
       <Card>
         <p style={{ color: '#999', textAlign: 'center', padding: 40 }}>
-          FSM calculation engine coming soon.
+          Data upload coming soon.
         </p>
       </Card>
     </div>

@@ -76,10 +76,9 @@ import AccountMappingPage from './pages/parameter-maintenance/AccountMappingPage
 import PaymentTermsPage from './pages/parameter-maintenance/PaymentTermsPage';
 
 import FsmFeatureRequestsPage from './pages/fsm-calculation/FsmFeatureRequestsPage';
-import FsmBudgetPage from './pages/fsm-calculation/FsmBudgetPage';
+import FsmDataUploadPage from './pages/fsm-calculation/FsmDataUploadPage';
 import FsmParametersPage from './pages/fsm-calculation/FsmParametersPage';
 import FsmCalculationPage from './pages/fsm-calculation/FsmCalculationPage';
-import FsmBookingsPage from './pages/fsm-calculation/FsmBookingsPage';
 import FsmReportingPage from './pages/fsm-calculation/FsmReportingPage';
 
 export default function App() {
@@ -133,10 +132,9 @@ export default function App() {
           <Route path="/fsm" element={<FsmLayout />}>
             <Route index element={<FsmFeatureRequestsPage />} />
             <Route path="feature-requests" element={<FsmFeatureRequestsPage />} />
-            <Route path="budget" element={<FsmBudgetPage />} />
+            <Route path="data-upload" element={<FsmDataUploadPage />} />
             <Route path="parameters" element={<FsmParametersPage />} />
             <Route path="calculation" element={<FsmCalculationPage />} />
-            <Route path="bookings" element={<FsmBookingsPage />} />
             <Route path="reporting" element={<FsmReportingPage />} />
           </Route>
 

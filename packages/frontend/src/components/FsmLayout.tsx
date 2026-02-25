@@ -69,11 +69,10 @@ const Main = styled.main`
 
 const navItems = [
   { path: '/fsm/feature-requests', label: 'Feature Request List' },
-  { path: '/fsm/budget', label: 'Budget Management' },
+  { path: '/fsm/data-upload', label: 'Data Upload' },
   { path: '/fsm/parameters', label: 'Calc. Parameter' },
-  { path: '/fsm/calculation', label: 'Calculation' },
-  { path: '/fsm/bookings', label: 'Bookings' },
-  { path: '/fsm/reporting', label: 'Reporting' },
+  { path: '/fsm/calculation', label: 'Calculation Rules' },
+  { path: '/fsm/reporting', label: 'Download' },
 ];
 
 export default function FsmLayout() {
