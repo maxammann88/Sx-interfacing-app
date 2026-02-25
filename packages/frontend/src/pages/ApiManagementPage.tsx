@@ -288,29 +288,77 @@ interface ApiEndpoint {
 }
 
 const endpoints: ApiEndpoint[] = [
-  { method: 'GET', path: '/api/feedback', description: 'List all feedback items (optional ?app= filter)', app: 'Core', status: 'active', auth: false },
-  { method: 'POST', path: '/api/feedback', description: 'Create new feedback item', app: 'Core', status: 'active', auth: false },
+  // --- Uploads (Data Import) ---
+  { method: 'POST', path: '/api/uploads/sap', description: 'Upload SAP CSV (appends data)', app: 'Interfacing', status: 'active', auth: false },
+  { method: 'POST', path: '/api/uploads/countries', description: 'Upload Countries CSV (replaces all)', app: 'Interfacing', status: 'active', auth: false },
+  { method: 'POST', path: '/api/uploads/master-data', description: 'Upload Master Data CSV (upsert)', app: 'Interfacing', status: 'active', auth: false },
+  { method: 'POST', path: '/api/uploads/billing-costs', description: 'Upload BU88/BU89 Billing Costs CSV (appends)', app: 'Interfacing', status: 'active', auth: false },
+  { method: 'POST', path: '/api/uploads/deposit', description: 'Upload Deposit CSV (replaces all)', app: 'Interfacing', status: 'active', auth: false },
+  { method: 'GET', path: '/api/uploads/deposit-summary', description: 'Deposit held sums by offsettingAcctNo (*-1)', app: 'Interfacing', status: 'active', auth: false },
+  { method: 'GET', path: '/api/uploads/bank-guarantees', description: 'Bank guarantee amounts by debitor1', app: 'Interfacing', status: 'active', auth: false },
+  { method: 'PUT', path: '/api/uploads/bank-guarantees', description: 'Upsert bank guarantee for a debitor1', app: 'Interfacing', status: 'active', auth: false },
+  { method: 'GET', path: '/api/uploads', description: 'List all upload records', app: 'Interfacing', status: 'active', auth: false },
+  { method: 'DELETE', path: '/api/uploads/:id', description: 'Delete upload and cascaded imports', app: 'Interfacing', status: 'active', auth: false },
+  // --- Countries ---
+  { method: 'GET', path: '/api/countries', description: 'List countries (optional ?status= filter)', app: 'Interfacing', status: 'active', auth: false },
+  { method: 'GET', path: '/api/countries/:id', description: 'Get single country by ID', app: 'Interfacing', status: 'active', auth: false },
+  // --- Master Data ---
+  { method: 'GET', path: '/api/master-data', description: 'Countries with joined master data', app: 'Interfacing', status: 'active', auth: false },
+  { method: 'PATCH', path: '/api/master-data/:id/payment-block', description: 'Toggle payment block for country', app: 'Interfacing', status: 'active', auth: false },
+  // --- Statement ---
+  { method: 'GET', path: '/api/statement/overview', description: 'Statement overview for all countries', app: 'Interfacing', status: 'active', auth: false },
+  { method: 'GET', path: '/api/statement/:countryId', description: 'Generate full statement for country/period', app: 'Interfacing', status: 'active', auth: false },
+  // --- Fix/Var ---
+  { method: 'GET', path: '/api/fix-var', description: 'Fix/Var breakdown for country/period', app: 'Interfacing', status: 'active', auth: false },
+  { method: 'GET', path: '/api/fix-var/overview', description: 'Fix/Var overview all countries', app: 'Interfacing', status: 'active', auth: false },
+  // --- Export ---
+  { method: 'POST', path: '/api/export/render/pdf', description: 'Render statement as PDF from JSON data', app: 'Interfacing', status: 'active', auth: false },
+  { method: 'POST', path: '/api/export/render/xlsx', description: 'Render statement as XLSX from JSON data', app: 'Interfacing', status: 'active', auth: false },
+  { method: 'GET', path: '/api/export/:countryId/pdf', description: 'Generate PDF for country statement', app: 'Interfacing', status: 'active', auth: false },
+  { method: 'GET', path: '/api/export/:countryId/xlsx', description: 'Generate XLSX for country statement', app: 'Interfacing', status: 'active', auth: false },
+  { method: 'GET', path: '/api/export/:countryId/preview', description: 'HTML preview of statement', app: 'Interfacing', status: 'active', auth: false },
+  { method: 'GET', path: '/api/export/bulk/pdf', description: 'Bulk PDF export for all countries', app: 'Interfacing', status: 'active', auth: false },
+  { method: 'GET', path: '/api/export/bulk/xlsx', description: 'Bulk XLSX export for all countries', app: 'Interfacing', status: 'active', auth: false },
+  { method: 'GET', path: '/api/export/bulk/raw-data', description: 'Export raw SAP data as XLSX', app: 'Interfacing', status: 'active', auth: false },
+  { method: 'POST', path: '/api/export/corrections', description: 'Save corrected statement version', app: 'Interfacing', status: 'active', auth: false },
+  { method: 'GET', path: '/api/export/corrections', description: 'List corrected statements', app: 'Interfacing', status: 'active', auth: false },
+  { method: 'DELETE', path: '/api/export/corrections/:countryId', description: 'Delete corrected statement', app: 'Interfacing', status: 'active', auth: false },
+  // --- Planning ---
+  { method: 'GET', path: '/api/planning', description: 'List all interfacing plans', app: 'Interfacing', status: 'active', auth: false },
+  { method: 'GET', path: '/api/planning/:period', description: 'Get plan for period (releaseDate etc.)', app: 'Interfacing', status: 'active', auth: false },
+  { method: 'PUT', path: '/api/planning/:period', description: 'Upsert plan for period', app: 'Interfacing', status: 'active', auth: false },
+  { method: 'GET', path: '/api/planning/assignments', description: 'Country-plan assignments for period', app: 'Interfacing', status: 'active', auth: false },
+  { method: 'PUT', path: '/api/planning/assignments/:period/:countryId', description: 'Upsert country assignment', app: 'Interfacing', status: 'active', auth: false },
+  // --- Billing Runs ---
+  { method: 'GET', path: '/api/billing-runs', description: 'List billing runs', app: 'Interfacing', status: 'active', auth: false },
+  { method: 'POST', path: '/api/billing-runs', description: 'Create billing run', app: 'Interfacing', status: 'active', auth: false },
+  // --- Feedback / Tickets ---
+  { method: 'GET', path: '/api/feedback', description: 'List feedback items (?app= filter)', app: 'Core', status: 'active', auth: false },
+  { method: 'POST', path: '/api/feedback', description: 'Create new feedback/ticket', app: 'Core', status: 'active', auth: false },
+  { method: 'DELETE', path: '/api/feedback/:id', description: 'Delete feedback item', app: 'Core', status: 'active', auth: false },
   { method: 'PATCH', path: '/api/feedback/:id/status', description: 'Update ticket status', app: 'Core', status: 'active', auth: false },
   { method: 'PATCH', path: '/api/feedback/:id/notes', description: 'Update working notes', app: 'Core', status: 'active', auth: false },
   { method: 'PATCH', path: '/api/feedback/:id/links', description: 'Update Jira/Confluence links', app: 'Core', status: 'active', auth: false },
-  { method: 'PATCH', path: '/api/feedback/:id/deadline', description: 'Update deadline with history tracking', app: 'Core', status: 'active', auth: false },
-  { method: 'PATCH', path: '/api/feedback/:id/automation-fte', description: 'Update automation FTE value', app: 'Core', status: 'active', auth: false },
+  { method: 'PATCH', path: '/api/feedback/:id/deadline', description: 'Update deadline with history', app: 'Core', status: 'active', auth: false },
+  { method: 'PATCH', path: '/api/feedback/:id/app', description: 'Reassign ticket to another app', app: 'Core', status: 'active', auth: false },
+  { method: 'PATCH', path: '/api/feedback/:id/assignee', description: 'Update ticket assignee', app: 'Core', status: 'active', auth: false },
+  { method: 'PATCH', path: '/api/feedback/:id/automation-fte', description: 'Update hours saved value', app: 'Core', status: 'active', auth: false },
+  { method: 'PATCH', path: '/api/feedback/:id/coding-effort', description: 'Update coding effort hours', app: 'Core', status: 'active', auth: false },
+  { method: 'PATCH', path: '/api/feedback/:id/peak-percent', description: 'Update peak time percentage', app: 'Core', status: 'active', auth: false },
+  { method: 'PATCH', path: '/api/feedback/:id/priority', description: 'Update ticket priority', app: 'Core', status: 'active', auth: false },
+  { method: 'PATCH', path: '/api/feedback/bulk/priority', description: 'Bulk update ticket priorities', app: 'Core', status: 'active', auth: false },
+  { method: 'PATCH', path: '/api/feedback/bulk/assignee', description: 'Bulk update ticket assignees', app: 'Core', status: 'active', auth: false },
   { method: 'GET', path: '/api/feedback/automation-summary', description: 'Aggregated FTE summary by app', app: 'Core', status: 'active', auth: false },
-  { method: 'DELETE', path: '/api/feedback/:id', description: 'Delete feedback item', app: 'Core', status: 'active', auth: false },
-  { method: 'POST', path: '/api/feedback/:id/comments', description: 'Add comment to feedback item', app: 'Core', status: 'active', auth: false },
-  { method: 'GET', path: '/api/master-data', description: 'List all countries with master data', app: 'Interfacing', status: 'active', auth: false },
-  { method: 'PATCH', path: '/api/master-data/:id/payment-block', description: 'Toggle payment block for country', app: 'Interfacing', status: 'active', auth: false },
-  { method: 'POST', path: '/api/import/sap', description: 'Upload SAP CSV file', app: 'Interfacing', status: 'active', auth: false },
-  { method: 'POST', path: '/api/import/countries', description: 'Upload Countries CSV file', app: 'Interfacing', status: 'active', auth: false },
-  { method: 'POST', path: '/api/import/master-data', description: 'Upload Master Data CSV file', app: 'Interfacing', status: 'active', auth: false },
-  { method: 'POST', path: '/api/import/deposit', description: 'Upload Deposit CSV file', app: 'Interfacing', status: 'active', auth: false },
-  { method: 'GET', path: '/api/statement/:countryId', description: 'Generate statement for a country/period', app: 'Interfacing', status: 'active', auth: false },
-  { method: 'GET', path: '/api/statement/overview', description: 'Statement overview for all countries', app: 'Interfacing', status: 'active', auth: false },
-  { method: 'GET', path: '/api/export/pdf/:countryId', description: 'Generate PDF for a country statement', app: 'Interfacing', status: 'active', auth: false },
-  { method: 'GET', path: '/api/export/xlsx/:countryId', description: 'Generate XLSX for a country statement', app: 'Interfacing', status: 'active', auth: false },
-  { method: 'POST', path: '/api/export/corrections', description: 'Save corrected statement version', app: 'Interfacing', status: 'active', auth: false },
-  { method: 'GET', path: '/api/export/corrections', description: 'List corrected statements', app: 'Interfacing', status: 'active', auth: false },
-  { method: 'GET', path: '/api/export/bulk/raw-data', description: 'Export raw SAP data as XLSX', app: 'Interfacing', status: 'active', auth: false },
+  { method: 'POST', path: '/api/feedback/:id/comments', description: 'Add comment to ticket', app: 'Core', status: 'active', auth: false },
+  // --- Registry (Streams & Sub-Apps) ---
+  { method: 'GET', path: '/api/registry', description: 'Get stream order + sub-app registry', app: 'Core', status: 'active', auth: false },
+  { method: 'PUT', path: '/api/registry', description: 'Save stream order + sub-app registry', app: 'Core', status: 'active', auth: false },
+  // --- Team Members ---
+  { method: 'GET', path: '/api/team-members', description: 'List all team members', app: 'Core', status: 'active', auth: false },
+  { method: 'PUT', path: '/api/team-members', description: 'Replace full team member list', app: 'Core', status: 'active', auth: false },
+  // --- KPIs ---
+  { method: 'GET', path: '/api/kpis', description: 'Home page KPIs (hours, LOC, etc.)', app: 'Core', status: 'active', auth: false },
+  // --- FSM (planned) ---
   { method: 'GET', path: '/api/fsm/parameters', description: 'Get calculation parameters', app: 'FSM', status: 'planned', auth: true },
   { method: 'POST', path: '/api/fsm/calculate', description: 'Run FSM calculation', app: 'FSM', status: 'planned', auth: true },
   { method: 'GET', path: '/api/fsm/results', description: 'Get calculation results', app: 'FSM', status: 'planned', auth: true },
@@ -333,7 +381,7 @@ function ApiRegistryTab() {
 
   return (
     <Content>
-      <PageTitle>API Management</PageTitle>
+      <PageTitle>API Documentation</PageTitle>
 
       <SummaryRow>
         <SummaryCard $color={theme.colors.primary}>
@@ -886,12 +934,12 @@ export default function ApiManagementPage() {
       <Header>
         <Link to="/"><LogoImg src="/sixt-logo.png" alt="SIXT" /></Link>
         <BackLink to="/">&larr;</BackLink>
-        <HeaderTitle>API, App, DB Management</HeaderTitle>
+        <HeaderTitle>API &amp; DB Docu</HeaderTitle>
       </Header>
 
       <TabBar>
-        <Tab $active={activeTab === 'api'} onClick={() => setActiveTab('api')}>API Management</Tab>
-        <Tab $active={activeTab === 'db'} onClick={() => setActiveTab('db')}>App &amp; DB Documentation</Tab>
+        <Tab $active={activeTab === 'api'} onClick={() => setActiveTab('api')}>API Documentation</Tab>
+        <Tab $active={activeTab === 'db'} onClick={() => setActiveTab('db')}>DB Documentation</Tab>
       </TabBar>
 
       {activeTab === 'api' && <ApiRegistryTab />}

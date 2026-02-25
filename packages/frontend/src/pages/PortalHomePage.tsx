@@ -1153,7 +1153,7 @@ export default function PortalHomePage() {
         <HeaderRight>
           <FeedbackLink to="/automation-controlling">Automation Controlling</FeedbackLink>
           <FeedbackLink to="/coding-team">Coding Team</FeedbackLink>
-          <FeedbackLink to="/api-management">API, App, DB Management</FeedbackLink>
+          <FeedbackLink to="/api-management">API &amp; DB Docu</FeedbackLink>
           <FeedbackLink to="/collaboration-model">Collaboration Model</FeedbackLink>
           <FeedbackLink to="/feedback">Features &amp; Bugs</FeedbackLink>
           <HeaderText>You rock today!</HeaderText>
