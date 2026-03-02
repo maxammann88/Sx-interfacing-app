@@ -178,6 +178,22 @@ const DfrTag = styled.div`
   }
 `;
 
+const FeeVariant = styled.div`
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed #e0e0e0;
+`;
+
+const VariantLabel = styled.div`
+  font-size: 12px;
+  font-weight: 600;
+  color: ${props => props.theme.colors.text};
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+`;
+
 const DfrSubItem = styled.div`
   display: flex;
   justify-content: space-between;
@@ -421,16 +437,42 @@ export default function FsmParametersPage() {
           </PartnerHeader>
           
           <RegionLabel>POS (Point of Sale)</RegionLabel>
-          <RegionFees>
-            {partner.feesByRegion.map(fee => (
-              <FeeItem key={fee.region}>
-                <label>{fee.region}</label>
-                <div className="value">
-                  {fee.currency} {fee.amount.toFixed(2)}
-                </div>
-              </FeeItem>
-            ))}
-          </RegionFees>
+          
+          {/* Standard Fee */}
+          <div>
+            <VariantLabel>
+              {partner.id === 'amadeus' ? '🎫 Without eVoucher' : 'Standard Fee'}
+            </VariantLabel>
+            <RegionFees>
+              {partner.feesByRegion.map(fee => (
+                <FeeItem key={fee.region}>
+                  <label>{fee.region}</label>
+                  <div className="value">
+                    {fee.currency} {(partner.id === 'amadeus' ? 5.29 : fee.amount).toFixed(2)}
+                  </div>
+                </FeeItem>
+              ))}
+            </RegionFees>
+          </div>
+
+          {/* eVoucher Fee for Amadeus */}
+          {partner.id === 'amadeus' && (
+            <FeeVariant>
+              <VariantLabel>
+                🎟️ With eVoucher
+              </VariantLabel>
+              <RegionFees>
+                {partner.feesByRegion.map(fee => (
+                  <FeeItem key={fee.region}>
+                    <label>{fee.region}</label>
+                    <div className="value">
+                      {fee.currency} {fee.amount.toFixed(2)}
+                    </div>
+                  </FeeItem>
+                ))}
+              </RegionFees>
+            </FeeVariant>
+          )}
 
           {partner.voucherRules && Object.keys(partner.voucherRules.dfrFees).length > 0 && (
             <DfrSection>
