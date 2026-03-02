@@ -154,11 +154,6 @@ export default function FsmCalculationPage() {
                 <ExpandIcon isOpen={rulesOpen}>▼</ExpandIcon>
               </SectionHeader>
               <SectionContent isOpen={rulesOpen}>
-                <InfoBox type="info">
-                  <strong>Future State Implementation:</strong> Fee is charged unless cancelled via the same 
-                  partner (not just original booking channel). Fee amount is based on point of sale country.
-                </InfoBox>
-
                 <SubTitle>Decision Tree - Fee Validation</SubTitle>
                 <p>Every reservation must pass all 6 validation steps to be charged a fee:</p>
                 
@@ -255,21 +250,10 @@ export default function FsmCalculationPage() {
                   <li><strong>Point in time:</strong> Handover Date</li>
                 </ul>
 
-                <SubTitle>Responsible for Parameter Changes</SubTitle>
-                <p style={{ fontSize: 13, color: '#666' }}>
-                  Franchise Controlling
-                </p>
-
                 <SubTitle>Relevant Stakeholders</SubTitle>
                 <p style={{ fontSize: 13, color: '#666' }}>
                   B2P Key Account Management, Business Development, Franchise Accounting & Controlling
                 </p>
-
-                <InfoBox type="warning" style={{ marginTop: 24 }}>
-                  <strong>Important:</strong> GDS fees for Franchise and Corporate are not connected. 
-                  They can be considered independently of each other. Fee only applies where 
-                  Franchise & Corporate are connected (source: Thorsten, verbally on 11.02.26).
-                </InfoBox>
               </SectionContent>
             </CollapsibleSection>
           </Section>
