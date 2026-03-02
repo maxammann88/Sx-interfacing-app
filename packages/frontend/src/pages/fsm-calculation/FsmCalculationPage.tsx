@@ -197,10 +197,10 @@ export default function FsmCalculationPage() {
                   <DecisionStep>
                     <StepNumber>4</StepNumber>
                     <StepContent>
-                      <StepTitle>Mandant Code Pick-Up Branch Check</StepTitle>
+                      <StepTitle>Franchise Mandant Check</StepTitle>
                       <StepDescription>
                         Was the reservation made for a franchise branch?<br/>
-                        <strong>Condition:</strong> Mandant code is assigned to franchisee<br/>
+                        <strong>Condition:</strong> FIR code matches uploaded franchise country list (see Parameter Maintenance)<br/>
                         <strong>If fails:</strong> No fee charged (not a franchise booking)
                       </StepDescription>
                     </StepContent>

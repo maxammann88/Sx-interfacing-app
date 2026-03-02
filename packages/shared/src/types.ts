@@ -195,6 +195,12 @@ export interface ApiResponse<T> {
   message?: string;
 }
 
+export interface FranchiseMandant {
+  fir: string;
+  iso?: string;
+  countryName?: string;
+}
+
 export interface GdsDcfPartner {
   id: string;
   name: string;

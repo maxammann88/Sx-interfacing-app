@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { PageTitle, Card, Button, Input } from '../../components/ui';
-import { GdsDcfPartner } from '@sixt/shared';
+import { GdsDcfPartner, FranchiseMandant } from '@sixt/shared';
 
 const ParamsContainer = styled.div`
   padding: 20px;
@@ -42,13 +42,13 @@ const SectionTitle = styled.h2`
   gap: 12px;
 `;
 
-const CategoryBadge = styled.span<{ type: 'gds' | 'dcf' }>`
+const CategoryBadge = styled.span<{ type: 'gds' | 'dcf' | 'franchise' }>`
   padding: 4px 12px;
   border-radius: 12px;
   font-size: 12px;
   font-weight: 600;
-  background: ${props => props.type === 'gds' ? '#e3f2fd' : '#fff3e0'};
-  color: ${props => props.type === 'gds' ? '#1976d2' : '#f57c00'};
+  background: ${props => props.type === 'gds' ? '#e3f2fd' : props.type === 'dcf' ? '#fff3e0' : '#e8f5e9'};
+  color: ${props => props.type === 'gds' ? '#1976d2' : props.type === 'dcf' ? '#f57c00' : '#2e7d32'};
 `;
 
 const ExpandIcon = styled.span<{ isOpen: boolean }>`
@@ -281,16 +281,64 @@ const InfoMessage = styled.div`
   font-size: 14px;
 `;
 
+const MandantsTable = styled.table`
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 16px;
+
+  th {
+    background: #f5f5f5;
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 2px solid #e0e0e0;
+  }
+
+  td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  tbody tr:hover {
+    background: #fafafa;
+  }
+`;
+
+const UploadButton = styled(Button)`
+  position: relative;
+  cursor: pointer;
+`;
+
+const HiddenFileInput = styled.input`
+  display: none;
+`;
+
+const MessageBox = styled.div<{ type: 'success' | 'error' }>`
+  padding: 12px 16px;
+  border-radius: 6px;
+  margin: 16px 0;
+  background: ${props => props.type === 'success' ? '#d4edda' : '#f8d7da'};
+  border-left: 4px solid ${props => props.type === 'success' ? '#28a745' : '#dc3545'};
+  color: ${props => props.type === 'success' ? '#155724' : '#721c24'};
+  font-size: 13px;
+`;
+
 export default function FsmParametersPage() {
   const [partners, setPartners] = useState<GdsDcfPartner[]>([]);
+  const [mandants, setMandants] = useState<FranchiseMandant[]>([]);
   const [loading, setLoading] = useState(true);
+  const [mandantsLoading, setMandantsLoading] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [editingPartner, setEditingPartner] = useState<GdsDcfPartner | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [gdsOpen, setGdsOpen] = useState(false);
   const [dcfOpen, setDcfOpen] = useState(false);
+  const [mandantsOpen, setMandantsOpen] = useState(false);
 
   useEffect(() => {
     loadPartners();
+    loadMandants();
   }, []);
 
   const loadPartners = async () => {
@@ -304,6 +352,72 @@ export default function FsmParametersPage() {
       console.error('Failed to load partners:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMandants = async () => {
+    try {
+      const response = await fetch('/api/gds-dcf/mandants');
+      const result = await response.json();
+      if (result.success) {
+        setMandants(result.data);
+      }
+    } catch (err) {
+      console.error('Failed to load mandants:', err);
+    }
+  };
+
+  const handleMandantUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setMandantsLoading(true);
+    setUploadMessage(null);
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await fetch('/api/gds-dcf/mandants/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        setMandants(result.data.mandants);
+        setUploadMessage({ type: 'success', text: `Successfully loaded ${result.data.count} franchise countries` });
+        setMandantsOpen(true);
+      } else {
+        setUploadMessage({ type: 'error', text: result.error || 'Upload failed' });
+      }
+    } catch (err) {
+      console.error('Failed to upload mandants:', err);
+      setUploadMessage({ type: 'error', text: 'Failed to upload file' });
+    } finally {
+      setMandantsLoading(false);
+      event.target.value = '';
+    }
+  };
+
+  const handleClearMandants = async () => {
+    if (!confirm('Are you sure you want to clear all franchise mandants? This cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/gds-dcf/mandants', {
+        method: 'DELETE',
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        setMandants([]);
+        setUploadMessage({ type: 'success', text: `Cleared ${result.data.count} franchise countries` });
+      }
+    } catch (err) {
+      console.error('Failed to clear mandants:', err);
+      setUploadMessage({ type: 'error', text: 'Failed to clear mandants' });
     }
   };
 
@@ -703,6 +817,81 @@ export default function FsmParametersPage() {
                   <InfoMessage>No DCF partners configured.</InfoMessage>
                 ) : (
                   renderPartners(dcfPartners)
+                )}
+              </SectionContent>
+            </CollapsibleSection>
+          </Section>
+
+          <Section>
+            <CollapsibleSection>
+              <SectionHeader isOpen={mandantsOpen} onClick={() => setMandantsOpen(!mandantsOpen)}>
+                <SectionTitle>
+                  <CategoryBadge type="franchise">FRANCHISE</CategoryBadge>
+                  Franchise Mandants
+                  <span style={{ fontSize: 14, fontWeight: 'normal', color: '#666', marginLeft: 8 }}>
+                    ({mandants.length})
+                  </span>
+                </SectionTitle>
+                <ExpandIcon isOpen={mandantsOpen}>▼</ExpandIcon>
+              </SectionHeader>
+              <SectionContent isOpen={mandantsOpen}>
+                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingRight: 12 }}>
+                  <div style={{ fontSize: 13, color: '#666' }}>
+                    Upload Excel file with franchise country FIR codes (Column A)
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {mandants.length > 0 && (
+                      <Button 
+                        onClick={handleClearMandants} 
+                        style={{ fontSize: 13, background: '#dc3545' }}
+                      >
+                        Clear All
+                      </Button>
+                    )}
+                    <UploadButton as="label" style={{ fontSize: 13 }}>
+                      {mandantsLoading ? 'Uploading...' : '📤 Upload Excel'}
+                      <HiddenFileInput 
+                        type="file" 
+                        accept=".xlsx,.xls" 
+                        onChange={handleMandantUpload}
+                        disabled={mandantsLoading}
+                      />
+                    </UploadButton>
+                  </div>
+                </div>
+
+                {uploadMessage && (
+                  <MessageBox type={uploadMessage.type}>
+                    {uploadMessage.text}
+                  </MessageBox>
+                )}
+
+                {mandants.length === 0 ? (
+                  <InfoMessage>No franchise mandants loaded. Please upload an Excel file.</InfoMessage>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
+                      {mandants.length} Franchise Countries Loaded
+                    </div>
+                    <MandantsTable>
+                      <thead>
+                        <tr>
+                          <th>FIR</th>
+                          <th>ISO Code</th>
+                          <th>Country Name</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {mandants.map((mandant, idx) => (
+                          <tr key={idx}>
+                            <td><strong>{mandant.fir}</strong></td>
+                            <td>{mandant.iso || '-'}</td>
+                            <td>{mandant.countryName || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </MandantsTable>
+                  </>
                 )}
               </SectionContent>
             </CollapsibleSection>

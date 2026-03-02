@@ -77,7 +77,8 @@ router.post('/validate/:uploadId', async (req: Request, res: Response, next: Nex
       return res.status(404).json({ success: false, error: 'Upload not found or no reservations' });
     }
 
-    const franchiseCodes = ['08234'];
+    const mandants = await (prisma as any).franchiseMandant.findMany();
+    const franchiseCodes = mandants.map((m: any) => m.fir);
     const validator = new GdsDcfValidator(partnerConfigs, franchiseCodes);
 
     const results: GdsDcfValidationResult[] = reservations.map((r: GdsDcfReservation) => 
@@ -231,6 +232,66 @@ router.delete('/partners/:id', async (req: Request, res: Response, next: NextFun
     });
 
     res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/mandants/upload', upload.single('file'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No file uploaded' });
+    }
+
+    const filename = req.file.originalname;
+    const isExcel = filename.endsWith('.xlsx') || filename.endsWith('.xls');
+
+    if (!isExcel) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Please upload an Excel file (.xlsx or .xls)' 
+      });
+    }
+
+    const { parseFranchiseMandantExcel } = await import('../services/franchiseMandantParser');
+    const mandants = await parseFranchiseMandantExcel(req.file.buffer);
+
+    await (prisma as any).franchiseMandant.deleteMany();
+    await (prisma as any).franchiseMandant.createMany({ data: mandants });
+
+    res.json({
+      success: true,
+      data: {
+        count: mandants.length,
+        mandants,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/mandants', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const mandants = await (prisma as any).franchiseMandant.findMany();
+
+    res.json({
+      success: true,
+      data: mandants,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/mandants', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = await (prisma as any).franchiseMandant.deleteMany();
+
+    res.json({
+      success: true,
+      data: { count: result.count },
+    });
   } catch (err) {
     next(err);
   }

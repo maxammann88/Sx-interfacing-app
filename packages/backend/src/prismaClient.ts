@@ -15,6 +15,7 @@ interface MockData {
   gdsDcfUploads: any[];
   gdsDcfReservations: any[];
   gdsDcfValidationResults: any[];
+  franchiseMandants: any[];
 }
 
 const mockData: MockData = {
@@ -103,6 +104,7 @@ const mockData: MockData = {
   gdsDcfUploads: [],
   gdsDcfReservations: [],
   gdsDcfValidationResults: [],
+  franchiseMandants: [],
 };
 
 let idCounters = {
@@ -316,6 +318,23 @@ const mockPrisma = {
         return newItem;
       });
       return { count: created.length };
+    },
+  },
+  franchiseMandant: {
+    findMany: async () => {
+      return [...mockData.franchiseMandants];
+    },
+    createMany: async (options: any) => {
+      const items = options.data;
+      items.forEach((item: any) => {
+        mockData.franchiseMandants.push(item);
+      });
+      return { count: items.length };
+    },
+    deleteMany: async () => {
+      const count = mockData.franchiseMandants.length;
+      mockData.franchiseMandants = [];
+      return { count };
     },
   },
   
