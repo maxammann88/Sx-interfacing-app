@@ -166,7 +166,15 @@ export default function FsmDataUploadPage() {
         setUploadProgress(100);
 
         if (validateResult.success) {
-          alert(`Upload successful!\n\nTotal Reservations: ${validateResult.data.totalReservations}\nChargeable: ${validateResult.data.chargeableReservations}\nTotal Fees: ${validateResult.data.totalFees.toFixed(2)}`);
+          // Build success message
+          let message = `Upload successful!\n\nTotal Reservations: ${validateResult.data.totalReservations}\nChargeable: ${validateResult.data.chargeableReservations}\nTotal Fees: ${validateResult.data.totalFees.toFixed(2)}`;
+          
+          // Add warning for missing columns
+          if (result.data.missingColumns && result.data.missingColumns.length > 0) {
+            message += `\n\n⚠️ WARNING: Missing optional columns:\n${result.data.missingColumns.join(', ')}\n\nThese columns are used for more accurate validation. The system will use lenient mode with default assumptions.`;
+          }
+          
+          alert(message);
           await loadUploads();
         }
       } else {
@@ -219,7 +227,8 @@ export default function FsmDataUploadPage() {
             </UploadText>
             <UploadHint>
               Supported formats: Excel (.xlsx, .xls) or CSV (.csv)<br/>
-              Expected columns: RES-NUMBER, SOURCE, POS, PCI, PICK-UP, RATECODE, AGENCY, IATA, FEE
+              Required columns: RES-NUMBER, SOURCE, POS<br/>
+              Optional columns: MANDANT/FIR, STATUS, INVOICE TYPE, MSER, VOUCHER, DFR
             </UploadHint>
             {uploading && (
               <ProgressBar>

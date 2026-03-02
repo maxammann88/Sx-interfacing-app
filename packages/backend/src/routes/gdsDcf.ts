@@ -18,19 +18,21 @@ router.post('/upload', upload.single('file'), async (req: Request, res: Response
     const isExcel = filename.endsWith('.xlsx') || filename.endsWith('.xls');
     const isCsv = filename.endsWith('.csv');
 
-    let reservations: GdsDcfReservation[];
+    let parseResult: { reservations: GdsDcfReservation[], detectedColumns: string[], missingColumns: string[] };
 
     if (isExcel) {
-      reservations = await parseGdsDcfExcel(req.file.buffer);
+      parseResult = await parseGdsDcfExcel(req.file.buffer);
     } else if (isCsv) {
       const content = req.file.buffer.toString('utf-8');
-      reservations = parseGdsDcfCsv(content);
+      parseResult = parseGdsDcfCsv(content);
     } else {
       return res.status(400).json({ 
         success: false, 
         error: 'Invalid file format. Please upload .xlsx, .xls, or .csv file' 
       });
     }
+
+    const { reservations, detectedColumns, missingColumns } = parseResult;
 
     const uploadRecord = await (prisma as any).gdsDcfUpload.create({
       data: {
@@ -55,6 +57,8 @@ router.post('/upload', upload.single('file'), async (req: Request, res: Response
         uploadId: uploadRecord.id,
         filename,
         recordCount: reservations.length,
+        detectedColumns,
+        missingColumns,
       },
     });
   } catch (err: any) {

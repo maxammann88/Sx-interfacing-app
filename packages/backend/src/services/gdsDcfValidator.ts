@@ -102,16 +102,26 @@ export class GdsDcfValidator {
 
   private validateMandantCode(mandantCode?: string): { step: string; passed: boolean; reason?: string } {
     if (!mandantCode) {
+      // Lenient mode: If mandant code is missing, assume it's franchise and pass with warning
       return {
-        step: '4. Mandant Code Pick-Up Branch Check',
-        passed: false,
-        reason: 'No mandant code provided',
+        step: '4. Franchise Mandant Check',
+        passed: true,
+        reason: 'Mandant code not provided - assuming franchise (lenient mode)',
+      };
+    }
+    
+    // If no franchise mandants uploaded, pass with warning
+    if (this.franchiseMandantCodes.length === 0) {
+      return {
+        step: '4. Franchise Mandant Check',
+        passed: true,
+        reason: 'No franchise mandant list uploaded - assuming franchise (lenient mode)',
       };
     }
     
     const passed = this.franchiseMandantCodes.includes(mandantCode);
     return {
-      step: '4. Mandant Code Pick-Up Branch Check',
+      step: '4. Franchise Mandant Check',
       passed,
       reason: passed 
         ? `Mandant code ${mandantCode} belongs to franchise` 
@@ -121,10 +131,11 @@ export class GdsDcfValidator {
 
   private validateStatus(status?: string): { step: string; passed: boolean; reason?: string } {
     if (!status) {
+      // Lenient mode: If status is missing, assume reservation is valid
       return {
         step: '5. Reservation Status Check',
-        passed: false,
-        reason: 'No status information provided',
+        passed: true,
+        reason: 'Status not provided - assuming valid reservation (lenient mode)',
       };
     }
 
@@ -146,10 +157,11 @@ export class GdsDcfValidator {
 
   private validateInvoiceType(invoiceType?: string, serialNumber?: number): { step: string; passed: boolean; reason?: string } {
     if (!invoiceType) {
+      // Lenient mode: If invoice type is missing, assume it's a main invoice
       return {
         step: '6. Invoice Type and Serial Number Check',
-        passed: false,
-        reason: 'No invoice type provided',
+        passed: true,
+        reason: 'Invoice type not provided - assuming main invoice (lenient mode)',
       };
     }
 
