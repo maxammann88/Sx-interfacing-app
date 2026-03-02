@@ -8,26 +8,72 @@ const ParamsContainer = styled.div`
 `;
 
 const Section = styled.div`
-  margin-bottom: 32px;
+  margin-bottom: 24px;
+`;
+
+const CollapsibleSection = styled.div`
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: white;
+`;
+
+const SectionHeader = styled.div<{ isOpen: boolean }>`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: ${props => props.isOpen ? '#f8f9fa' : 'white'};
+  cursor: pointer;
+  transition: background 0.2s;
+  
+  &:hover {
+    background: #f8f9fa;
+  }
 `;
 
 const SectionTitle = styled.h2`
   font-size: 18px;
   font-weight: 600;
-  margin-bottom: 16px;
+  margin: 0;
   color: ${props => props.theme.colors.text};
+  display: flex;
+  align-items: center;
+  gap: 12px;
+`;
+
+const CategoryBadge = styled.span<{ type: 'gds' | 'dcf' }>`
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  background: ${props => props.type === 'gds' ? '#e3f2fd' : '#fff3e0'};
+  color: ${props => props.type === 'gds' ? '#1976d2' : '#f57c00'};
+`;
+
+const ExpandIcon = styled.span<{ isOpen: boolean }>`
+  font-size: 20px;
+  transition: transform 0.2s;
+  transform: ${props => props.isOpen ? 'rotate(180deg)' : 'rotate(0deg)'};
+`;
+
+const SectionContent = styled.div<{ isOpen: boolean }>`
+  max-height: ${props => props.isOpen ? '2000px' : '0'};
+  overflow: hidden;
+  transition: max-height 0.3s ease-in-out;
 `;
 
 const PartnersGrid = styled.div`
   display: grid;
   gap: 16px;
+  padding: 20px;
 `;
 
 const PartnerCard = styled.div`
   border: 1px solid #e0e0e0;
   border-radius: 8px;
   padding: 20px;
-  background: white;
+  background: #fafafa;
   
   &:hover {
     box-shadow: 0 2px 8px rgba(0,0,0,0.08);
@@ -62,8 +108,9 @@ const RegionFees = styled.div`
 
 const FeeItem = styled.div`
   padding: 12px;
-  background: #f8f9fa;
+  background: white;
   border-radius: 6px;
+  border: 1px solid #e0e0e0;
   
   label {
     font-size: 12px;
@@ -150,6 +197,8 @@ export default function FsmParametersPage() {
   const [loading, setLoading] = useState(true);
   const [editingPartner, setEditingPartner] = useState<GdsDcfPartner | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [gdsOpen, setGdsOpen] = useState(true);
+  const [dcfOpen, setDcfOpen] = useState(true);
 
   useEffect(() => {
     loadPartners();
@@ -225,6 +274,55 @@ export default function FsmParametersPage() {
     setEditingPartner({ ...editingPartner, feesByRegion: updatedFees });
   };
 
+  const gdsPartners = partners.filter(p => 
+    p.id === 'travelport' || p.id === 'sabre' || p.id === 'amadeus'
+  );
+
+  const dcfPartners = partners.filter(p => 
+    p.id === 'expedia-emea' || p.id === 'priceline-americas' || p.id === 'meili'
+  );
+
+  const renderPartners = (partnerList: GdsDcfPartner[]) => (
+    <PartnersGrid>
+      {partnerList.map(partner => (
+        <PartnerCard key={partner.id}>
+          <PartnerHeader>
+            <PartnerName>{partner.name}</PartnerName>
+            <ButtonGroup>
+              <Button onClick={() => handleEdit(partner)}>Edit</Button>
+              <Button onClick={() => handleDelete(partner.id)} style={{ background: '#dc3545' }}>
+                Delete
+              </Button>
+            </ButtonGroup>
+          </PartnerHeader>
+          
+          <SourceChannels>
+            <strong>Source Channels:</strong> {partner.sourceChannels.join(', ')}
+          </SourceChannels>
+          
+          <RegionFees>
+            {partner.feesByRegion.map(fee => (
+              <FeeItem key={fee.region}>
+                <label>{fee.region}</label>
+                <div className="value">
+                  {fee.currency} {fee.amount.toFixed(2)}
+                </div>
+              </FeeItem>
+            ))}
+          </RegionFees>
+
+          {partner.voucherRules && (
+            <div style={{ marginTop: 12, fontSize: 12, color: '#666', fontStyle: 'italic' }}>
+              Special Rule: DFR {partner.voucherRules.dfrCodes.join(', ')} → 
+              {partner.voucherRules.feeAdjustment > 0 ? '+' : ''}
+              {partner.voucherRules.feeAdjustment.toFixed(2)} {partner.feesByRegion[0]?.currency}
+            </div>
+          )}
+        </PartnerCard>
+      ))}
+    </PartnersGrid>
+  );
+
   if (loading) {
     return (
       <div>
@@ -242,61 +340,52 @@ export default function FsmParametersPage() {
       
       <Card>
         <ParamsContainer>
+          <p style={{ fontSize: 13, color: '#666', marginBottom: 20 }}>
+            Manage GDS and DCF partner fee configurations. Changes will affect future calculations.
+          </p>
+
           <Section>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <SectionTitle style={{ marginBottom: 0 }}>Partner Configuration</SectionTitle>
-              <Button onClick={() => alert('Add new partner feature coming soon')}>
-                + Add Partner
-              </Button>
-            </div>
-            <p style={{ fontSize: 13, color: '#666', marginBottom: 20 }}>
-              Manage GDS and DCF partner fee configurations. Changes will affect future calculations.
-            </p>
+            <CollapsibleSection>
+              <SectionHeader isOpen={gdsOpen} onClick={() => setGdsOpen(!gdsOpen)}>
+                <SectionTitle>
+                  <CategoryBadge type="gds">GDS</CategoryBadge>
+                  Global Distribution System Partners
+                  <span style={{ fontSize: 14, fontWeight: 'normal', color: '#666', marginLeft: 8 }}>
+                    ({gdsPartners.length})
+                  </span>
+                </SectionTitle>
+                <ExpandIcon isOpen={gdsOpen}>▼</ExpandIcon>
+              </SectionHeader>
+              <SectionContent isOpen={gdsOpen}>
+                {gdsPartners.length === 0 ? (
+                  <InfoMessage>No GDS partners configured.</InfoMessage>
+                ) : (
+                  renderPartners(gdsPartners)
+                )}
+              </SectionContent>
+            </CollapsibleSection>
+          </Section>
 
-            {partners.length === 0 ? (
-              <InfoMessage>
-                No partner configurations found. Default partners will be used for calculations.
-              </InfoMessage>
-            ) : (
-              <PartnersGrid>
-                {partners.map(partner => (
-                  <PartnerCard key={partner.id}>
-                    <PartnerHeader>
-                      <PartnerName>{partner.name}</PartnerName>
-                      <ButtonGroup>
-                        <Button onClick={() => handleEdit(partner)}>Edit</Button>
-                        <Button onClick={() => handleDelete(partner.id)} style={{ background: '#dc3545' }}>
-                          Delete
-                        </Button>
-                      </ButtonGroup>
-                    </PartnerHeader>
-                    
-                    <SourceChannels>
-                      <strong>Source Channels:</strong> {partner.sourceChannels.join(', ')}
-                    </SourceChannels>
-                    
-                    <RegionFees>
-                      {partner.feesByRegion.map(fee => (
-                        <FeeItem key={fee.region}>
-                          <label>{fee.region}</label>
-                          <div className="value">
-                            {fee.currency} {fee.amount.toFixed(2)}
-                          </div>
-                        </FeeItem>
-                      ))}
-                    </RegionFees>
-
-                    {partner.voucherRules && (
-                      <div style={{ marginTop: 12, fontSize: 12, color: '#666', fontStyle: 'italic' }}>
-                        Special Rule: DFR {partner.voucherRules.dfrCodes.join(', ')} → 
-                        {partner.voucherRules.feeAdjustment > 0 ? '+' : ''}
-                        {partner.voucherRules.feeAdjustment.toFixed(2)} {partner.feesByRegion[0]?.currency}
-                      </div>
-                    )}
-                  </PartnerCard>
-                ))}
-              </PartnersGrid>
-            )}
+          <Section>
+            <CollapsibleSection>
+              <SectionHeader isOpen={dcfOpen} onClick={() => setDcfOpen(!dcfOpen)}>
+                <SectionTitle>
+                  <CategoryBadge type="dcf">DCF</CategoryBadge>
+                  Direct Connect Fee Partners
+                  <span style={{ fontSize: 14, fontWeight: 'normal', color: '#666', marginLeft: 8 }}>
+                    ({dcfPartners.length})
+                  </span>
+                </SectionTitle>
+                <ExpandIcon isOpen={dcfOpen}>▼</ExpandIcon>
+              </SectionHeader>
+              <SectionContent isOpen={dcfOpen}>
+                {dcfPartners.length === 0 ? (
+                  <InfoMessage>No DCF partners configured.</InfoMessage>
+                ) : (
+                  renderPartners(dcfPartners)
+                )}
+              </SectionContent>
+            </CollapsibleSection>
           </Section>
         </ParamsContainer>
       </Card>

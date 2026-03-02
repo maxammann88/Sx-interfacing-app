@@ -169,7 +169,15 @@ router.get('/partners', async (req: Request, res: Response, next: NextFunction) 
     let partners = await (prisma as any).gdsDcfPartner.findMany();
     
     if (partners.length === 0) {
-      partners = getDefaultPartners();
+      const defaultPartners = getDefaultPartners();
+      
+      for (const partner of defaultPartners) {
+        await (prisma as any).gdsDcfPartner.create({
+          data: partner,
+        });
+      }
+      
+      partners = await (prisma as any).gdsDcfPartner.findMany();
     }
 
     res.json({

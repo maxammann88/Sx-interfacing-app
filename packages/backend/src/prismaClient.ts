@@ -244,7 +244,53 @@ const mockPrisma = {
   countryPlanAssignment: createMockModel('interfacingPlans'),
   correctedStatement: createMockModel('interfacingPlans'),
   bankGuarantee: createMockModel('masterData'),
-  gdsDcfPartner: createMockModel('gdsDcfPartners'),
+  gdsDcfPartner: {
+    findMany: async (options?: any) => {
+      let data = [...mockData.gdsDcfPartners];
+      if (options?.where) {
+        data = data.filter((item: any) => {
+          for (const [key, value] of Object.entries(options.where)) {
+            if (item[key] !== value) return false;
+          }
+          return true;
+        });
+      }
+      return data;
+    },
+    findUnique: async (options: any) => {
+      return mockData.gdsDcfPartners.find((item: any) => item.id === options.where.id) || null;
+    },
+    create: async (options: any) => {
+      const newItem = {
+        ...options.data,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      mockData.gdsDcfPartners.push(newItem);
+      return newItem;
+    },
+    update: async (options: any) => {
+      const index = mockData.gdsDcfPartners.findIndex((item: any) => item.id === options.where.id);
+      if (index === -1) {
+        throw new Error(`Partner with id ${options.where.id} not found`);
+      }
+      mockData.gdsDcfPartners[index] = {
+        ...mockData.gdsDcfPartners[index],
+        ...options.data,
+        updatedAt: new Date(),
+      };
+      return mockData.gdsDcfPartners[index];
+    },
+    delete: async (options: any) => {
+      const index = mockData.gdsDcfPartners.findIndex((item: any) => item.id === options.where.id);
+      if (index === -1) {
+        throw new Error(`Partner with id ${options.where.id} not found`);
+      }
+      const deleted = mockData.gdsDcfPartners[index];
+      mockData.gdsDcfPartners.splice(index, 1);
+      return deleted;
+    },
+  },
   gdsDcfUpload: createMockModel('gdsDcfUploads'),
   gdsDcfReservation: {
     ...createMockModel('gdsDcfReservations'),
