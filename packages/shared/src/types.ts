@@ -205,7 +205,12 @@ export interface GdsDcfPartner {
     currency: string;
   }[];
   voucherRules?: {
-    dfrFees: { [dfrCode: string]: number }; // DFR code -> specific fee amount
+    dfrFees: { 
+      [dfrCode: string]: { 
+        amount: number; 
+        currency: string; 
+      }; 
+    };
   };
 }
 

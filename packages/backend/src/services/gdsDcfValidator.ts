@@ -186,15 +186,17 @@ export class GdsDcfValidator {
     }
 
     let finalFee = regionFee.amount;
+    let finalCurrency = regionFee.currency;
 
     // Check for DFR-specific fee override
     if (partner.voucherRules && dfr && partner.voucherRules.dfrFees[dfr] !== undefined) {
-      finalFee = partner.voucherRules.dfrFees[dfr];
+      finalFee = partner.voucherRules.dfrFees[dfr].amount;
+      finalCurrency = partner.voucherRules.dfrFees[dfr].currency;
     }
 
     return {
       fee: finalFee,
-      currency: regionFee.currency,
+      currency: finalCurrency,
       region,
     };
   }
@@ -257,7 +259,7 @@ export function getDefaultPartners(): GdsDcfPartner[] {
       ],
       voucherRules: {
         dfrFees: {
-          '10355': 5.29, // Expedia exception - lower fee
+          '10355': { amount: 5.29, currency: 'EUR' }, // Expedia exception
         },
       },
     },
@@ -292,7 +294,7 @@ export function getDefaultPartners(): GdsDcfPartner[] {
       ],
       voucherRules: {
         dfrFees: {
-          '10897': 2.75, // Autoclub Australia discount
+          '10897': { amount: 2.75, currency: 'EUR' }, // Autoclub Australia
         },
       },
     },

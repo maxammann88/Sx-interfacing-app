@@ -374,6 +374,9 @@ export default function FsmParametersPage() {
     
     const amount = parseFloat(feeAmount) || 0;
     
+    const currency = prompt('Enter currency (EUR or USD):', 'EUR');
+    if (!currency) return;
+    
     const updatedRules = editingPartner.voucherRules || { dfrFees: {} };
     
     setEditingPartner({
@@ -381,7 +384,7 @@ export default function FsmParametersPage() {
       voucherRules: {
         dfrFees: {
           ...updatedRules.dfrFees,
-          [dfrCode]: amount,
+          [dfrCode]: { amount, currency },
         },
       },
     });
@@ -400,15 +403,20 @@ export default function FsmParametersPage() {
     });
   };
 
-  const updateDfrFee = (dfrCode: string, newFee: number) => {
+  const updateDfrFee = (dfrCode: string, field: 'amount' | 'currency', value: any) => {
     if (!editingPartner || !editingPartner.voucherRules) return;
+    
+    const currentFee = editingPartner.voucherRules.dfrFees[dfrCode];
     
     setEditingPartner({
       ...editingPartner,
       voucherRules: {
         dfrFees: {
           ...editingPartner.voucherRules.dfrFees,
-          [dfrCode]: newFee,
+          [dfrCode]: {
+            ...currentFee,
+            [field]: field === 'amount' ? (parseFloat(value) || 0) : value,
+          },
         },
       },
     });
@@ -441,7 +449,7 @@ export default function FsmParametersPage() {
           {/* Standard Fee */}
           <div>
             <VariantLabel>
-              {partner.id === 'amadeus' ? '🎫 Without eVoucher' : 'Standard Fee'}
+              {partner.id === 'amadeus' ? 'Without eVoucher' : 'Standard Fee'}
             </VariantLabel>
             <RegionFees>
               {partner.feesByRegion.map(fee => (
@@ -459,7 +467,7 @@ export default function FsmParametersPage() {
           {partner.id === 'amadeus' && (
             <FeeVariant>
               <VariantLabel>
-                🎟️ With eVoucher
+                With eVoucher
               </VariantLabel>
               <RegionFees>
                 {partner.feesByRegion.map(fee => (
@@ -477,11 +485,11 @@ export default function FsmParametersPage() {
           {partner.voucherRules && Object.keys(partner.voucherRules.dfrFees).length > 0 && (
             <DfrSection>
               <DfrTitle>DFR Exceptions:</DfrTitle>
-              {Object.entries(partner.voucherRules.dfrFees).map(([dfrCode, fee]) => (
+              {Object.entries(partner.voucherRules.dfrFees).map(([dfrCode, feeData]) => (
                 <DfrSubItem key={dfrCode}>
                   <span className="dfr-code">{dfrCode}</span>
                   <span className="dfr-fee">
-                    {partner.feesByRegion[0]?.currency} {fee.toFixed(2)}
+                    {feeData.currency} {feeData.amount.toFixed(2)}
                   </span>
                 </DfrSubItem>
               ))}
@@ -621,24 +629,34 @@ export default function FsmParametersPage() {
               
               {editingPartner.voucherRules && Object.keys(editingPartner.voucherRules.dfrFees).length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {Object.entries(editingPartner.voucherRules.dfrFees).map(([dfrCode, fee]) => (
+                  {Object.entries(editingPartner.voucherRules.dfrFees).map(([dfrCode, feeData]) => (
                     <div key={dfrCode} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                       <Input
                         value={dfrCode}
                         disabled
-                        style={{ flex: '0 0 120px', background: '#f5f5f5' }}
+                        style={{ flex: '0 0 100px', background: '#f5f5f5' }}
                       />
                       <Input
                         type="number"
                         step="0.01"
-                        value={fee}
-                        onChange={(e) => updateDfrFee(dfrCode, parseFloat(e.target.value) || 0)}
+                        value={feeData.amount}
+                        onChange={(e) => updateDfrFee(dfrCode, 'amount', e.target.value)}
                         style={{ flex: 1 }}
-                        placeholder="Fee amount"
+                        placeholder="Amount"
                       />
-                      <span style={{ minWidth: 40, fontSize: 12, color: '#666' }}>
-                        {editingPartner.feesByRegion[0]?.currency}
-                      </span>
+                      <select
+                        value={feeData.currency}
+                        onChange={(e) => updateDfrFee(dfrCode, 'currency', e.target.value)}
+                        style={{ 
+                          width: '80px', 
+                          padding: '8px', 
+                          borderRadius: '4px', 
+                          border: '1px solid #ccc' 
+                        }}
+                      >
+                        <option value="EUR">EUR</option>
+                        <option value="USD">USD</option>
+                      </select>
                       <button
                         onClick={() => removeDfrCode(dfrCode)}
                         style={{
