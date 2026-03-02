@@ -444,8 +444,6 @@ export default function FsmParametersPage() {
             </ButtonGroup>
           </PartnerHeader>
           
-          <RegionLabel>POS (Point of Sale)</RegionLabel>
-          
           {/* Standard Fee */}
           <div>
             <VariantLabel>
@@ -454,7 +452,7 @@ export default function FsmParametersPage() {
             <RegionFees>
               {partner.feesByRegion.map(fee => (
                 <FeeItem key={fee.region}>
-                  <label>{fee.region}</label>
+                  <label>POS: {fee.region}</label>
                   <div className="value">
                     {fee.currency} {(partner.id === 'amadeus' ? 5.29 : fee.amount).toFixed(2)}
                   </div>
@@ -472,7 +470,7 @@ export default function FsmParametersPage() {
               <RegionFees>
                 {partner.feesByRegion.map(fee => (
                   <FeeItem key={fee.region}>
-                    <label>{fee.region}</label>
+                    <label>POS: {fee.region}</label>
                     <div className="value">
                       {fee.currency} {fee.amount.toFixed(2)}
                     </div>
