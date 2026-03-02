@@ -212,6 +212,19 @@ export interface GdsDcfPartner {
       }; 
     };
   };
+  // For Amadeus: separate DFR exceptions for with/without eVoucher
+  dfrFeesWithoutEVoucher?: {
+    [dfrCode: string]: { 
+      amount: number; 
+      currency: string; 
+    };
+  };
+  dfrFeesWithEVoucher?: {
+    [dfrCode: string]: { 
+      amount: number; 
+      currency: string; 
+    };
+  };
 }
 
 export interface GdsDcfReservation {

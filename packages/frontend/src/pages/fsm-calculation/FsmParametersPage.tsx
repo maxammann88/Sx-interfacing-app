@@ -390,6 +390,91 @@ export default function FsmParametersPage() {
     });
   };
 
+  const addAmadeusDfr = (variant: 'without' | 'with') => {
+    if (!editingPartner) return;
+    
+    const dfrCode = prompt('Enter DFR Code:');
+    if (!dfrCode) return;
+    
+    const feeAmount = prompt(`Enter fee amount for DFR ${dfrCode} (e.g., 5.29):`);
+    if (feeAmount === null) return;
+    
+    const amount = parseFloat(feeAmount) || 0;
+    
+    const currency = prompt('Enter currency (EUR or USD):', 'EUR');
+    if (!currency) return;
+    
+    if (variant === 'without') {
+      setEditingPartner({
+        ...editingPartner,
+        dfrFeesWithoutEVoucher: {
+          ...(editingPartner.dfrFeesWithoutEVoucher || {}),
+          [dfrCode]: { amount, currency },
+        },
+      });
+    } else {
+      setEditingPartner({
+        ...editingPartner,
+        dfrFeesWithEVoucher: {
+          ...(editingPartner.dfrFeesWithEVoucher || {}),
+          [dfrCode]: { amount, currency },
+        },
+      });
+    }
+  };
+
+  const removeAmadeusDfr = (variant: 'without' | 'with', codeToRemove: string) => {
+    if (!editingPartner) return;
+    
+    if (variant === 'without') {
+      const { [codeToRemove]: removed, ...remaining } = editingPartner.dfrFeesWithoutEVoucher || {};
+      setEditingPartner({
+        ...editingPartner,
+        dfrFeesWithoutEVoucher: remaining,
+      });
+    } else {
+      const { [codeToRemove]: removed, ...remaining } = editingPartner.dfrFeesWithEVoucher || {};
+      setEditingPartner({
+        ...editingPartner,
+        dfrFeesWithEVoucher: remaining,
+      });
+    }
+  };
+
+  const updateAmadeusDfr = (variant: 'without' | 'with', dfrCode: string, field: 'amount' | 'currency', value: any) => {
+    if (!editingPartner) return;
+    
+    if (variant === 'without') {
+      const currentFee = editingPartner.dfrFeesWithoutEVoucher?.[dfrCode];
+      if (!currentFee) return;
+      
+      setEditingPartner({
+        ...editingPartner,
+        dfrFeesWithoutEVoucher: {
+          ...editingPartner.dfrFeesWithoutEVoucher,
+          [dfrCode]: {
+            ...currentFee,
+            [field]: field === 'amount' ? (parseFloat(value) || 0) : value,
+          },
+        },
+      });
+    } else {
+      const currentFee = editingPartner.dfrFeesWithEVoucher?.[dfrCode];
+      if (!currentFee) return;
+      
+      setEditingPartner({
+        ...editingPartner,
+        dfrFeesWithEVoucher: {
+          ...editingPartner.dfrFeesWithEVoucher,
+          [dfrCode]: {
+            ...currentFee,
+            [field]: field === 'amount' ? (parseFloat(value) || 0) : value,
+          },
+        },
+      });
+    }
+  };
+
   const removeDfrCode = (codeToRemove: string) => {
     if (!editingPartner || !editingPartner.voucherRules) return;
     
@@ -444,7 +529,7 @@ export default function FsmParametersPage() {
             </ButtonGroup>
           </PartnerHeader>
           
-          {/* Standard Fee */}
+          {/* Standard Fee or Without eVoucher */}
           <div>
             <VariantLabel>
               {partner.id === 'amadeus' ? 'Without eVoucher' : 'Standard Fee'}
@@ -459,6 +544,21 @@ export default function FsmParametersPage() {
                 </FeeItem>
               ))}
             </RegionFees>
+            
+            {/* DFR Exceptions for without eVoucher (Amadeus) or standard (others) */}
+            {partner.id === 'amadeus' && partner.dfrFeesWithoutEVoucher && Object.keys(partner.dfrFeesWithoutEVoucher).length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <DfrTitle style={{ fontSize: 11 }}>DFR Exceptions:</DfrTitle>
+                {Object.entries(partner.dfrFeesWithoutEVoucher).map(([dfrCode, feeData]) => (
+                  <DfrSubItem key={dfrCode} style={{ marginTop: 6, padding: 6 }}>
+                    <span className="dfr-code" style={{ fontSize: 11 }}>{dfrCode}</span>
+                    <span className="dfr-fee" style={{ fontSize: 11 }}>
+                      {feeData.currency} {feeData.amount.toFixed(2)}
+                    </span>
+                  </DfrSubItem>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* eVoucher Fee for Amadeus */}
@@ -477,10 +577,26 @@ export default function FsmParametersPage() {
                   </FeeItem>
                 ))}
               </RegionFees>
+              
+              {/* DFR Exceptions for with eVoucher */}
+              {partner.dfrFeesWithEVoucher && Object.keys(partner.dfrFeesWithEVoucher).length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <DfrTitle style={{ fontSize: 11 }}>DFR Exceptions:</DfrTitle>
+                  {Object.entries(partner.dfrFeesWithEVoucher).map(([dfrCode, feeData]) => (
+                    <DfrSubItem key={dfrCode} style={{ marginTop: 6, padding: 6 }}>
+                      <span className="dfr-code" style={{ fontSize: 11 }}>{dfrCode}</span>
+                      <span className="dfr-fee" style={{ fontSize: 11 }}>
+                        {feeData.currency} {feeData.amount.toFixed(2)}
+                      </span>
+                    </DfrSubItem>
+                  ))}
+                </div>
+              )}
             </FeeVariant>
           )}
 
-          {partner.voucherRules && Object.keys(partner.voucherRules.dfrFees).length > 0 && (
+          {/* DFR Exceptions for non-Amadeus partners */}
+          {partner.id !== 'amadeus' && partner.voucherRules && Object.keys(partner.voucherRules.dfrFees).length > 0 && (
             <DfrSection>
               <DfrTitle>DFR Exceptions:</DfrTitle>
               {Object.entries(partner.voucherRules.dfrFees).map(([dfrCode, feeData]) => (
@@ -614,66 +730,175 @@ export default function FsmParametersPage() {
               );
             })}
 
-            <div style={{ marginTop: 24, paddingTop: 24, borderTop: '1px solid #e0e0e0' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <label style={{ fontWeight: 600, fontSize: 14 }}>DFR Exceptions</label>
-                <Button onClick={addDfrCode} style={{ fontSize: 12, padding: '6px 12px' }}>
-                  + Add DFR
-                </Button>
-              </div>
-              <div style={{ fontSize: 12, color: '#666', marginBottom: 12 }}>
-                Define specific fees for different DFR codes. Each code can have its own fee amount.
-              </div>
-              
-              {editingPartner.voucherRules && Object.keys(editingPartner.voucherRules.dfrFees).length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {Object.entries(editingPartner.voucherRules.dfrFees).map(([dfrCode, feeData]) => (
-                    <div key={dfrCode} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <Input
-                        value={dfrCode}
-                        disabled
-                        style={{ flex: '0 0 100px', background: '#f5f5f5' }}
-                      />
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={feeData.amount}
-                        onChange={(e) => updateDfrFee(dfrCode, 'amount', e.target.value)}
-                        style={{ flex: 1 }}
-                        placeholder="Amount"
-                      />
-                      <select
-                        value={feeData.currency}
-                        onChange={(e) => updateDfrFee(dfrCode, 'currency', e.target.value)}
-                        style={{ 
-                          width: '80px', 
-                          padding: '8px', 
-                          borderRadius: '4px', 
-                          border: '1px solid #ccc' 
-                        }}
-                      >
-                        <option value="EUR">EUR</option>
-                        <option value="USD">USD</option>
-                      </select>
-                      <button
-                        onClick={() => removeDfrCode(dfrCode)}
-                        style={{
-                          background: '#dc3545',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '4px',
-                          padding: '8px 12px',
-                          cursor: 'pointer',
-                          fontSize: '12px',
-                        }}
-                      >
-                        ✕
-                      </button>
+            {/* Amadeus-specific: Two separate DFR sections */}
+            {editingPartner.id === 'amadeus' && (
+              <>
+                <div style={{ marginTop: 24, paddingTop: 24, borderTop: '1px solid #e0e0e0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <label style={{ fontWeight: 600, fontSize: 14 }}>DFR Exceptions - Without eVoucher</label>
+                    <Button onClick={() => addAmadeusDfr('without')} style={{ fontSize: 12, padding: '6px 12px' }}>
+                      + Add DFR
+                    </Button>
+                  </div>
+                  
+                  {editingPartner.dfrFeesWithoutEVoucher && Object.keys(editingPartner.dfrFeesWithoutEVoucher).length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {Object.entries(editingPartner.dfrFeesWithoutEVoucher).map(([dfrCode, feeData]) => (
+                        <div key={dfrCode} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <Input
+                            value={dfrCode}
+                            disabled
+                            style={{ flex: '0 0 100px', background: '#f5f5f5' }}
+                          />
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={feeData.amount}
+                            onChange={(e) => updateAmadeusDfr('without', dfrCode, 'amount', e.target.value)}
+                            style={{ flex: 1 }}
+                            placeholder="Amount"
+                          />
+                          <select
+                            value={feeData.currency}
+                            onChange={(e) => updateAmadeusDfr('without', dfrCode, 'currency', e.target.value)}
+                            style={{ width: '80px', padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+                          >
+                            <option value="EUR">EUR</option>
+                            <option value="USD">USD</option>
+                          </select>
+                          <button
+                            onClick={() => removeAmadeusDfr('without', dfrCode)}
+                            style={{
+                              background: '#dc3545',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              padding: '8px 12px',
+                              cursor: 'pointer',
+                              fontSize: '12px',
+                            }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
-              )}
-            </div>
+
+                <div style={{ marginTop: 24, paddingTop: 24, borderTop: '1px solid #e0e0e0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <label style={{ fontWeight: 600, fontSize: 14 }}>DFR Exceptions - With eVoucher</label>
+                    <Button onClick={() => addAmadeusDfr('with')} style={{ fontSize: 12, padding: '6px 12px' }}>
+                      + Add DFR
+                    </Button>
+                  </div>
+                  
+                  {editingPartner.dfrFeesWithEVoucher && Object.keys(editingPartner.dfrFeesWithEVoucher).length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {Object.entries(editingPartner.dfrFeesWithEVoucher).map(([dfrCode, feeData]) => (
+                        <div key={dfrCode} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <Input
+                            value={dfrCode}
+                            disabled
+                            style={{ flex: '0 0 100px', background: '#f5f5f5' }}
+                          />
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={feeData.amount}
+                            onChange={(e) => updateAmadeusDfr('with', dfrCode, 'amount', e.target.value)}
+                            style={{ flex: 1 }}
+                            placeholder="Amount"
+                          />
+                          <select
+                            value={feeData.currency}
+                            onChange={(e) => updateAmadeusDfr('with', dfrCode, 'currency', e.target.value)}
+                            style={{ width: '80px', padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+                          >
+                            <option value="EUR">EUR</option>
+                            <option value="USD">USD</option>
+                          </select>
+                          <button
+                            onClick={() => removeAmadeusDfr('with', dfrCode)}
+                            style={{
+                              background: '#dc3545',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              padding: '8px 12px',
+                              cursor: 'pointer',
+                              fontSize: '12px',
+                            }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* Non-Amadeus partners: Single DFR section */}
+            {editingPartner.id !== 'amadeus' && (
+              <div style={{ marginTop: 24, paddingTop: 24, borderTop: '1px solid #e0e0e0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <label style={{ fontWeight: 600, fontSize: 14 }}>DFR Exceptions</label>
+                  <Button onClick={addDfrCode} style={{ fontSize: 12, padding: '6px 12px' }}>
+                    + Add DFR
+                  </Button>
+                </div>
+                <div style={{ fontSize: 12, color: '#666', marginBottom: 12 }}>
+                  Define specific fees for different DFR codes. Each code can have its own fee amount.
+                </div>
+                
+                {editingPartner.voucherRules && Object.keys(editingPartner.voucherRules.dfrFees).length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {Object.entries(editingPartner.voucherRules.dfrFees).map(([dfrCode, feeData]) => (
+                      <div key={dfrCode} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <Input
+                          value={dfrCode}
+                          disabled
+                          style={{ flex: '0 0 100px', background: '#f5f5f5' }}
+                        />
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={feeData.amount}
+                          onChange={(e) => updateDfrFee(dfrCode, 'amount', e.target.value)}
+                          style={{ flex: 1 }}
+                          placeholder="Amount"
+                        />
+                        <select
+                          value={feeData.currency}
+                          onChange={(e) => updateDfrFee(dfrCode, 'currency', e.target.value)}
+                          style={{ width: '80px', padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+                        >
+                          <option value="EUR">EUR</option>
+                          <option value="USD">USD</option>
+                        </select>
+                        <button
+                          onClick={() => removeDfrCode(dfrCode)}
+                          style={{
+                            background: '#dc3545',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            padding: '8px 12px',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
               <Button onClick={handleSave} style={{ flex: 1 }}>Save Changes</Button>

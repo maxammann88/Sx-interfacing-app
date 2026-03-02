@@ -257,10 +257,9 @@ export function getDefaultPartners(): GdsDcfPartner[] {
         { region: 'Americas', amount: 6.55, currency: 'EUR' },
         { region: 'Other', amount: 6.55, currency: 'EUR' },
       ],
-      voucherRules: {
-        dfrFees: {
-          '10355': { amount: 5.29, currency: 'EUR' }, // Expedia exception
-        },
+      dfrFeesWithoutEVoucher: {},
+      dfrFeesWithEVoucher: {
+        '10355': { amount: 5.29, currency: 'EUR' }, // Expedia exception for eVoucher
       },
     },
     {
