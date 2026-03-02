@@ -185,17 +185,21 @@ export class GdsDcfValidator {
       return { fee: 0, currency: 'EUR', region };
     }
 
-    let baseFee = regionFee.amount;
+    let finalFee = regionFee.amount;
 
-    if (partner.voucherRules && voucherNumber && dfr) {
-      const isVoucherException = partner.voucherRules.dfrCodes.includes(dfr);
-      if (isVoucherException) {
-        baseFee += partner.voucherRules.feeAdjustment;
+    // Check for DFR-specific fee override
+    if (partner.voucherRules && dfr && partner.voucherRules.dfrFees[dfr] !== undefined) {
+      finalFee = partner.voucherRules.dfrFees[dfr];
+    } else if (partner.voucherRules && voucherNumber && Object.keys(partner.voucherRules.dfrFees).length > 0) {
+      // If voucher is present but DFR not in exceptions, use eVoucher fee (6.55 for Amadeus)
+      const eVoucherFee = 6.55; // Standard eVoucher fee
+      if (partner.id === 'amadeus') {
+        finalFee = eVoucherFee;
       }
     }
 
     return {
-      fee: baseFee,
+      fee: finalFee,
       currency: regionFee.currency,
       region,
     };
@@ -257,19 +261,10 @@ export function getDefaultPartners(): GdsDcfPartner[] {
         { region: 'Americas', amount: 5.29, currency: 'EUR' },
         { region: 'Other', amount: 5.29, currency: 'EUR' },
       ],
-    },
-    {
-      id: 'amadeus-evoucher',
-      name: 'Amadeus eVoucher',
-      sourceChannels: ['GA'],
-      feesByRegion: [
-        { region: 'EMEA', amount: 6.55, currency: 'EUR' },
-        { region: 'Americas', amount: 6.55, currency: 'EUR' },
-        { region: 'Other', amount: 6.55, currency: 'EUR' },
-      ],
       voucherRules: {
-        dfrCodes: ['10355'],
-        feeAdjustment: 1.26,
+        dfrFees: {
+          '10355': 5.29, // Expedia exception
+        },
       },
     },
     {
@@ -302,8 +297,9 @@ export function getDefaultPartners(): GdsDcfPartner[] {
         { region: 'Other', amount: 5.50, currency: 'EUR' },
       ],
       voucherRules: {
-        dfrCodes: ['10897'],
-        feeAdjustment: -2.75,
+        dfrFees: {
+          '10897': 2.75, // Autoclub Australia discount
+        },
       },
     },
   ];

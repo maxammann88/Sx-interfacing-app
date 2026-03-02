@@ -178,6 +178,28 @@ const DfrTag = styled.div`
   }
 `;
 
+const DfrSubItem = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: white;
+  border-radius: 4px;
+  border: 1px solid #e0e0e0;
+  font-size: 13px;
+  margin-top: 8px;
+  
+  .dfr-code {
+    font-weight: 600;
+    color: ${props => props.theme.colors.text};
+  }
+  
+  .dfr-fee {
+    font-weight: 600;
+    color: ${props => props.theme.colors.primary};
+  }
+`;
+
 const SourceChannels = styled.div`
   margin-top: 8px;
   font-size: 13px;
@@ -331,18 +353,20 @@ export default function FsmParametersPage() {
     const dfrCode = prompt('Enter DFR/Agency Code:');
     if (!dfrCode) return;
     
-    const feeAdjustment = prompt('Enter fee adjustment (e.g., 0.26 for +0.26 EUR or -2.75 for discount):');
-    if (feeAdjustment === null) return;
+    const feeAmount = prompt(`Enter fee amount for DFR ${dfrCode} (e.g., 5.29 or 2.75):`);
+    if (feeAmount === null) return;
     
-    const adjustment = parseFloat(feeAdjustment) || 0;
+    const amount = parseFloat(feeAmount) || 0;
     
-    const updatedRules = editingPartner.voucherRules || { dfrCodes: [], feeAdjustment: 0 };
+    const updatedRules = editingPartner.voucherRules || { dfrFees: {} };
     
     setEditingPartner({
       ...editingPartner,
       voucherRules: {
-        dfrCodes: [...updatedRules.dfrCodes, dfrCode],
-        feeAdjustment: adjustment,
+        dfrFees: {
+          ...updatedRules.dfrFees,
+          [dfrCode]: amount,
+        },
       },
     });
   };
@@ -350,17 +374,32 @@ export default function FsmParametersPage() {
   const removeDfrCode = (codeToRemove: string) => {
     if (!editingPartner || !editingPartner.voucherRules) return;
     
+    const { [codeToRemove]: removed, ...remainingFees } = editingPartner.voucherRules.dfrFees;
+    
     setEditingPartner({
       ...editingPartner,
       voucherRules: {
-        ...editingPartner.voucherRules,
-        dfrCodes: editingPartner.voucherRules.dfrCodes.filter(code => code !== codeToRemove),
+        dfrFees: remainingFees,
+      },
+    });
+  };
+
+  const updateDfrFee = (dfrCode: string, newFee: number) => {
+    if (!editingPartner || !editingPartner.voucherRules) return;
+    
+    setEditingPartner({
+      ...editingPartner,
+      voucherRules: {
+        dfrFees: {
+          ...editingPartner.voucherRules.dfrFees,
+          [dfrCode]: newFee,
+        },
       },
     });
   };
 
   const gdsPartners = partners.filter(p => 
-    p.id === 'travelport' || p.id === 'sabre' || p.id === 'amadeus' || p.id === 'amadeus-evoucher'
+    p.id === 'travelport' || p.id === 'sabre' || p.id === 'amadeus'
   );
 
   const dcfPartners = partners.filter(p => 
@@ -393,20 +432,25 @@ export default function FsmParametersPage() {
             ))}
           </RegionFees>
 
-          {partner.voucherRules && (
+          {partner.voucherRules && Object.keys(partner.voucherRules.dfrFees).length > 0 && (
             <DfrSection>
-              <DfrTitle>DFR Exceptions:</DfrTitle>
-              <DfrList>
-                {partner.voucherRules.dfrCodes.map(dfr => (
-                  <DfrTag key={dfr}>
-                    {dfr}
-                    <span style={{ marginLeft: 4, fontWeight: 600 }}>
-                      {partner.voucherRules!.feeAdjustment > 0 ? '+' : ''}
-                      {partner.voucherRules!.feeAdjustment.toFixed(2)} {partner.feesByRegion[0]?.currency}
-                    </span>
-                  </DfrTag>
-                ))}
-              </DfrList>
+              <DfrTitle>DFR / Agency Exceptions:</DfrTitle>
+              {Object.entries(partner.voucherRules.dfrFees).map(([dfrCode, fee]) => (
+                <DfrSubItem key={dfrCode}>
+                  <span className="dfr-code">{dfrCode}</span>
+                  <span className="dfr-fee">
+                    {partner.feesByRegion[0]?.currency} {fee.toFixed(2)}
+                  </span>
+                </DfrSubItem>
+              ))}
+              {partner.id === 'amadeus' && (
+                <DfrSubItem>
+                  <span className="dfr-code">with eVoucher (default)</span>
+                  <span className="dfr-fee">
+                    {partner.feesByRegion[0]?.currency} 6.55
+                  </span>
+                </DfrSubItem>
+              )}
             </DfrSection>
           )}
         </PartnerCard>
@@ -497,18 +541,7 @@ export default function FsmParametersPage() {
               />
             </FormGroup>
 
-            <FormGroup>
-              <label>Source Channels (comma-separated)</label>
-              <Input
-                value={editingPartner.sourceChannels.join(', ')}
-                onChange={(e) => setEditingPartner({ 
-                  ...editingPartner, 
-                  sourceChannels: e.target.value.split(',').map(s => s.trim()) 
-                })}
-              />
-            </FormGroup>
-
-            <SectionTitle>Fee by Region</SectionTitle>
+            <SectionTitle>Fee by Region (Standard)</SectionTitle>
             
             {['EMEA', 'Americas', 'Other'].map(region => {
               const fee = editingPartner.feesByRegion.find(f => f.region === region);
@@ -548,35 +581,47 @@ export default function FsmParametersPage() {
                   + Add DFR
                 </Button>
               </div>
+              <div style={{ fontSize: 12, color: '#666', marginBottom: 12 }}>
+                Define specific fees for different DFR/Agency codes. Each code can have its own fee amount.
+              </div>
               
-              {editingPartner.voucherRules && editingPartner.voucherRules.dfrCodes.length > 0 && (
-                <>
-                  <FormGroup>
-                    <label>Fee Adjustment</label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={editingPartner.voucherRules.feeAdjustment}
-                      onChange={(e) => setEditingPartner({
-                        ...editingPartner,
-                        voucherRules: {
-                          ...editingPartner.voucherRules!,
-                          feeAdjustment: parseFloat(e.target.value) || 0,
-                        },
-                      })}
-                      placeholder="e.g., 0.26 or -2.75"
-                    />
-                  </FormGroup>
-                  
-                  <DfrList style={{ marginTop: 12 }}>
-                    {editingPartner.voucherRules.dfrCodes.map(code => (
-                      <DfrTag key={code}>
-                        {code}
-                        <button onClick={() => removeDfrCode(code)}>✕</button>
-                      </DfrTag>
-                    ))}
-                  </DfrList>
-                </>
+              {editingPartner.voucherRules && Object.keys(editingPartner.voucherRules.dfrFees).length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {Object.entries(editingPartner.voucherRules.dfrFees).map(([dfrCode, fee]) => (
+                    <div key={dfrCode} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <Input
+                        value={dfrCode}
+                        disabled
+                        style={{ flex: '0 0 120px', background: '#f5f5f5' }}
+                      />
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={fee}
+                        onChange={(e) => updateDfrFee(dfrCode, parseFloat(e.target.value) || 0)}
+                        style={{ flex: 1 }}
+                        placeholder="Fee amount"
+                      />
+                      <span style={{ minWidth: 40, fontSize: 12, color: '#666' }}>
+                        {editingPartner.feesByRegion[0]?.currency}
+                      </span>
+                      <button
+                        onClick={() => removeDfrCode(dfrCode)}
+                        style={{
+                          background: '#dc3545',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          padding: '8px 12px',
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
 
