@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import styled from 'styled-components';
 import { PageTitle, Card } from '../../components/ui';
 
@@ -7,16 +7,62 @@ const RulesContainer = styled.div`
 `;
 
 const Section = styled.div`
-  margin-bottom: 40px;
+  margin-bottom: 24px;
+`;
+
+const CollapsibleSection = styled.div`
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+`;
+
+const SectionHeader = styled.div<{ isOpen: boolean }>`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: ${props => props.isOpen ? '#f8f9fa' : 'white'};
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s;
+
+  &:hover {
+    background: #f8f9fa;
+  }
 `;
 
 const SectionTitle = styled.h2`
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
-  margin-bottom: 16px;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   color: ${props => props.theme.colors.text};
-  border-bottom: 2px solid ${props => props.theme.colors.primary};
-  padding-bottom: 8px;
+`;
+
+const CategoryBadge = styled.span<{ type: 'gds' | 'dcf' }>`
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: ${props => props.type === 'gds' ? '#e3f2fd' : '#fff3e0'};
+  color: ${props => props.type === 'gds' ? '#1976d2' : '#f57c00'};
+`;
+
+const ExpandIcon = styled.span<{ isOpen: boolean }>`
+  font-size: 14px;
+  transition: transform 0.2s;
+  transform: ${props => props.isOpen ? 'rotate(180deg)' : 'rotate(0deg)'};
+`;
+
+const SectionContent = styled.div<{ isOpen: boolean }>`
+  display: ${props => props.isOpen ? 'block' : 'none'};
+  padding: 24px;
+  background: white;
+  border-top: 1px solid #e0e0e0;
 `;
 
 const SubTitle = styled.h3`
@@ -132,321 +178,332 @@ const Formula = styled.div`
 `;
 
 export default function FsmCalculationPage() {
+  const [gdsOpen, setGdsOpen] = useState(false);
+  const [dcfOpen, setDcfOpen] = useState(false);
+
   return (
     <div>
-      <PageTitle>Calculation Rules - GDS & DCF Fees</PageTitle>
+      <PageTitle>Calculation Rules</PageTitle>
       
       <Card>
         <RulesContainer>
+          <p style={{ fontSize: 13, color: '#666', marginBottom: 24 }}>
+            This page documents the calculation logic for GDS (Global Distribution System) and 
+            DCF (Direct Connect Fee) charges. Expand each section to view detailed rules.
+          </p>
+
           <Section>
-            <SectionTitle>Overview</SectionTitle>
-            <p>
-              This page documents the calculation logic for GDS (Global Distribution System) and 
-              DCF (Direct Connect Fee) charges. The system automatically identifies chargeable 
-              reservations and calculates applicable fees based on partner, region, and booking conditions.
-            </p>
+            <CollapsibleSection>
+              <SectionHeader isOpen={gdsOpen} onClick={() => setGdsOpen(!gdsOpen)}>
+                <SectionTitle>
+                  <CategoryBadge type="gds">GDS</CategoryBadge>
+                  Global Distribution System Fees
+                </SectionTitle>
+                <ExpandIcon isOpen={gdsOpen}>▼</ExpandIcon>
+              </SectionHeader>
+              <SectionContent isOpen={gdsOpen}>
+                {/* GDS Content */}
+                <InfoBox type="info">
+                  <strong>Future State Implementation:</strong> Fee is charged unless cancelled via the same 
+                  partner (not just original booking channel). Fee amount is based on point of sale country.
+                </InfoBox>
+
+                <SubTitle>Decision Tree - Fee Validation</SubTitle>
+                <p>Every reservation must pass all 6 validation steps to be charged a fee:</p>
+                
+                <DecisionTree>
+                  <DecisionStep>
+                    <StepNumber>1</StepNumber>
+                    <StepContent>
+                      <StepTitle>Reservation Number Check</StepTitle>
+                      <StepDescription>
+                        Has a reservation been made?<br/>
+                        <strong>Condition:</strong> ResNr &gt; 0<br/>
+                        <strong>If fails:</strong> No fee charged
+                      </StepDescription>
+                    </StepContent>
+                  </DecisionStep>
+
+                  <DecisionStep>
+                    <StepNumber>2</StepNumber>
+                    <StepContent>
+                      <StepTitle>Booking Channel / Interface Check</StepTitle>
+                      <StepDescription>
+                        Was the booking made through a GDS partner interface?<br/>
+                        <strong>Valid channels:</strong> Galileo (GG), Worldspan (GW), Sabre (GS), Amadeus (GA)<br/>
+                        <strong>If fails:</strong> No fee charged (not a GDS booking)
+                      </StepDescription>
+                    </StepContent>
+                  </DecisionStep>
+
+                  <DecisionStep>
+                    <StepNumber>3</StepNumber>
+                    <StepContent>
+                      <StepTitle>Partner Check</StepTitle>
+                      <StepDescription>
+                        Is the identified partner configured in the system?<br/>
+                        <strong>Condition:</strong> Partner exists in parameter configuration<br/>
+                        <strong>If fails:</strong> No fee charged
+                      </StepDescription>
+                    </StepContent>
+                  </DecisionStep>
+
+                  <DecisionStep>
+                    <StepNumber>4</StepNumber>
+                    <StepContent>
+                      <StepTitle>Mandant Code Pick-Up Branch Check</StepTitle>
+                      <StepDescription>
+                        Was the reservation made for a franchise branch?<br/>
+                        <strong>Condition:</strong> Mandant code is assigned to franchisee<br/>
+                        <strong>If fails:</strong> No fee charged (not a franchise booking)
+                      </StepDescription>
+                    </StepContent>
+                  </DecisionStep>
+
+                  <DecisionStep>
+                    <StepNumber>5</StepNumber>
+                    <StepContent>
+                      <StepTitle>Reservation Status Check</StepTitle>
+                      <StepDescription>
+                        What is the booking status?<br/>
+                        <strong>Valid statuses:</strong> Invoice, No Show, Open, 
+                        Cancellation not via original booking channel<br/>
+                        <strong>If fails:</strong> No fee charged (cancelled via same channel)
+                      </StepDescription>
+                    </StepContent>
+                  </DecisionStep>
+
+                  <DecisionStep>
+                    <StepNumber>6</StepNumber>
+                    <StepContent>
+                      <StepTitle>Invoice Type and Serial Number Check</StepTitle>
+                      <StepDescription>
+                        Is this the main invoice and first in series?<br/>
+                        <strong>Condition:</strong> Main Invoice AND MSER = 0<br/>
+                        <strong>If fails:</strong> No fee charged (prevents duplicate charging)
+                      </StepDescription>
+                    </StepContent>
+                  </DecisionStep>
+                </DecisionTree>
+
+                <InfoBox type="success">
+                  <strong>All steps passed?</strong> The system proceeds to calculate the fee amount 
+                  based on partner and region.
+                </InfoBox>
+
+                <SubTitle>Standard Fee by Partner and Region</SubTitle>
+                <FeeTable>
+                  <thead>
+                    <tr>
+                      <th>Partner</th>
+                      <th>EMEA</th>
+                      <th>Americas</th>
+                      <th>Other</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><strong>Travelport</strong> (Worldspan + Galileo)</td>
+                      <td>USD 8.60</td>
+                      <td>USD 8.60</td>
+                      <td>USD 8.60</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Sabre</strong></td>
+                      <td>USD 7.17</td>
+                      <td>USD 7.17</td>
+                      <td>USD 7.17</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Amadeus - Without eVoucher</strong></td>
+                      <td>EUR 5.29</td>
+                      <td>EUR 5.29</td>
+                      <td>EUR 5.29</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Amadeus - With eVoucher</strong></td>
+                      <td>EUR 6.55</td>
+                      <td>EUR 6.55</td>
+                      <td>EUR 6.55</td>
+                    </tr>
+                  </tbody>
+                </FeeTable>
+
+                <SubTitle>Amadeus Special Rules (eVoucher & DFR)</SubTitle>
+                <InfoBox type="info">
+                  <strong>eVoucher Detection:</strong><br/>
+                  • If Reservation Source Channel 2 or 3 = Amadeus AND Voucher Number is filled → EUR 6.55<br/>
+                  • Without eVoucher → EUR 5.29<br/>
+                  <br/>
+                  <strong>DFR Exceptions:</strong><br/>
+                  • Specific DFR codes can override standard fees for both with/without eVoucher variants<br/>
+                  • Example: DFR 10355 (Expedia) → EUR 5.29 (for with eVoucher variant)
+                </InfoBox>
+
+                <SubTitle>Partner Source Channel Mapping</SubTitle>
+                <FeeTable>
+                  <thead>
+                    <tr>
+                      <th>Partner</th>
+                      <th>Source Channel Codes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>Travelport (Worldspan)</td>
+                      <td>GW</td>
+                    </tr>
+                    <tr>
+                      <td>Travelport (Galileo)</td>
+                      <td>GG</td>
+                    </tr>
+                    <tr>
+                      <td>Sabre</td>
+                      <td>GS</td>
+                    </tr>
+                    <tr>
+                      <td>Amadeus</td>
+                      <td>GA</td>
+                    </tr>
+                  </tbody>
+                </FeeTable>
+              </SectionContent>
+            </CollapsibleSection>
+          </Section>
+
+          <Section>
+            <CollapsibleSection>
+              <SectionHeader isOpen={dcfOpen} onClick={() => setDcfOpen(!dcfOpen)}>
+                <SectionTitle>
+                  <CategoryBadge type="dcf">DCF</CategoryBadge>
+                  Direct Connect Fees
+                </SectionTitle>
+                <ExpandIcon isOpen={dcfOpen}>▼</ExpandIcon>
+              </SectionHeader>
+              <SectionContent isOpen={dcfOpen}>
+                {/* DCF Content */}
+                <InfoBox type="info">
+                  <strong>Future State Implementation:</strong> DCF charges apply to direct API connections 
+                  with online travel agencies (OTAs). Same validation rules as GDS apply.
+                </InfoBox>
+
+                <SubTitle>Decision Tree - Fee Validation</SubTitle>
+                <p>Same 6-step validation as GDS, adjusted for DCF partners:</p>
+                
+                <DecisionTree>
+                  <DecisionStep>
+                    <StepNumber>2</StepNumber>
+                    <StepContent>
+                      <StepTitle>Booking Channel / Interface Check</StepTitle>
+                      <StepDescription>
+                        Was the booking made through a DCF partner interface?<br/>
+                        <strong>Valid channels:</strong> SOAP, TPRA (API connections)<br/>
+                        <strong>Partners:</strong> Expedia, Priceline, Meili<br/>
+                        <strong>If fails:</strong> No fee charged (not a DCF booking)
+                      </StepDescription>
+                    </StepContent>
+                  </DecisionStep>
+                </DecisionTree>
+                <p style={{ fontSize: 13, color: '#666', fontStyle: 'italic' }}>
+                  Steps 1, 3, 4, 5, and 6 are identical to GDS validation.
+                </p>
+
+                <SubTitle>Standard Fee by Partner and Region</SubTitle>
+                <FeeTable>
+                  <thead>
+                    <tr>
+                      <th>Partner</th>
+                      <th>EMEA</th>
+                      <th>Americas</th>
+                      <th>Other</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><strong>Expedia</strong></td>
+                      <td>EUR 3.00</td>
+                      <td>EUR 4.00</td>
+                      <td>EUR 4.00</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Priceline</strong></td>
+                      <td>USD 3.25</td>
+                      <td>USD 3.25</td>
+                      <td>USD 1.50</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Meili</strong></td>
+                      <td>EUR 5.50</td>
+                      <td>EUR 5.50</td>
+                      <td>EUR 5.50</td>
+                    </tr>
+                  </tbody>
+                </FeeTable>
+
+                <SubTitle>Meili Special Rules (DFR-based Discount)</SubTitle>
+                <InfoBox type="info">
+                  <strong>DFR Detection:</strong><br/>
+                  • DFR = 10897 (Autoclub Australia) → EUR 2.75<br/>
+                  • Other DFR codes → EUR 5.50 (standard fee)
+                </InfoBox>
+                
+                <Formula>
+                  Meili base fee = EUR 5.50<br/>
+                  Meili with DFR 10897 = EUR 2.75
+                </Formula>
+
+                <SubTitle>Partner Source Channel Mapping</SubTitle>
+                <FeeTable>
+                  <thead>
+                    <tr>
+                      <th>Partner</th>
+                      <th>Source Channel Codes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>Expedia</td>
+                      <td>Expedia02I6, SOAP, TPRA (varies by source)</td>
+                    </tr>
+                    <tr>
+                      <td>Priceline</td>
+                      <td>PriceLine011S</td>
+                    </tr>
+                    <tr>
+                      <td>Meili</td>
+                      <td>Meili</td>
+                    </tr>
+                  </tbody>
+                </FeeTable>
+              </SectionContent>
+            </CollapsibleSection>
+          </Section>
+
+          <Section style={{ marginTop: 32, paddingTop: 24, borderTop: '1px solid #e0e0e0' }}>
+            <SubTitle>General Information</SubTitle>
             
-            <InfoBox type="info">
-              <strong>Future State Implementation:</strong> Fee is charged unless cancelled via the same 
-              partner (not just original booking channel). Fee amount is based on point of sale country, 
-              providing flexibility for country-level adjustments.
-            </InfoBox>
-          </Section>
-
-          <Section>
-            <SectionTitle>Decision Tree - Fee Validation</SectionTitle>
-            <p>Every reservation must pass all 6 validation steps to be charged a fee:</p>
-            
-            <DecisionTree>
-              <DecisionStep>
-                <StepNumber>1</StepNumber>
-                <StepContent>
-                  <StepTitle>Reservation Number Check</StepTitle>
-                  <StepDescription>
-                    Has a reservation been made?<br/>
-                    <strong>Condition:</strong> ResNr &gt; 0<br/>
-                    <strong>If fails:</strong> No fee charged
-                  </StepDescription>
-                </StepContent>
-              </DecisionStep>
-
-              <DecisionStep>
-                <StepNumber>2</StepNumber>
-                <StepContent>
-                  <StepTitle>Booking Channel / Interface Check</StepTitle>
-                  <StepDescription>
-                    Was the booking made through a GDS/DCF partner interface?<br/>
-                    <strong>Valid channels:</strong> SOAP, TPRA (DCF) | Galileo (GG), Worldscan (GW), 
-                    Sabre (GS), Amadeus (GA), Expedia, Priceline, Meili<br/>
-                    <strong>If fails:</strong> No fee charged (not a GDS/DCF booking)
-                  </StepDescription>
-                </StepContent>
-              </DecisionStep>
-
-              <DecisionStep>
-                <StepNumber>3</StepNumber>
-                <StepContent>
-                  <StepTitle>Partner Check</StepTitle>
-                  <StepDescription>
-                    Is the identified partner configured in the system?<br/>
-                    <strong>Condition:</strong> Partner exists in parameter configuration<br/>
-                    <strong>If fails:</strong> No fee charged
-                  </StepDescription>
-                </StepContent>
-              </DecisionStep>
-
-              <DecisionStep>
-                <StepNumber>4</StepNumber>
-                <StepContent>
-                  <StepTitle>Mandant Code Pick-Up Branch Check</StepTitle>
-                  <StepDescription>
-                    Was the reservation made for a franchise branch?<br/>
-                    <strong>Condition:</strong> Mandant code is assigned to franchisee<br/>
-                    <strong>If fails:</strong> No fee charged (not a franchise booking)
-                  </StepDescription>
-                </StepContent>
-              </DecisionStep>
-
-              <DecisionStep>
-                <StepNumber>5</StepNumber>
-                <StepContent>
-                  <StepTitle>Reservation Status Check</StepTitle>
-                  <StepDescription>
-                    What is the booking status?<br/>
-                    <strong>Valid statuses:</strong> Invoice, No Show, Open, 
-                    Cancellation not via original booking channel<br/>
-                    <strong>If fails:</strong> No fee charged (cancelled via same channel)
-                  </StepDescription>
-                </StepContent>
-              </DecisionStep>
-
-              <DecisionStep>
-                <StepNumber>6</StepNumber>
-                <StepContent>
-                  <StepTitle>Invoice Type and Serial Number Check</StepTitle>
-                  <StepDescription>
-                    Is this the main invoice and first in series?<br/>
-                    <strong>Condition:</strong> Main Invoice AND MSER = 0<br/>
-                    <strong>If fails:</strong> No fee charged (prevents duplicate charging)
-                  </StepDescription>
-                </StepContent>
-              </DecisionStep>
-            </DecisionTree>
-
-            <InfoBox type="success">
-              <strong>All steps passed?</strong> The system proceeds to calculate the fee amount 
-              based on partner and region.
-            </InfoBox>
-          </Section>
-
-          <Section>
-            <SectionTitle>Fee Amount Calculation</SectionTitle>
-            
-            <SubTitle>Standard Fee by Partner and Region</SubTitle>
-            <FeeTable>
-              <thead>
-                <tr>
-                  <th>Partner</th>
-                  <th>EMEA</th>
-                  <th>Americas</th>
-                  <th>Other</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><strong>Travelport</strong> (Worldscan + Galileo)</td>
-                  <td>USD 8.60</td>
-                  <td>USD 8.60</td>
-                  <td>USD 8.60</td>
-                </tr>
-                <tr>
-                  <td><strong>Sabre</strong></td>
-                  <td>USD 7.17</td>
-                  <td>USD 7.17</td>
-                  <td>USD 7.17</td>
-                </tr>
-                <tr>
-                  <td><strong>Amadeus</strong></td>
-                  <td>EUR 5.29</td>
-                  <td>EUR 5.29</td>
-                  <td>EUR 5.29</td>
-                </tr>
-                <tr>
-                  <td><strong>Expedia</strong> (EMEA source)</td>
-                  <td>EUR 3.00</td>
-                  <td>EUR 4.00</td>
-                  <td>EUR 4.00</td>
-                </tr>
-                <tr>
-                  <td><strong>Priceline</strong> (The Americas)</td>
-                  <td>USD 3.25</td>
-                  <td>USD 3.25</td>
-                  <td>USD 1.50</td>
-                </tr>
-                <tr>
-                  <td><strong>Meili</strong></td>
-                  <td>EUR 5.50</td>
-                  <td>EUR 5.50</td>
-                  <td>EUR 5.50</td>
-                </tr>
-              </tbody>
-            </FeeTable>
-
-            <SubTitle>Amadeus Special Rules (eVoucher)</SubTitle>
-            <InfoBox type="info">
-              <strong>Voucher Number Detection:</strong><br/>
-              • If Reservation Source Channel 2 or 3 = Amadeus AND Voucher Number is filled → EUR 6.55<br/>
-              • Exception: If Reservation Source Channel 3 = Amadeus AND Channel 2 = TPRA AND DFR = 10355 (Expedia) → EUR 5.29
-            </InfoBox>
-            
-            <Formula>
-              Amadeus base fee = EUR 5.29<br/>
-              Amadeus with eVoucher = EUR 5.29 + EUR 0.26 = EUR 6.55<br/>
-              Amadeus via TPRA with DFR 10355 = EUR 5.29 (no adjustment)
-            </Formula>
-
-            <SubTitle>Meili Special Rules (DFR-based Discount)</SubTitle>
-            <InfoBox type="info">
-              <strong>DFR Detection:</strong><br/>
-              • DFR = 10897 (Autoclub Australia) → EUR 2.75<br/>
-              • Other DFR codes → EUR 5.50
-            </InfoBox>
-            
-            <Formula>
-              Meili base fee = EUR 5.50<br/>
-              Meili with DFR 10897 = EUR 5.50 - EUR 2.75 = EUR 2.75
-            </Formula>
-          </Section>
-
-          <Section>
-            <SectionTitle>Currency Conversion</SectionTitle>
-            <p>
-              Fees are charged in partner's native currency (EUR or USD). Currency conversion uses 
-              the latest exchange rate available at the time of preparing the statement.
-            </p>
-          </Section>
-
-          <Section>
-            <SectionTitle>Payment Flow</SectionTitle>
-            <ul style={{ lineHeight: 1.8 }}>
-              <li><strong>Debtor:</strong> Mandant code pickup branch of the reservation</li>
-              <li><strong>Creditor:</strong> SIXT</li>
-              <li><strong>Point in time:</strong> Handover Date</li>
-            </ul>
-          </Section>
-
-          <Section>
-            <SectionTitle>Example Scenarios</SectionTitle>
-            
-            <SubTitle>Scenario 1: Chargeable Reservation</SubTitle>
-            <DecisionTree>
-              <div style={{ marginBottom: 12 }}>
-                <strong>Reservation Details:</strong><br/>
-                ResNr: 9728819374 | Source: GDS_SABRE | POS: FR | Mandant: 08234 | Status: Invoice | Invoice Type: Main, MSER=0
-              </div>
-              <DecisionStep>
-                <StepNumber>✓</StepNumber>
-                <StepContent>
-                  <StepTitle>Result: Fee Charged</StepTitle>
-                  <StepDescription>
-                    Partner: Sabre | Region: EMEA | Fee: USD 7.17
-                  </StepDescription>
-                </StepContent>
-              </DecisionStep>
-            </DecisionTree>
-
-            <SubTitle>Scenario 2: Not Chargeable (Cancelled via Original Channel)</SubTitle>
-            <DecisionTree>
-              <div style={{ marginBottom: 12 }}>
-                <strong>Reservation Details:</strong><br/>
-                ResNr: 9728888864 | Source: XML_INTERFACE | Status: Cancelled via original booking channel
-              </div>
-              <DecisionStep passed={false}>
-                <StepNumber>✗</StepNumber>
-                <StepContent>
-                  <StepTitle>Result: No Fee</StepTitle>
-                  <StepDescription>
-                    Reason: Cancelled via original booking channel (Step 5 failed)
-                  </StepDescription>
-                </StepContent>
-              </DecisionStep>
-            </DecisionTree>
-
-            <SubTitle>Scenario 3: Amadeus with eVoucher</SubTitle>
-            <DecisionTree>
-              <div style={{ marginBottom: 12 }}>
-                <strong>Reservation Details:</strong><br/>
-                ResNr: 9728413837 | Source: GDS_GALILEO | Channel 2: Amadeus | Voucher: filled | DFR: other than 10355
-              </div>
-              <DecisionStep>
-                <StepNumber>✓</StepNumber>
-                <StepContent>
-                  <StepTitle>Result: Fee Charged</StepTitle>
-                  <StepDescription>
-                    Partner: Amadeus | Region: EMEA | Base Fee: EUR 5.29 + eVoucher adjustment EUR 0.26 = <strong>EUR 6.55</strong>
-                  </StepDescription>
-                </StepContent>
-              </DecisionStep>
-            </DecisionTree>
-          </Section>
-
-          <Section>
-            <SectionTitle>Partner Source Channel Mapping</SectionTitle>
-            <FeeTable>
-              <thead>
-                <tr>
-                  <th>Partner</th>
-                  <th>Source Channel Codes</th>
-                  <th>Technology</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Travelport (Worldscan)</td>
-                  <td>GW</td>
-                  <td>GDS</td>
-                </tr>
-                <tr>
-                  <td>Travelport (Galileo)</td>
-                  <td>GG</td>
-                  <td>GDS</td>
-                </tr>
-                <tr>
-                  <td>Sabre</td>
-                  <td>GS</td>
-                  <td>GDS</td>
-                </tr>
-                <tr>
-                  <td>Amadeus</td>
-                  <td>GA</td>
-                  <td>GDS</td>
-                </tr>
-                <tr>
-                  <td>Expedia</td>
-                  <td>SOAP, TPRA (varies by source)</td>
-                  <td>API/DCF</td>
-                </tr>
-                <tr>
-                  <td>Priceline</td>
-                  <td>PriceLine011S</td>
-                  <td>API/DCF</td>
-                </tr>
-                <tr>
-                  <td>Meili</td>
-                  <td>Meili</td>
-                  <td>API/DCF</td>
-                </tr>
-              </tbody>
-            </FeeTable>
-          </Section>
-
-          <Section>
-            <SectionTitle>Additional Notes</SectionTitle>
             <InfoBox type="warning">
               <strong>Important:</strong> GDS fees for Franchise and Corporate are not connected. 
               They can be considered independently of each other. Fee only applies where 
               Franchise & Corporate are connected (source: Thorsten, verbally on 11.02.26).
             </InfoBox>
+
+            <div style={{ marginTop: 16 }}>
+              <strong style={{ fontSize: 14 }}>Currency Conversion</strong>
+              <p style={{ fontSize: 13, color: '#666', marginTop: 8 }}>
+                Fees are charged in partner's native currency (EUR or USD). Currency conversion uses 
+                the latest exchange rate available at the time of preparing the statement.
+              </p>
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <strong style={{ fontSize: 14 }}>Payment Flow</strong>
+              <ul style={{ lineHeight: 1.8, fontSize: 13, color: '#666', marginTop: 8 }}>
+                <li><strong>Debtor:</strong> Mandant code pickup branch of the reservation</li>
+                <li><strong>Creditor:</strong> SIXT</li>
+                <li><strong>Point in time:</strong> Handover Date</li>
+              </ul>
+            </div>
             
             <p style={{ marginTop: 16, fontSize: 13, color: '#666' }}>
               <strong>Responsible for parameter changes:</strong> Franchise Controlling<br/>
