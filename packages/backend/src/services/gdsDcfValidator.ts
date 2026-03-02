@@ -230,7 +230,7 @@ export function getDefaultPartners(): GdsDcfPartner[] {
   return [
     {
       id: 'travelport',
-      name: 'Travelport (Worldscan + Galileo)',
+      name: 'Travelport (Worldspan + Galileo)',
       sourceChannels: ['GW', 'GG'],
       feesByRegion: [
         { region: 'EMEA', amount: 8.60, currency: 'USD' },
@@ -257,9 +257,19 @@ export function getDefaultPartners(): GdsDcfPartner[] {
         { region: 'Americas', amount: 5.29, currency: 'EUR' },
         { region: 'Other', amount: 5.29, currency: 'EUR' },
       ],
+    },
+    {
+      id: 'amadeus-evoucher',
+      name: 'Amadeus eVoucher',
+      sourceChannels: ['GA'],
+      feesByRegion: [
+        { region: 'EMEA', amount: 6.55, currency: 'EUR' },
+        { region: 'Americas', amount: 6.55, currency: 'EUR' },
+        { region: 'Other', amount: 6.55, currency: 'EUR' },
+      ],
       voucherRules: {
         dfrCodes: ['10355'],
-        feeAdjustment: 0.26,
+        feeAdjustment: 1.26,
       },
     },
     {

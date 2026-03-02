@@ -106,6 +106,13 @@ const RegionFees = styled.div`
   margin-top: 12px;
 `;
 
+const RegionLabel = styled.div`
+  font-size: 12px;
+  font-weight: 600;
+  color: ${props => props.theme.colors.textSecondary};
+  margin-bottom: 12px;
+`;
+
 const FeeItem = styled.div`
   padding: 12px;
   background: white;
@@ -124,6 +131,50 @@ const FeeItem = styled.div`
     font-size: 15px;
     font-weight: 600;
     color: ${props => props.theme.colors.text};
+  }
+`;
+
+const DfrSection = styled.div`
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e0e0e0;
+`;
+
+const DfrTitle = styled.div`
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: ${props => props.theme.colors.text};
+`;
+
+const DfrList = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+`;
+
+const DfrTag = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #f0f0f0;
+  border-radius: 16px;
+  font-size: 12px;
+  color: #333;
+  
+  button {
+    background: none;
+    border: none;
+    color: #999;
+    cursor: pointer;
+    padding: 0;
+    font-size: 14px;
+    line-height: 1;
+    
+    &:hover {
+      color: #dc3545;
+    }
   }
 `;
 
@@ -274,8 +325,42 @@ export default function FsmParametersPage() {
     setEditingPartner({ ...editingPartner, feesByRegion: updatedFees });
   };
 
+  const addDfrCode = () => {
+    if (!editingPartner) return;
+    
+    const dfrCode = prompt('Enter DFR/Agency Code:');
+    if (!dfrCode) return;
+    
+    const feeAdjustment = prompt('Enter fee adjustment (e.g., 0.26 for +0.26 EUR or -2.75 for discount):');
+    if (feeAdjustment === null) return;
+    
+    const adjustment = parseFloat(feeAdjustment) || 0;
+    
+    const updatedRules = editingPartner.voucherRules || { dfrCodes: [], feeAdjustment: 0 };
+    
+    setEditingPartner({
+      ...editingPartner,
+      voucherRules: {
+        dfrCodes: [...updatedRules.dfrCodes, dfrCode],
+        feeAdjustment: adjustment,
+      },
+    });
+  };
+
+  const removeDfrCode = (codeToRemove: string) => {
+    if (!editingPartner || !editingPartner.voucherRules) return;
+    
+    setEditingPartner({
+      ...editingPartner,
+      voucherRules: {
+        ...editingPartner.voucherRules,
+        dfrCodes: editingPartner.voucherRules.dfrCodes.filter(code => code !== codeToRemove),
+      },
+    });
+  };
+
   const gdsPartners = partners.filter(p => 
-    p.id === 'travelport' || p.id === 'sabre' || p.id === 'amadeus'
+    p.id === 'travelport' || p.id === 'sabre' || p.id === 'amadeus' || p.id === 'amadeus-evoucher'
   );
 
   const dcfPartners = partners.filter(p => 
@@ -296,10 +381,7 @@ export default function FsmParametersPage() {
             </ButtonGroup>
           </PartnerHeader>
           
-          <SourceChannels>
-            <strong>Source Channels:</strong> {partner.sourceChannels.join(', ')}
-          </SourceChannels>
-          
+          <RegionLabel>POS (Point of Sale)</RegionLabel>
           <RegionFees>
             {partner.feesByRegion.map(fee => (
               <FeeItem key={fee.region}>
@@ -312,11 +394,20 @@ export default function FsmParametersPage() {
           </RegionFees>
 
           {partner.voucherRules && (
-            <div style={{ marginTop: 12, fontSize: 12, color: '#666', fontStyle: 'italic' }}>
-              Special Rule: DFR {partner.voucherRules.dfrCodes.join(', ')} → 
-              {partner.voucherRules.feeAdjustment > 0 ? '+' : ''}
-              {partner.voucherRules.feeAdjustment.toFixed(2)} {partner.feesByRegion[0]?.currency}
-            </div>
+            <DfrSection>
+              <DfrTitle>DFR Exceptions:</DfrTitle>
+              <DfrList>
+                {partner.voucherRules.dfrCodes.map(dfr => (
+                  <DfrTag key={dfr}>
+                    {dfr}
+                    <span style={{ marginLeft: 4, fontWeight: 600 }}>
+                      {partner.voucherRules!.feeAdjustment > 0 ? '+' : ''}
+                      {partner.voucherRules!.feeAdjustment.toFixed(2)} {partner.feesByRegion[0]?.currency}
+                    </span>
+                  </DfrTag>
+                ))}
+              </DfrList>
+            </DfrSection>
           )}
         </PartnerCard>
       ))}
@@ -449,6 +540,45 @@ export default function FsmParametersPage() {
                 </div>
               );
             })}
+
+            <div style={{ marginTop: 24, paddingTop: 24, borderTop: '1px solid #e0e0e0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <label style={{ fontWeight: 600, fontSize: 14 }}>DFR / Agency Exceptions</label>
+                <Button onClick={addDfrCode} style={{ fontSize: 12, padding: '6px 12px' }}>
+                  + Add DFR
+                </Button>
+              </div>
+              
+              {editingPartner.voucherRules && editingPartner.voucherRules.dfrCodes.length > 0 && (
+                <>
+                  <FormGroup>
+                    <label>Fee Adjustment</label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={editingPartner.voucherRules.feeAdjustment}
+                      onChange={(e) => setEditingPartner({
+                        ...editingPartner,
+                        voucherRules: {
+                          ...editingPartner.voucherRules!,
+                          feeAdjustment: parseFloat(e.target.value) || 0,
+                        },
+                      })}
+                      placeholder="e.g., 0.26 or -2.75"
+                    />
+                  </FormGroup>
+                  
+                  <DfrList style={{ marginTop: 12 }}>
+                    {editingPartner.voucherRules.dfrCodes.map(code => (
+                      <DfrTag key={code}>
+                        {code}
+                        <button onClick={() => removeDfrCode(code)}>✕</button>
+                      </DfrTag>
+                    ))}
+                  </DfrList>
+                </>
+              )}
+            </div>
 
             <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
               <Button onClick={handleSave} style={{ flex: 1 }}>Save Changes</Button>
