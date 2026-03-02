@@ -197,8 +197,8 @@ export default function FsmParametersPage() {
   const [loading, setLoading] = useState(true);
   const [editingPartner, setEditingPartner] = useState<GdsDcfPartner | null>(null);
   const [showModal, setShowModal] = useState(false);
-  const [gdsOpen, setGdsOpen] = useState(true);
-  const [dcfOpen, setDcfOpen] = useState(true);
+  const [gdsOpen, setGdsOpen] = useState(false);
+  const [dcfOpen, setDcfOpen] = useState(false);
 
   useEffect(() => {
     loadPartners();
@@ -326,7 +326,7 @@ export default function FsmParametersPage() {
   if (loading) {
     return (
       <div>
-        <PageTitle>Calc. Parameter</PageTitle>
+        <PageTitle>Parameter Maintenance</PageTitle>
         <Card>
           <InfoMessage>Loading parameters...</InfoMessage>
         </Card>
@@ -336,12 +336,12 @@ export default function FsmParametersPage() {
 
   return (
     <div>
-      <PageTitle>Calc. Parameter - GDS & DCF Partners</PageTitle>
+      <PageTitle>Parameter Maintenance</PageTitle>
       
       <Card>
         <ParamsContainer>
           <p style={{ fontSize: 13, color: '#666', marginBottom: 20 }}>
-            Manage GDS and DCF partner fee configurations. Changes will affect future calculations.
+            Manage parameter set-up here. Changes will affect future calculations.
           </p>
 
           <Section>
@@ -349,7 +349,7 @@ export default function FsmParametersPage() {
               <SectionHeader isOpen={gdsOpen} onClick={() => setGdsOpen(!gdsOpen)}>
                 <SectionTitle>
                   <CategoryBadge type="gds">GDS</CategoryBadge>
-                  Global Distribution System Partners
+                  Global Distribution System
                   <span style={{ fontSize: 14, fontWeight: 'normal', color: '#666', marginLeft: 8 }}>
                     ({gdsPartners.length})
                   </span>
@@ -371,7 +371,7 @@ export default function FsmParametersPage() {
               <SectionHeader isOpen={dcfOpen} onClick={() => setDcfOpen(!dcfOpen)}>
                 <SectionTitle>
                   <CategoryBadge type="dcf">DCF</CategoryBadge>
-                  Direct Connect Fee Partners
+                  Direct Connect Fee
                   <span style={{ fontSize: 14, fontWeight: 'normal', color: '#666', marginLeft: 8 }}>
                     ({dcfPartners.length})
                   </span>
