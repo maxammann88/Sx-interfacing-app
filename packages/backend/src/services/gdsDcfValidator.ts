@@ -190,12 +190,6 @@ export class GdsDcfValidator {
     // Check for DFR-specific fee override
     if (partner.voucherRules && dfr && partner.voucherRules.dfrFees[dfr] !== undefined) {
       finalFee = partner.voucherRules.dfrFees[dfr];
-    } else if (partner.voucherRules && voucherNumber && Object.keys(partner.voucherRules.dfrFees).length > 0) {
-      // If voucher is present but DFR not in exceptions, use eVoucher fee (6.55 for Amadeus)
-      const eVoucherFee = 6.55; // Standard eVoucher fee
-      if (partner.id === 'amadeus') {
-        finalFee = eVoucherFee;
-      }
     }
 
     return {
@@ -257,19 +251,19 @@ export function getDefaultPartners(): GdsDcfPartner[] {
       name: 'Amadeus',
       sourceChannels: ['GA'],
       feesByRegion: [
-        { region: 'EMEA', amount: 5.29, currency: 'EUR' },
-        { region: 'Americas', amount: 5.29, currency: 'EUR' },
-        { region: 'Other', amount: 5.29, currency: 'EUR' },
+        { region: 'EMEA', amount: 6.55, currency: 'EUR' },
+        { region: 'Americas', amount: 6.55, currency: 'EUR' },
+        { region: 'Other', amount: 6.55, currency: 'EUR' },
       ],
       voucherRules: {
         dfrFees: {
-          '10355': 5.29, // Expedia exception
+          '10355': 5.29, // Expedia exception - lower fee
         },
       },
     },
     {
       id: 'expedia-emea',
-      name: 'Expedia (EMEA)',
+      name: 'Expedia',
       sourceChannels: ['Expedia02I6'],
       feesByRegion: [
         { region: 'EMEA', amount: 3.00, currency: 'EUR' },
@@ -279,7 +273,7 @@ export function getDefaultPartners(): GdsDcfPartner[] {
     },
     {
       id: 'priceline-americas',
-      name: 'Priceline (The Americas)',
+      name: 'Priceline',
       sourceChannels: ['PriceLine011S'],
       feesByRegion: [
         { region: 'EMEA', amount: 3.25, currency: 'USD' },

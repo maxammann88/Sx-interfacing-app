@@ -350,7 +350,7 @@ export default function FsmParametersPage() {
   const addDfrCode = () => {
     if (!editingPartner) return;
     
-    const dfrCode = prompt('Enter DFR/Agency Code:');
+    const dfrCode = prompt('Enter DFR Code:');
     if (!dfrCode) return;
     
     const feeAmount = prompt(`Enter fee amount for DFR ${dfrCode} (e.g., 5.29 or 2.75):`);
@@ -434,7 +434,7 @@ export default function FsmParametersPage() {
 
           {partner.voucherRules && Object.keys(partner.voucherRules.dfrFees).length > 0 && (
             <DfrSection>
-              <DfrTitle>DFR / Agency Exceptions:</DfrTitle>
+              <DfrTitle>DFR Exceptions:</DfrTitle>
               {Object.entries(partner.voucherRules.dfrFees).map(([dfrCode, fee]) => (
                 <DfrSubItem key={dfrCode}>
                   <span className="dfr-code">{dfrCode}</span>
@@ -443,14 +443,6 @@ export default function FsmParametersPage() {
                   </span>
                 </DfrSubItem>
               ))}
-              {partner.id === 'amadeus' && (
-                <DfrSubItem>
-                  <span className="dfr-code">with eVoucher (default)</span>
-                  <span className="dfr-fee">
-                    {partner.feesByRegion[0]?.currency} 6.55
-                  </span>
-                </DfrSubItem>
-              )}
             </DfrSection>
           )}
         </PartnerCard>
@@ -576,13 +568,13 @@ export default function FsmParametersPage() {
 
             <div style={{ marginTop: 24, paddingTop: 24, borderTop: '1px solid #e0e0e0' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <label style={{ fontWeight: 600, fontSize: 14 }}>DFR / Agency Exceptions</label>
+                <label style={{ fontWeight: 600, fontSize: 14 }}>DFR Exceptions</label>
                 <Button onClick={addDfrCode} style={{ fontSize: 12, padding: '6px 12px' }}>
                   + Add DFR
                 </Button>
               </div>
               <div style={{ fontSize: 12, color: '#666', marginBottom: 12 }}>
-                Define specific fees for different DFR/Agency codes. Each code can have its own fee amount.
+                Define specific fees for different DFR codes. Each code can have its own fee amount.
               </div>
               
               {editingPartner.voucherRules && Object.keys(editingPartner.voucherRules.dfrFees).length > 0 && (
