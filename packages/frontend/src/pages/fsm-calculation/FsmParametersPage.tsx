@@ -667,7 +667,7 @@ export default function FsmParametersPage() {
                 <ExpandIcon isOpen={gdsOpen}>▼</ExpandIcon>
               </SectionHeader>
               <SectionContent isOpen={gdsOpen}>
-                <div style={{ marginBottom: 16 }}>
+                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end', paddingRight: 12 }}>
                   <Button onClick={() => handleAddPartner('gds')} style={{ fontSize: 13 }}>
                     + Add GDS Partner
                   </Button>
@@ -694,7 +694,7 @@ export default function FsmParametersPage() {
                 <ExpandIcon isOpen={dcfOpen}>▼</ExpandIcon>
               </SectionHeader>
               <SectionContent isOpen={dcfOpen}>
-                <div style={{ marginBottom: 16 }}>
+                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end', paddingRight: 12 }}>
                   <Button onClick={() => handleAddPartner('dcf')} style={{ fontSize: 13 }}>
                     + Add DCF Partner
                   </Button>
@@ -741,8 +741,9 @@ export default function FsmParametersPage() {
                       <Input
                         type="number"
                         step="0.01"
-                        value={fee?.amount || 0}
+                        value={fee?.amount ?? ''}
                         onChange={(e) => updateRegionFee(region as any, 'amount', e.target.value)}
+                        placeholder="0.00"
                       />
                     </FormGroup>
                     <FormGroup style={{ marginBottom: 0 }}>
@@ -784,10 +785,10 @@ export default function FsmParametersPage() {
                           <Input
                             type="number"
                             step="0.01"
-                            value={feeData.amount}
+                            value={feeData.amount ?? ''}
                             onChange={(e) => updateAmadeusDfr('without', dfrCode, 'amount', e.target.value)}
                             style={{ flex: 1 }}
-                            placeholder="Amount"
+                            placeholder="0.00"
                           />
                           <select
                             value={feeData.currency}
@@ -837,10 +838,10 @@ export default function FsmParametersPage() {
                           <Input
                             type="number"
                             step="0.01"
-                            value={feeData.amount}
+                            value={feeData.amount ?? ''}
                             onChange={(e) => updateAmadeusDfr('with', dfrCode, 'amount', e.target.value)}
                             style={{ flex: 1 }}
-                            placeholder="Amount"
+                            placeholder="0.00"
                           />
                           <select
                             value={feeData.currency}
@@ -897,10 +898,10 @@ export default function FsmParametersPage() {
                         <Input
                           type="number"
                           step="0.01"
-                          value={feeData.amount}
+                          value={feeData.amount ?? ''}
                           onChange={(e) => updateDfrFee(dfrCode, 'amount', e.target.value)}
                           style={{ flex: 1 }}
-                          placeholder="Amount"
+                          placeholder="0.00"
                         />
                         <select
                           value={feeData.currency}
