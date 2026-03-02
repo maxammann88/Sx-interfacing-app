@@ -198,6 +198,7 @@ export interface ApiResponse<T> {
 export interface GdsDcfPartner {
   id: string;
   name: string;
+  category: 'gds' | 'dcf';
   sourceChannels: string[];
   feesByRegion: {
     region: 'EMEA' | 'Americas' | 'Other';

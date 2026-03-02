@@ -358,13 +358,12 @@ export default function FsmParametersPage() {
     if (!partnerName) return;
 
     const partnerId = partnerName.toLowerCase().replace(/\s+/g, '-');
-    const sourceChannel = prompt('Enter source channel (e.g., GA for GDS, OTA name for DCF):');
-    if (!sourceChannel) return;
 
     const newPartner: GdsDcfPartner = {
       id: partnerId,
       name: partnerName,
-      sourceChannels: [sourceChannel],
+      category: type,
+      sourceChannels: [''],
       feesByRegion: [
         { region: 'EMEA', amount: 0, currency: 'EUR' },
         { region: 'Americas', amount: 0, currency: 'EUR' },
@@ -531,13 +530,9 @@ export default function FsmParametersPage() {
     });
   };
 
-  const gdsPartners = partners.filter(p => 
-    p.id === 'travelport' || p.id === 'sabre' || p.id === 'amadeus'
-  );
+  const gdsPartners = partners.filter(p => p.category === 'gds');
 
-  const dcfPartners = partners.filter(p => 
-    p.id === 'expedia-emea' || p.id === 'priceline-americas' || p.id === 'meili'
-  );
+  const dcfPartners = partners.filter(p => p.category === 'dcf');
 
   const renderPartners = (partnerList: GdsDcfPartner[]) => (
     <PartnersGrid>

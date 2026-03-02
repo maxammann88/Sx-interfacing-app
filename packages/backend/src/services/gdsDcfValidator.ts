@@ -231,6 +231,7 @@ export function getDefaultPartners(): GdsDcfPartner[] {
     {
       id: 'travelport',
       name: 'Travelport (Worldspan + Galileo)',
+      category: 'gds',
       sourceChannels: ['GW', 'GG'],
       feesByRegion: [
         { region: 'EMEA', amount: 8.60, currency: 'USD' },
@@ -241,6 +242,7 @@ export function getDefaultPartners(): GdsDcfPartner[] {
     {
       id: 'sabre',
       name: 'Sabre',
+      category: 'gds',
       sourceChannels: ['GS'],
       feesByRegion: [
         { region: 'EMEA', amount: 7.17, currency: 'USD' },
@@ -251,6 +253,7 @@ export function getDefaultPartners(): GdsDcfPartner[] {
     {
       id: 'amadeus',
       name: 'Amadeus',
+      category: 'gds',
       sourceChannels: ['GA'],
       feesByRegion: [
         { region: 'EMEA', amount: 6.55, currency: 'EUR' },
@@ -265,6 +268,7 @@ export function getDefaultPartners(): GdsDcfPartner[] {
     {
       id: 'expedia-emea',
       name: 'Expedia',
+      category: 'dcf',
       sourceChannels: ['Expedia02I6'],
       feesByRegion: [
         { region: 'EMEA', amount: 3.00, currency: 'EUR' },
@@ -275,6 +279,7 @@ export function getDefaultPartners(): GdsDcfPartner[] {
     {
       id: 'priceline-americas',
       name: 'Priceline',
+      category: 'dcf',
       sourceChannels: ['PriceLine011S'],
       feesByRegion: [
         { region: 'EMEA', amount: 3.25, currency: 'USD' },
@@ -285,6 +290,7 @@ export function getDefaultPartners(): GdsDcfPartner[] {
     {
       id: 'meili',
       name: 'Meili',
+      category: 'dcf',
       sourceChannels: ['Meili'],
       feesByRegion: [
         { region: 'EMEA', amount: 5.50, currency: 'EUR' },
