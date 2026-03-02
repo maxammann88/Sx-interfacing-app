@@ -353,6 +353,30 @@ export default function FsmParametersPage() {
     }
   };
 
+  const handleAddPartner = (type: 'gds' | 'dcf') => {
+    const partnerName = prompt('Enter partner name:');
+    if (!partnerName) return;
+
+    const partnerId = partnerName.toLowerCase().replace(/\s+/g, '-');
+    const sourceChannel = prompt('Enter source channel (e.g., GA for GDS, OTA name for DCF):');
+    if (!sourceChannel) return;
+
+    const newPartner: GdsDcfPartner = {
+      id: partnerId,
+      name: partnerName,
+      sourceChannels: [sourceChannel],
+      feesByRegion: [
+        { region: 'EMEA', amount: 0, currency: 'EUR' },
+        { region: 'Americas', amount: 0, currency: 'EUR' },
+        { region: 'Other', amount: 0, currency: 'EUR' },
+      ],
+      voucherRules: { dfrFees: {} },
+    };
+
+    setEditingPartner(newPartner);
+    setShowModal(true);
+  };
+
   const updateRegionFee = (region: 'EMEA' | 'Americas' | 'Other', field: 'amount' | 'currency', value: any) => {
     if (!editingPartner) return;
 
@@ -648,6 +672,11 @@ export default function FsmParametersPage() {
                 <ExpandIcon isOpen={gdsOpen}>▼</ExpandIcon>
               </SectionHeader>
               <SectionContent isOpen={gdsOpen}>
+                <div style={{ marginBottom: 16 }}>
+                  <Button onClick={() => handleAddPartner('gds')} style={{ fontSize: 13 }}>
+                    + Add GDS Partner
+                  </Button>
+                </div>
                 {gdsPartners.length === 0 ? (
                   <InfoMessage>No GDS partners configured.</InfoMessage>
                 ) : (
@@ -670,6 +699,11 @@ export default function FsmParametersPage() {
                 <ExpandIcon isOpen={dcfOpen}>▼</ExpandIcon>
               </SectionHeader>
               <SectionContent isOpen={dcfOpen}>
+                <div style={{ marginBottom: 16 }}>
+                  <Button onClick={() => handleAddPartner('dcf')} style={{ fontSize: 13 }}>
+                    + Add DCF Partner
+                  </Button>
+                </div>
                 {dcfPartners.length === 0 ? (
                   <InfoMessage>No DCF partners configured.</InfoMessage>
                 ) : (
@@ -685,7 +719,9 @@ export default function FsmParametersPage() {
         <Modal onClick={() => setShowModal(false)}>
           <ModalContent onClick={(e) => e.stopPropagation()}>
             <ModalHeader>
-              <ModalTitle>Edit Partner: {editingPartner.name}</ModalTitle>
+              <ModalTitle>
+                {partners.some(p => p.id === editingPartner.id) ? 'Edit' : 'Create'} Partner: {editingPartner.name}
+              </ModalTitle>
               <Button onClick={() => setShowModal(false)}>✕</Button>
             </ModalHeader>
 
