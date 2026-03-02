@@ -11,6 +11,10 @@ interface MockData {
   sapImports: any[];
   billingRuns: any[];
   interfacingPlans: any[];
+  gdsDcfPartners: any[];
+  gdsDcfUploads: any[];
+  gdsDcfReservations: any[];
+  gdsDcfValidationResults: any[];
 }
 
 const mockData: MockData = {
@@ -95,6 +99,10 @@ const mockData: MockData = {
   sapImports: [],
   billingRuns: [],
   interfacingPlans: [],
+  gdsDcfPartners: [],
+  gdsDcfUploads: [],
+  gdsDcfReservations: [],
+  gdsDcfValidationResults: [],
 };
 
 let idCounters = {
@@ -103,6 +111,9 @@ let idCounters = {
   streams: 3,
   subApps: 2,
   countries: 3,
+  gdsDcfUploads: 1,
+  gdsDcfReservations: 1,
+  gdsDcfValidationResults: 1,
 };
 
 const createMockModel = (modelName: keyof MockData) => {
@@ -233,6 +244,34 @@ const mockPrisma = {
   countryPlanAssignment: createMockModel('interfacingPlans'),
   correctedStatement: createMockModel('interfacingPlans'),
   bankGuarantee: createMockModel('masterData'),
+  gdsDcfPartner: createMockModel('gdsDcfPartners'),
+  gdsDcfUpload: createMockModel('gdsDcfUploads'),
+  gdsDcfReservation: {
+    ...createMockModel('gdsDcfReservations'),
+    createMany: async (options: any) => {
+      const items = options.data;
+      const created = items.map((item: any) => {
+        const newId = idCounters.gdsDcfReservations++;
+        const newItem = { id: newId, ...item };
+        mockData.gdsDcfReservations.push(newItem);
+        return newItem;
+      });
+      return { count: created.length };
+    },
+  },
+  gdsDcfValidationResult: {
+    ...createMockModel('gdsDcfValidationResults'),
+    createMany: async (options: any) => {
+      const items = options.data;
+      const created = items.map((item: any) => {
+        const newId = idCounters.gdsDcfValidationResults++;
+        const newItem = { id: newId, ...item };
+        mockData.gdsDcfValidationResults.push(newItem);
+        return newItem;
+      });
+      return { count: created.length };
+    },
+  },
   
   $transaction: async (operations: any[]) => {
     return Promise.all(operations);

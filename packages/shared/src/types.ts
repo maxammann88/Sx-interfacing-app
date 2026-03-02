@@ -186,11 +186,67 @@ export interface InterfacingPlan {
   updatedAt: string;
 }
 
-export type UploadType = 'sap' | 'countries' | 'master-data';
+export type UploadType = 'sap' | 'countries' | 'master-data' | 'gds-dcf';
 
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;
   error?: string;
   message?: string;
+}
+
+export interface GdsDcfPartner {
+  id: string;
+  name: string;
+  sourceChannels: string[];
+  feesByRegion: {
+    region: 'EMEA' | 'Americas' | 'Other';
+    amount: number;
+    currency: string;
+  }[];
+  voucherRules?: {
+    dfrCodes: string[];
+    feeAdjustment: number;
+  };
+}
+
+export interface GdsDcfReservation {
+  resNumber: string;
+  source: string;
+  pos: string;
+  pci: string;
+  pickupDate: string;
+  rateCode: string;
+  agency: string;
+  iata: string;
+  fee: number;
+  mandantCode?: string;
+  status?: string;
+  invoiceType?: string;
+  serialNumber?: number;
+  voucherNumber?: string;
+  dfr?: string;
+}
+
+export interface GdsDcfValidationResult {
+  reservation: GdsDcfReservation;
+  isChargeable: boolean;
+  calculatedFee: number;
+  currency: string;
+  partner: string;
+  region: string;
+  validationSteps: {
+    step: string;
+    passed: boolean;
+    reason?: string;
+  }[];
+}
+
+export interface GdsDcfUpload {
+  id: number;
+  filename: string;
+  uploadedAt: string;
+  recordCount: number;
+  chargeableCount: number;
+  totalFees: number;
 }

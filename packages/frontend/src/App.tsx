@@ -80,6 +80,7 @@ import FsmDataUploadPage from './pages/fsm-calculation/FsmDataUploadPage';
 import FsmParametersPage from './pages/fsm-calculation/FsmParametersPage';
 import FsmCalculationPage from './pages/fsm-calculation/FsmCalculationPage';
 import FsmReportingPage from './pages/fsm-calculation/FsmReportingPage';
+import FsmResultsPage from './pages/fsm-calculation/FsmResultsPage';
 
 export default function App() {
   const [, setRegistryReady] = useState(0);
@@ -136,6 +137,7 @@ export default function App() {
             <Route path="parameters" element={<FsmParametersPage />} />
             <Route path="calculation" element={<FsmCalculationPage />} />
             <Route path="reporting" element={<FsmReportingPage />} />
+            <Route path="results" element={<FsmResultsPage />} />
           </Route>
 
           <Route path="/sub-app/:slug/*" element={<GenericSubAppPage />} />
