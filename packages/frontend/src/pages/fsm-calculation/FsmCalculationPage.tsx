@@ -41,17 +41,6 @@ const SectionTitle = styled.h2`
   color: ${props => props.theme.colors.text};
 `;
 
-const CategoryBadge = styled.span<{ type: 'gds' | 'dcf' }>`
-  padding: 4px 10px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  background: ${props => props.type === 'gds' ? '#e3f2fd' : '#fff3e0'};
-  color: ${props => props.type === 'gds' ? '#1976d2' : '#f57c00'};
-`;
-
 const ExpandIcon = styled.span<{ isOpen: boolean }>`
   font-size: 14px;
   transition: transform 0.2s;
@@ -125,29 +114,6 @@ const StepDescription = styled.div`
   line-height: 1.5;
 `;
 
-const FeeTable = styled.table`
-  width: 100%;
-  border-collapse: collapse;
-  margin: 16px 0;
-  font-size: 13px;
-  
-  th, td {
-    padding: 10px 12px;
-    text-align: left;
-    border: 1px solid #e0e0e0;
-  }
-  
-  th {
-    background: #f5f5f5;
-    font-weight: 600;
-    color: ${props => props.theme.colors.text};
-  }
-  
-  tbody tr:hover {
-    background: #f9f9f9;
-  }
-`;
-
 const InfoBox = styled.div<{ type?: 'info' | 'warning' | 'success' }>`
   padding: 12px 16px;
   border-radius: 6px;
@@ -166,20 +132,8 @@ const InfoBox = styled.div<{ type?: 'info' | 'warning' | 'success' }>`
   line-height: 1.6;
 `;
 
-const Formula = styled.div`
-  background: #f8f9fa;
-  border: 1px solid #dee2e6;
-  border-radius: 4px;
-  padding: 12px 16px;
-  font-family: 'Courier New', monospace;
-  font-size: 14px;
-  margin: 12px 0;
-  color: #495057;
-`;
-
 export default function FsmCalculationPage() {
-  const [gdsOpen, setGdsOpen] = useState(false);
-  const [dcfOpen, setDcfOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
 
   return (
     <div>
@@ -188,21 +142,18 @@ export default function FsmCalculationPage() {
       <Card>
         <RulesContainer>
           <p style={{ fontSize: 13, color: '#666', marginBottom: 24 }}>
-            This page documents the calculation logic for GDS (Global Distribution System) and 
-            DCF (Direct Connect Fee) charges. Expand each section to view detailed rules.
+            This page documents the calculation logic for franchise fees. Expand each section to view detailed rules.
           </p>
 
           <Section>
             <CollapsibleSection>
-              <SectionHeader isOpen={gdsOpen} onClick={() => setGdsOpen(!gdsOpen)}>
+              <SectionHeader isOpen={rulesOpen} onClick={() => setRulesOpen(!rulesOpen)}>
                 <SectionTitle>
-                  <CategoryBadge type="gds">GDS</CategoryBadge>
-                  Global Distribution System Fees
+                  GDS & DCF Fee Validation Rules
                 </SectionTitle>
-                <ExpandIcon isOpen={gdsOpen}>▼</ExpandIcon>
+                <ExpandIcon isOpen={rulesOpen}>▼</ExpandIcon>
               </SectionHeader>
-              <SectionContent isOpen={gdsOpen}>
-                {/* GDS Content */}
+              <SectionContent isOpen={rulesOpen}>
                 <InfoBox type="info">
                   <strong>Future State Implementation:</strong> Fee is charged unless cancelled via the same 
                   partner (not just original booking channel). Fee amount is based on point of sale country.
@@ -229,9 +180,9 @@ export default function FsmCalculationPage() {
                     <StepContent>
                       <StepTitle>Booking Channel / Interface Check</StepTitle>
                       <StepDescription>
-                        Was the booking made through a GDS partner interface?<br/>
-                        <strong>Valid channels:</strong> Galileo (GG), Worldspan (GW), Sabre (GS), Amadeus (GA)<br/>
-                        <strong>If fails:</strong> No fee charged (not a GDS booking)
+                        Was the booking made through a GDS/DCF partner interface?<br/>
+                        <strong>Valid channels:</strong> Configured partner source channels (see Parameter Maintenance)<br/>
+                        <strong>If fails:</strong> No fee charged (not a GDS/DCF booking)
                       </StepDescription>
                     </StepContent>
                   </DecisionStep>
@@ -288,227 +239,39 @@ export default function FsmCalculationPage() {
 
                 <InfoBox type="success">
                   <strong>All steps passed?</strong> The system proceeds to calculate the fee amount 
-                  based on partner and region.
+                  based on partner configuration and region (see Parameter Maintenance for current fee amounts).
                 </InfoBox>
 
-                <SubTitle>Standard Fee by Partner and Region</SubTitle>
-                <FeeTable>
-                  <thead>
-                    <tr>
-                      <th>Partner</th>
-                      <th>EMEA</th>
-                      <th>Americas</th>
-                      <th>Other</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td><strong>Travelport</strong> (Worldspan + Galileo)</td>
-                      <td>USD 8.60</td>
-                      <td>USD 8.60</td>
-                      <td>USD 8.60</td>
-                    </tr>
-                    <tr>
-                      <td><strong>Sabre</strong></td>
-                      <td>USD 7.17</td>
-                      <td>USD 7.17</td>
-                      <td>USD 7.17</td>
-                    </tr>
-                    <tr>
-                      <td><strong>Amadeus - Without eVoucher</strong></td>
-                      <td>EUR 5.29</td>
-                      <td>EUR 5.29</td>
-                      <td>EUR 5.29</td>
-                    </tr>
-                    <tr>
-                      <td><strong>Amadeus - With eVoucher</strong></td>
-                      <td>EUR 6.55</td>
-                      <td>EUR 6.55</td>
-                      <td>EUR 6.55</td>
-                    </tr>
-                  </tbody>
-                </FeeTable>
-
-                <SubTitle>Amadeus Special Rules (eVoucher & DFR)</SubTitle>
-                <InfoBox type="info">
-                  <strong>eVoucher Detection:</strong><br/>
-                  • If Reservation Source Channel 2 or 3 = Amadeus AND Voucher Number is filled → EUR 6.55<br/>
-                  • Without eVoucher → EUR 5.29<br/>
-                  <br/>
-                  <strong>DFR Exceptions:</strong><br/>
-                  • Specific DFR codes can override standard fees for both with/without eVoucher variants<br/>
-                  • Example: DFR 10355 (Expedia) → EUR 5.29 (for with eVoucher variant)
-                </InfoBox>
-
-                <SubTitle>Partner Source Channel Mapping</SubTitle>
-                <FeeTable>
-                  <thead>
-                    <tr>
-                      <th>Partner</th>
-                      <th>Source Channel Codes</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td>Travelport (Worldspan)</td>
-                      <td>GW</td>
-                    </tr>
-                    <tr>
-                      <td>Travelport (Galileo)</td>
-                      <td>GG</td>
-                    </tr>
-                    <tr>
-                      <td>Sabre</td>
-                      <td>GS</td>
-                    </tr>
-                    <tr>
-                      <td>Amadeus</td>
-                      <td>GA</td>
-                    </tr>
-                  </tbody>
-                </FeeTable>
-              </SectionContent>
-            </CollapsibleSection>
-          </Section>
-
-          <Section>
-            <CollapsibleSection>
-              <SectionHeader isOpen={dcfOpen} onClick={() => setDcfOpen(!dcfOpen)}>
-                <SectionTitle>
-                  <CategoryBadge type="dcf">DCF</CategoryBadge>
-                  Direct Connect Fees
-                </SectionTitle>
-                <ExpandIcon isOpen={dcfOpen}>▼</ExpandIcon>
-              </SectionHeader>
-              <SectionContent isOpen={dcfOpen}>
-                {/* DCF Content */}
-                <InfoBox type="info">
-                  <strong>Future State Implementation:</strong> DCF charges apply to direct API connections 
-                  with online travel agencies (OTAs). Same validation rules as GDS apply.
-                </InfoBox>
-
-                <SubTitle>Decision Tree - Fee Validation</SubTitle>
-                <p>Same 6-step validation as GDS, adjusted for DCF partners:</p>
-                
-                <DecisionTree>
-                  <DecisionStep>
-                    <StepNumber>2</StepNumber>
-                    <StepContent>
-                      <StepTitle>Booking Channel / Interface Check</StepTitle>
-                      <StepDescription>
-                        Was the booking made through a DCF partner interface?<br/>
-                        <strong>Valid channels:</strong> SOAP, TPRA (API connections)<br/>
-                        <strong>Partners:</strong> Expedia, Priceline, Meili<br/>
-                        <strong>If fails:</strong> No fee charged (not a DCF booking)
-                      </StepDescription>
-                    </StepContent>
-                  </DecisionStep>
-                </DecisionTree>
-                <p style={{ fontSize: 13, color: '#666', fontStyle: 'italic' }}>
-                  Steps 1, 3, 4, 5, and 6 are identical to GDS validation.
+                <SubTitle style={{ marginTop: 32 }}>Currency Conversion</SubTitle>
+                <p style={{ fontSize: 13, color: '#666' }}>
+                  Fees are charged in partner's native currency (EUR or USD). Currency conversion uses 
+                  the latest exchange rate available at the time of preparing the statement.
                 </p>
 
-                <SubTitle>Standard Fee by Partner and Region</SubTitle>
-                <FeeTable>
-                  <thead>
-                    <tr>
-                      <th>Partner</th>
-                      <th>EMEA</th>
-                      <th>Americas</th>
-                      <th>Other</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td><strong>Expedia</strong></td>
-                      <td>EUR 3.00</td>
-                      <td>EUR 4.00</td>
-                      <td>EUR 4.00</td>
-                    </tr>
-                    <tr>
-                      <td><strong>Priceline</strong></td>
-                      <td>USD 3.25</td>
-                      <td>USD 3.25</td>
-                      <td>USD 1.50</td>
-                    </tr>
-                    <tr>
-                      <td><strong>Meili</strong></td>
-                      <td>EUR 5.50</td>
-                      <td>EUR 5.50</td>
-                      <td>EUR 5.50</td>
-                    </tr>
-                  </tbody>
-                </FeeTable>
+                <SubTitle>Payment Flow</SubTitle>
+                <ul style={{ lineHeight: 1.8, fontSize: 13, color: '#666' }}>
+                  <li><strong>Debtor:</strong> Mandant code pickup branch of the reservation</li>
+                  <li><strong>Creditor:</strong> SIXT</li>
+                  <li><strong>Point in time:</strong> Handover Date</li>
+                </ul>
 
-                <SubTitle>Meili Special Rules (DFR-based Discount)</SubTitle>
-                <InfoBox type="info">
-                  <strong>DFR Detection:</strong><br/>
-                  • DFR = 10897 (Autoclub Australia) → EUR 2.75<br/>
-                  • Other DFR codes → EUR 5.50 (standard fee)
+                <SubTitle>Responsible for Parameter Changes</SubTitle>
+                <p style={{ fontSize: 13, color: '#666' }}>
+                  Franchise Controlling
+                </p>
+
+                <SubTitle>Relevant Stakeholders</SubTitle>
+                <p style={{ fontSize: 13, color: '#666' }}>
+                  B2P Key Account Management, Business Development, Franchise Accounting & Controlling
+                </p>
+
+                <InfoBox type="warning" style={{ marginTop: 24 }}>
+                  <strong>Important:</strong> GDS fees for Franchise and Corporate are not connected. 
+                  They can be considered independently of each other. Fee only applies where 
+                  Franchise & Corporate are connected (source: Thorsten, verbally on 11.02.26).
                 </InfoBox>
-                
-                <Formula>
-                  Meili base fee = EUR 5.50<br/>
-                  Meili with DFR 10897 = EUR 2.75
-                </Formula>
-
-                <SubTitle>Partner Source Channel Mapping</SubTitle>
-                <FeeTable>
-                  <thead>
-                    <tr>
-                      <th>Partner</th>
-                      <th>Source Channel Codes</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td>Expedia</td>
-                      <td>Expedia02I6, SOAP, TPRA (varies by source)</td>
-                    </tr>
-                    <tr>
-                      <td>Priceline</td>
-                      <td>PriceLine011S</td>
-                    </tr>
-                    <tr>
-                      <td>Meili</td>
-                      <td>Meili</td>
-                    </tr>
-                  </tbody>
-                </FeeTable>
               </SectionContent>
             </CollapsibleSection>
-          </Section>
-
-          <Section style={{ marginTop: 32, paddingTop: 24, borderTop: '1px solid #e0e0e0' }}>
-            <SubTitle>General Information</SubTitle>
-            
-            <InfoBox type="warning">
-              <strong>Important:</strong> GDS fees for Franchise and Corporate are not connected. 
-              They can be considered independently of each other. Fee only applies where 
-              Franchise & Corporate are connected (source: Thorsten, verbally on 11.02.26).
-            </InfoBox>
-
-            <div style={{ marginTop: 16 }}>
-              <strong style={{ fontSize: 14 }}>Currency Conversion</strong>
-              <p style={{ fontSize: 13, color: '#666', marginTop: 8 }}>
-                Fees are charged in partner's native currency (EUR or USD). Currency conversion uses 
-                the latest exchange rate available at the time of preparing the statement.
-              </p>
-            </div>
-
-            <div style={{ marginTop: 16 }}>
-              <strong style={{ fontSize: 14 }}>Payment Flow</strong>
-              <ul style={{ lineHeight: 1.8, fontSize: 13, color: '#666', marginTop: 8 }}>
-                <li><strong>Debtor:</strong> Mandant code pickup branch of the reservation</li>
-                <li><strong>Creditor:</strong> SIXT</li>
-                <li><strong>Point in time:</strong> Handover Date</li>
-              </ul>
-            </div>
-            
-            <p style={{ marginTop: 16, fontSize: 13, color: '#666' }}>
-              <strong>Responsible for parameter changes:</strong> Franchise Controlling<br/>
-              <strong>Stakeholders:</strong> B2P Key Account Management, Business Development, Franchise Accounting & Controlling
-            </p>
           </Section>
         </RulesContainer>
       </Card>
