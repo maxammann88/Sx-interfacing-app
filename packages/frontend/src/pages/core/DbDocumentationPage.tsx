@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import styled from 'styled-components';
 import { theme } from '../../styles/theme';
+import api from '../../utils/api';
 
 const Content = styled.div`
   max-width: 1400px;
@@ -64,6 +65,93 @@ const Badge = styled.span<{ $color: string }>`
   border-radius: 10px;
   background: ${p => p.$color};
   color: white;
+`;
+
+const DbMgmtCard = styled(Card)`
+  border-left: 4px solid ${theme.colors.info};
+  margin-bottom: 32px;
+`;
+
+const DbMgmtGrid = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  @media (max-width: 768px) { grid-template-columns: 1fr; }
+`;
+
+const DbMgmtSection = styled.div`
+  padding: 20px;
+  border-radius: 10px;
+  background: #fafbfc;
+  border: 1px solid ${theme.colors.border};
+`;
+
+const DbMgmtTitle = styled.h4`
+  font-size: 14px;
+  font-weight: 700;
+  color: ${theme.colors.textPrimary};
+  margin: 0 0 6px;
+`;
+
+const DbMgmtDesc = styled.p`
+  font-size: 12px;
+  color: ${theme.colors.textSecondary};
+  margin: 0 0 16px;
+  line-height: 1.5;
+`;
+
+const DbBtn = styled.button<{ $variant?: 'primary' | 'danger' }>`
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  color: white;
+  background: ${p => p.$variant === 'danger' ? theme.colors.danger : theme.colors.primary};
+  transition: all 0.15s;
+  &:hover { opacity: 0.9; transform: translateY(-1px); }
+  &:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+`;
+
+const HiddenInput = styled.input`
+  display: none;
+`;
+
+const StatsGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+`;
+
+const StatItem = styled.div`
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: white;
+  border-radius: 6px;
+  font-size: 12px;
+  border: 1px solid ${theme.colors.border};
+`;
+
+const StatLabel = styled.span`
+  color: ${theme.colors.textSecondary};
+`;
+
+const StatValue = styled.span`
+  font-weight: 700;
+  color: ${theme.colors.textPrimary};
+`;
+
+const StatusMsg = styled.div<{ $type: 'success' | 'error' | 'info' }>`
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  background: ${p => p.$type === 'success' ? '#e8f5e9' : p.$type === 'error' ? '#ffebee' : '#e3f2fd'};
+  color: ${p => p.$type === 'success' ? '#2e7d32' : p.$type === 'error' ? '#c62828' : '#1565c0'};
 `;
 
 const ModelCard = styled(Card)`
@@ -358,6 +446,94 @@ const appColors: Record<string, string> = {
 
 export default function DbDocumentationPage() {
   const [expandedModels, setExpandedModels] = useState<Set<string>>(new Set(['Country', 'FeedbackItem']));
+  const [dbStats, setDbStats] = useState<Record<string, number> | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [statusMsg, setStatusMsg] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const STAT_LABELS: Record<string, string> = {
+    countries: 'Countries',
+    masterData: 'Master Data',
+    uploads: 'Uploads',
+    sapImports: 'SAP Imports',
+    billingCostImports: 'Billing Costs',
+    depositImports: 'Deposits',
+    billingRuns: 'Billing Runs',
+    interfacingPlans: 'Plans',
+    countryPlanAssignments: 'Plan Assignments',
+    correctedStatements: 'Corrections',
+    feedbackItems: 'Tickets',
+    feedbackComments: 'Comments',
+    streams: 'Streams',
+    subApps: 'Sub-Apps',
+    bankGuarantees: 'Bank Guarantees',
+    teamMembers: 'Team Members',
+  };
+
+  const loadStats = useCallback(async () => {
+    try {
+      const { data } = await api.get('/database/stats');
+      setDbStats(data);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => { loadStats(); }, [loadStats]);
+
+  const handleExport = async () => {
+    setLoading(true);
+    setStatusMsg(null);
+    try {
+      const { data } = await api.get('/database/export');
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `sixt-db-export-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setStatusMsg({ text: `Export erfolgreich – ${data._meta.tables ? Object.values(data._meta.tables as Record<string, number>).reduce((s: number, n: number) => s + n, 0) : 0} Datensätze exportiert.`, type: 'success' });
+    } catch (err: any) {
+      setStatusMsg({ text: `Export fehlgeschlagen: ${err.message}`, type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const confirmed = window.confirm(
+      '⚠️ ACHTUNG: Der Import ersetzt ALLE Daten in der Datenbank!\n\n' +
+      'Alle bestehenden Daten werden gelöscht und durch die Daten aus der Datei ersetzt.\n\n' +
+      'Möchtest du fortfahren?'
+    );
+    if (!confirmed) {
+      e.target.value = '';
+      return;
+    }
+
+    setImporting(true);
+    setStatusMsg({ text: 'Importiere Daten...', type: 'info' });
+    try {
+      const text = await file.text();
+      const json = JSON.parse(text);
+      if (!json?._meta?.version) {
+        setStatusMsg({ text: 'Ungültiges Dateiformat – kein gültiger DB-Export.', type: 'error' });
+        return;
+      }
+      const { data } = await api.post('/database/import', json);
+      const total = Object.values(data.counts as Record<string, number>).reduce((s, n) => s + n, 0);
+      setStatusMsg({ text: `Import erfolgreich – ${total} Datensätze importiert.`, type: 'success' });
+      loadStats();
+    } catch (err: any) {
+      setStatusMsg({ text: `Import fehlgeschlagen: ${err?.response?.data?.error || err.message}`, type: 'error' });
+    } finally {
+      setImporting(false);
+      e.target.value = '';
+    }
+  };
 
   const toggleModel = (name: string) => {
     setExpandedModels(prev => {
@@ -370,6 +546,52 @@ export default function DbDocumentationPage() {
 
   return (
     <Content>
+      <SectionTitle>Database Management</SectionTitle>
+      <DbMgmtCard>
+        <DbMgmtGrid>
+          <DbMgmtSection>
+            <DbMgmtTitle>📥 Datenbank exportieren</DbMgmtTitle>
+            <DbMgmtDesc>
+              Exportiert alle Tabellen als JSON-Datei. Enthält Countries, SAP-Daten,
+              Tickets, Streams, Team Members und alle weiteren Daten.
+            </DbMgmtDesc>
+            <DbBtn onClick={handleExport} disabled={loading}>
+              {loading ? 'Exportiere...' : 'Download DB-Export'}
+            </DbBtn>
+          </DbMgmtSection>
+
+          <DbMgmtSection>
+            <DbMgmtTitle>📤 Datenbank importieren</DbMgmtTitle>
+            <DbMgmtDesc>
+              Importiert eine zuvor exportierte JSON-Datei. Achtung: Alle bestehenden
+              Daten werden dabei ersetzt.
+            </DbMgmtDesc>
+            <DbBtn $variant="danger" onClick={() => fileInputRef.current?.click()} disabled={importing}>
+              {importing ? 'Importiere...' : 'JSON-Datei importieren'}
+            </DbBtn>
+            <HiddenInput
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              onChange={handleImport}
+            />
+          </DbMgmtSection>
+        </DbMgmtGrid>
+
+        {dbStats && (
+          <StatsGrid>
+            {Object.entries(STAT_LABELS).map(([key, label]) => (
+              <StatItem key={key}>
+                <StatLabel>{label}</StatLabel>
+                <StatValue>{dbStats[key] ?? 0}</StatValue>
+              </StatItem>
+            ))}
+          </StatsGrid>
+        )}
+
+        {statusMsg && <StatusMsg $type={statusMsg.type}>{statusMsg.text}</StatusMsg>}
+      </DbMgmtCard>
+
       <SectionTitle>Application Architecture</SectionTitle>
 
       <InfoRow>

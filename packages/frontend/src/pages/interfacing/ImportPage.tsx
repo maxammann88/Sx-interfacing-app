@@ -152,7 +152,7 @@ export default function ImportPage() {
           </FormGroup>
           <FormGroup style={{ flex: 1, marginBottom: 0 }}>
             <Label>SAP Export CSV (semicolon-separated)</Label>
-            <FileInput onClick={() => sapRef.current?.click()} style={{ padding: 16 }}>
+            <FileInput style={{ padding: 16 }}>
               <input
                 ref={sapRef}
                 type="file"
@@ -174,7 +174,7 @@ export default function ImportPage() {
         <UploadRow>
           <FormGroup style={{ flex: 1, marginBottom: 0 }}>
             <Label>Country List CSV (semicolon-separated, overwrites existing data)</Label>
-            <FileInput onClick={() => countryRef.current?.click()} style={{ padding: 16 }}>
+            <FileInput style={{ padding: 16 }}>
               <input
                 ref={countryRef}
                 type="file"
@@ -199,7 +199,7 @@ export default function ImportPage() {
         <UploadRow>
           <FormGroup style={{ flex: 1, marginBottom: 0 }}>
             <Label>Master Data CSV (semicolon-separated, overwrites existing data)</Label>
-            <FileInput onClick={() => masterRef.current?.click()} style={{ padding: 16 }}>
+            <FileInput style={{ padding: 16 }}>
               <input
                 ref={masterRef}
                 type="file"
@@ -224,7 +224,7 @@ export default function ImportPage() {
         <UploadRow>
           <FormGroup style={{ flex: 1, marginBottom: 0 }}>
             <Label>Billing CSV (Semikolon; Daten werden angehängt, bestehende Einträge bleiben erhalten)</Label>
-            <FileInput onClick={() => billingCostsRef.current?.click()} style={{ padding: 16 }}>
+            <FileInput style={{ padding: 16 }}>
               <input
                 ref={billingCostsRef}
                 type="file"
@@ -252,7 +252,7 @@ export default function ImportPage() {
         <UploadRow>
           <FormGroup style={{ flex: 1, marginBottom: 0 }}>
             <Label>Deposit CSV (semicolon-separated, overwrites existing data)</Label>
-            <FileInput onClick={() => depositRef.current?.click()} style={{ padding: 16 }}>
+            <FileInput style={{ padding: 16 }}>
               <input
                 ref={depositRef}
                 type="file"

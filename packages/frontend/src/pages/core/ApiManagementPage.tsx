@@ -12,70 +12,14 @@ let registryCache: { streamOrder: string[]; registry: SubAppOwnerEntry[] } | nul
 export async function fetchRegistry(): Promise<void> {
   try {
     const res = await api.get<{ streamOrder: string[]; registry: SubAppOwnerEntry[] }>('/registry');
-    if (res.data && Array.isArray(res.data.registry)) {
-      let streamOrder = res.data.streamOrder || [];
-      let registry = [...res.data.registry];
+    if (res.data && Array.isArray(res.data.registry) && res.data.registry.length > 0) {
+      registryCache = { streamOrder: res.data.streamOrder || [], registry: res.data.registry };
 
-      // Lokale Einträge (localStorage), die noch nicht in der API sind, in die DB übernehmen
-      try {
-        const raw = localStorage.getItem('subAppOwners_v2');
-        if (raw && raw.length > 2) {
-          const localList = JSON.parse(raw) as SubAppOwnerEntry[];
-          const key = (r: SubAppOwnerEntry) => `${r.stream}\t${r.app}`;
-          const apiKeys = new Set(registry.map(key));
-          let merged = false;
-          localList.forEach((e) => {
-            const normalized = { ...e, status: (e.status === 'Planned' ? 'Planning' : e.status) || 'Planning', isStarted: e.isStarted ?? false };
-            if (!apiKeys.has(key(normalized))) {
-              registry.push(normalized);
-              apiKeys.add(key(normalized));
-              merged = true;
-            }
-          });
-          if (merged) {
-            const localOrder = (() => { try { const o = localStorage.getItem('streamOrder_v1'); return o ? JSON.parse(o) as string[] : null; } catch { return null; } })();
-            const orderSet = new Set(streamOrder);
-            if (Array.isArray(localOrder)) localOrder.forEach((s) => { if (!orderSet.has(s)) { streamOrder = [...streamOrder, s]; orderSet.add(s); } });
-            await api.put('/registry', { registry, streamOrder });
-            const r2 = await api.get<{ streamOrder: string[]; registry: SubAppOwnerEntry[] }>('/registry');
-            streamOrder = r2.data.streamOrder || [];
-            registry = r2.data.registry || [];
-            localStorage.removeItem('subAppOwners_v2');
-            localStorage.removeItem('streamOrder_v1');
-          }
-        }
-      } catch (_) { /* ignore */ }
-
-      registryCache = { streamOrder, registry };
-
-      // Einmal-Migration: gestartete Sub-Apps aus localStorage in DB übernehmen
-      try {
-        const startedRaw = localStorage.getItem('startedSubApps_v1');
-        if (startedRaw && registryCache!.registry.length > 0) {
-          const slugs: string[] = JSON.parse(startedRaw);
-          if (Array.isArray(slugs) && slugs.length > 0) {
-            const toSlug = (n: string) => n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-            const updated = registryCache!.registry.map((r) => ({ ...r, isStarted: r.isStarted || slugs.includes(toSlug(r.app)) }));
-            await api.put('/registry', { registry: updated, streamOrder: registryCache!.streamOrder });
-            const r2 = await api.get<{ streamOrder: string[]; registry: SubAppOwnerEntry[] }>('/registry');
-            registryCache = r2.data;
-            localStorage.removeItem('startedSubApps_v1');
-          }
-        }
-      } catch (_) { /* ignore */ }
+      // Clean up legacy localStorage keys (one-time)
+      localStorage.removeItem('subAppOwners_v2');
+      localStorage.removeItem('streamOrder_v1');
+      localStorage.removeItem('startedSubApps_v1');
       return;
-    }
-  } catch (_) { /* ignore */ }
-  // If API returns empty or fails, migrate from localStorage once
-  try {
-    const raw = localStorage.getItem('subAppOwners_v2');
-    if (raw && raw.length > 2) {
-      const registry = JSON.parse(raw) as SubAppOwnerEntry[];
-      registry.forEach((d: SubAppOwnerEntry) => { if ((d.status as string) === 'Planned') d.status = 'Planning'; });
-      const streamOrder = (() => { try { const o = localStorage.getItem('streamOrder_v1'); return o ? JSON.parse(o) : null; } catch { return null; } })();
-      await api.put('/registry', { registry, streamOrder: streamOrder || [...new Set(registry.map(r => r.stream))] });
-      const res = await api.get<{ streamOrder: string[]; registry: SubAppOwnerEntry[] }>('/registry');
-      registryCache = res.data;
     }
   } catch (_) { /* ignore */ }
 }
@@ -469,12 +413,12 @@ interface SubAppOwnerEntry {
 }
 
 const DEFAULT_OWNERS: SubAppOwnerEntry[] = [
-  { stream: 'Franchise Controlling', streamOwner: 'Inês Boavida Couto', app: 'Partner Requests', owner: '', status: 'Planning', description: 'Partner onboarding and request handling' },
-  { stream: 'Franchise Controlling', streamOwner: 'Inês Boavida Couto', app: 'Parameter Maintenance', owner: 'Herbert Krenn', status: 'Live', description: 'Country parameters, account mapping, payment terms' },
-  { stream: 'Franchise Controlling', streamOwner: 'Inês Boavida Couto', app: 'FSM-Calculation', owner: 'Max Ammann', status: 'Dev', description: 'Franchise Statement Modernization calculation engine' },
-  { stream: 'Franchise Controlling', streamOwner: 'Inês Boavida Couto', app: 'Bookings & Invoicing', owner: '', status: 'Planning', description: 'Booking data and invoicing workflows' },
-  { stream: 'Franchise Controlling', streamOwner: 'Inês Boavida Couto', app: 'Interfacing', owner: 'Henning Seidel', status: 'Live', description: 'Monthly interfacing statements, SAP imports, exports' },
-  { stream: 'Franchise Controlling', streamOwner: 'Inês Boavida Couto', app: 'Controlling', owner: '', status: 'Planning', description: 'Franchise controlling dashboards & reporting' },
+  { stream: 'Franchise Controlling', streamOwner: 'Max Ammann', app: 'Interfacing', owner: 'Henning Seidel', status: 'Live', description: 'Monthly interfacing statements, SAP imports, exports', isStarted: true },
+  { stream: 'Franchise Controlling', streamOwner: 'Max Ammann', app: 'Reporting & Controlling', owner: 'Inês Boavida Couto', status: 'Planning', description: 'Franchise controlling dashboards & reporting' },
+  { stream: 'Franchise Controlling', streamOwner: 'Max Ammann', app: 'Parameter Maintenance', owner: 'Herbert Krenn', status: 'Planning', description: 'Country parameters, account mapping, payment terms' },
+  { stream: 'Franchise Controlling', streamOwner: 'Max Ammann', app: 'Partner Requests', owner: 'Inês Boavida Couto', status: 'Planning', description: 'Partner onboarding and request handling' },
+  { stream: 'FSM', streamOwner: 'Max Ammann', app: 'FSM-Calculation', owner: 'Max Ammann', status: 'Planning', description: 'Franchise Statement Modernization calculation engine' },
+  { stream: 'Core', streamOwner: 'Max Ammann', app: 'Core', owner: 'Max Ammann', status: 'Live', description: 'Platform core, feedback system, team management', isStarted: true },
   { stream: 'B2P Controlling', streamOwner: '', app: 'Partner Requests & Reconciliation', owner: '', status: 'Planning', description: 'Partner inquiries and reconciliation workflows' },
   { stream: 'B2P Controlling', streamOwner: '', app: 'Parameter Maintenance', owner: '', status: 'Planning', description: 'B2P-specific parameter management' },
   { stream: 'B2P Controlling', streamOwner: '', app: 'VPF', owner: '', status: 'Planning', description: 'Variable Performance Fee calculation' },
@@ -497,14 +441,6 @@ const STATUS_COLORS: Record<string, string> = {
 
 function loadOwners(): SubAppOwnerEntry[] {
   if (registryCache && registryCache.registry.length > 0) return registryCache.registry;
-  try {
-    const raw = localStorage.getItem('subAppOwners_v2');
-    if (raw) {
-      const data: SubAppOwnerEntry[] = JSON.parse(raw);
-      data.forEach(d => { if ((d.status as string) === 'Planned') d.status = 'Planning'; });
-      return data;
-    }
-  } catch {}
   return DEFAULT_OWNERS;
 }
 
@@ -529,14 +465,10 @@ export function getSubAppRegistry(): SubAppOwnerEntry[] {
 }
 
 const STREAM_ORDER_KEY = 'streamOrder_v1';
-const DEFAULT_STREAM_ORDER = ['Franchise Controlling', 'B2P Controlling', 'Business Development'];
+const DEFAULT_STREAM_ORDER = ['Franchise Controlling', 'FSM', 'Core', 'B2P Controlling'];
 
 export function getStreamOrder(): string[] {
   if (registryCache && registryCache.streamOrder.length > 0) return registryCache.streamOrder;
-  try {
-    const raw = localStorage.getItem(STREAM_ORDER_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {}
   return DEFAULT_STREAM_ORDER;
 }
 

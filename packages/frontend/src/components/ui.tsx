@@ -206,7 +206,8 @@ export const Badge = styled.span<{ $color?: string }>`
   color: ${theme.colors.white};
 `;
 
-export const FileInput = styled.div`
+export const FileInput = styled.label`
+  display: block;
   border: 2px dashed ${theme.colors.border};
   border-radius: ${theme.borderRadius};
   padding: 32px;

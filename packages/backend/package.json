@@ -11,6 +11,9 @@
     "db:seed": "ts-node src/seed/index.ts",
     "db:studio": "prisma studio"
   },
+  "prisma": {
+    "seed": "ts-node src/seed/index.ts"
+  },
   "dependencies": {
     "@prisma/client": "^6.3.0",
     "@sixt/shared": "workspace:*",
