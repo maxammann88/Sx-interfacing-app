@@ -14,6 +14,7 @@ import registryRoutes from './routes/registry';
 import teamMembersRoutes from './routes/teamMembers';
 import fixVarRoutes from './routes/fixVar';
 import gdsDcfRoutes from './routes/gdsDcf';
+import gdsDcfExportRoutes from './routes/gdsDcfExport';
 import { errorHandler } from './middleware/errorHandler';
 
 const app = express();
@@ -39,6 +40,7 @@ app.use('/api/registry', registryRoutes);
 app.use('/api/team-members', teamMembersRoutes);
 app.use('/api/fix-var', fixVarRoutes);
 app.use('/api/gds-dcf', gdsDcfRoutes);
+app.use('/api/gds-dcf/export', gdsDcfExportRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

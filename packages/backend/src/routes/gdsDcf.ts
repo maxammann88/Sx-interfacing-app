@@ -4,6 +4,7 @@ import prisma from '../prismaClient';
 import { parseGdsDcfExcel, parseGdsDcfCsv } from '../services/gdsDcfParser';
 import { GdsDcfValidator, getDefaultPartners } from '../services/gdsDcfValidator';
 import { GdsDcfPartner, GdsDcfReservation, GdsDcfValidationResult } from '@sixt/shared';
+import { serializePartner, deserializePartner, deserializeValidationResult } from '../utils/jsonHelpers';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
@@ -71,7 +72,9 @@ router.post('/validate/:uploadId', async (req: Request, res: Response, next: Nex
     const uploadId = parseInt(req.params.uploadId, 10);
     
     const partners = await (prisma as any).gdsDcfPartner.findMany();
-    const partnerConfigs = partners.length > 0 ? partners : getDefaultPartners();
+    const partnerConfigs = partners.length > 0 
+      ? partners.map((p: any) => deserializePartner(p))
+      : getDefaultPartners();
     
     const reservations = await (prisma as any).gdsDcfReservation.findMany({
       where: { uploadId },
@@ -89,23 +92,24 @@ router.post('/validate/:uploadId', async (req: Request, res: Response, next: Nex
       validator.validateReservation(r)
     );
 
+    // Only save chargeable reservations
+    const chargeableResults = results.filter(r => r.isChargeable);
+
     await (prisma as any).gdsDcfValidationResult.createMany({
-      data: results.map((result: GdsDcfValidationResult) => ({
+      data: chargeableResults.map((result: GdsDcfValidationResult) => ({
         uploadId,
-        reservationData: result.reservation,
+        reservationData: JSON.stringify(result.reservation),
         isChargeable: result.isChargeable,
         calculatedFee: result.calculatedFee,
         currency: result.currency,
         partner: result.partner,
         region: result.region,
-        validationSteps: result.validationSteps,
+        validationSteps: JSON.stringify(result.validationSteps),
       })),
     });
 
-    const chargeableCount = results.filter(r => r.isChargeable).length;
-    const totalFees = results
-      .filter(r => r.isChargeable)
-      .reduce((sum, r) => sum + r.calculatedFee, 0);
+    const chargeableCount = chargeableResults.length;
+    const totalFees = chargeableResults.reduce((sum, r) => sum + r.calculatedFee, 0);
 
     await (prisma as any).gdsDcfUpload.update({
       where: { id: uploadId },
@@ -142,11 +146,13 @@ router.get('/results/:uploadId', async (req: Request, res: Response, next: NextF
       return res.status(404).json({ success: false, error: 'Upload not found' });
     }
 
+    const deserializedResults = results.map((r: any) => deserializeValidationResult(r));
+
     res.json({
       success: true,
       data: {
         upload,
-        results,
+        results: deserializedResults,
       },
     });
   } catch (err) {
@@ -169,6 +175,34 @@ router.get('/uploads', async (req: Request, res: Response, next: NextFunction) =
   }
 });
 
+router.delete('/upload/:uploadId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const uploadId = parseInt(req.params.uploadId, 10);
+
+    // Delete validation results first (cascade should handle this, but being explicit)
+    await (prisma as any).gdsDcfValidationResult.deleteMany({
+      where: { uploadId },
+    });
+
+    // Delete reservations
+    await (prisma as any).gdsDcfReservation.deleteMany({
+      where: { uploadId },
+    });
+
+    // Delete the upload record
+    await (prisma as any).gdsDcfUpload.delete({
+      where: { id: uploadId },
+    });
+
+    res.json({
+      success: true,
+      message: 'Upload deleted successfully',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/partners', async (req: Request, res: Response, next: NextFunction) => {
   try {
     let partners = await (prisma as any).gdsDcfPartner.findMany();
@@ -178,16 +212,18 @@ router.get('/partners', async (req: Request, res: Response, next: NextFunction) 
       
       for (const partner of defaultPartners) {
         await (prisma as any).gdsDcfPartner.create({
-          data: partner,
+          data: serializePartner(partner),
         });
       }
       
       partners = await (prisma as any).gdsDcfPartner.findMany();
     }
 
+    const deserializedPartners = partners.map((p: any) => deserializePartner(p));
+
     res.json({
       success: true,
-      data: partners,
+      data: deserializedPartners,
     });
   } catch (err) {
     next(err);
@@ -206,21 +242,23 @@ router.post('/partners', async (req: Request, res: Response, next: NextFunction)
       where: { id: partnerData.id },
     });
 
+    const serializedData = serializePartner(partnerData);
+
     let partner;
     if (existing) {
       partner = await (prisma as any).gdsDcfPartner.update({
         where: { id: partnerData.id },
-        data: partnerData,
+        data: serializedData,
       });
     } else {
       partner = await (prisma as any).gdsDcfPartner.create({
-        data: partnerData,
+        data: serializedData,
       });
     }
 
     res.json({
       success: true,
-      data: partner,
+      data: deserializePartner(partner),
     });
   } catch (err) {
     next(err);

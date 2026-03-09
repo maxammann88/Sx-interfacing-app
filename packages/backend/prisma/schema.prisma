@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -302,4 +302,80 @@ model TeamMember {
 
   @@unique([name])
   @@map("team_members")
+}
+
+// GDS/DCF FSM Calculation Models
+model GdsDcfPartner {
+  id                      String  @id
+  name                    String
+  category                String  // 'gds' | 'dcf'
+  sourceChannels          String  // JSON array as string
+  feesByRegion            String  // JSON array as string
+  voucherRules            String? // JSON object as string (optional)
+  dfrFeesWithoutEVoucher  String? // JSON object as string (optional)
+  dfrFeesWithEVoucher     String? // JSON object as string (optional)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@map("gds_dcf_partners")
+}
+
+model GdsDcfUpload {
+  id              Int      @id @default(autoincrement())
+  filename        String
+  uploadedAt      String
+  recordCount     Int
+  chargeableCount Int
+  totalFees       Float
+  reservations    GdsDcfReservation[]
+  validationResults GdsDcfValidationResult[]
+
+  @@map("gds_dcf_uploads")
+}
+
+model GdsDcfReservation {
+  id                Int      @id @default(autoincrement())
+  uploadId          Int
+  upload            GdsDcfUpload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  resNumber         String
+  sourceChannel2    String
+  sourceChannel3    String
+  mandantCode       String
+  statusExtended    String
+  posCountryCode    String
+  handoverDate      String
+  voucherNumber     String?
+  customerParentNum String?
+  serialNumber      Int?
+
+  @@index([uploadId])
+  @@index([mandantCode])
+  @@index([sourceChannel2])
+  @@index([sourceChannel3])
+  @@map("gds_dcf_reservations")
+}
+
+model GdsDcfValidationResult {
+  id               Int      @id @default(autoincrement())
+  uploadId         Int
+  upload           GdsDcfUpload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  reservationData  String   // JSON string
+  isChargeable     Boolean
+  calculatedFee    Float
+  currency         String
+  partner          String
+  region           String
+  validationSteps  String   // JSON array as string
+
+  @@index([uploadId])
+  @@map("gds_dcf_validation_results")
+}
+
+model FranchiseMandant {
+  id          Int     @id @default(autoincrement())
+  fir         String
+  iso         String?
+  countryName String?
+
+  @@map("franchise_mandants")
 }

@@ -235,21 +235,33 @@ export interface GdsDcfPartner {
 }
 
 export interface GdsDcfReservation {
-  resNumber: string;
-  source: string;
-  pos: string;
-  pci: string;
-  pickupDate: string;
-  rateCode: string;
-  agency: string;
-  iata: string;
-  fee: number;
-  mandantCode?: string;
-  status?: string;
-  invoiceType?: string;
-  serialNumber?: number;
-  voucherNumber?: string;
-  dfr?: string;
+  // Core identification
+  resNumber: string;                    // rsrv_resn
+  
+  // Source channels
+  sourceChannel2: string;               // rsrv_source_chl2 (e.g., "Amadeus", "SOAP")
+  sourceChannel3: string;               // rsrv_source_chl3 (e.g., "TPRA", "Expedia0216")
+  
+  // Mandant and status
+  mandantCode: string;                  // mndt_code
+  statusExtended: string;               // rsrv_status_extended (Invoice/No Show/Open)
+  
+  // Location and customer
+  posCountryCode: string;               // rsrv_posl_country_code
+  customerParentNum?: string;           // cstm_parent_num (for special rules)
+  
+  // Financial and booking details
+  voucherNumber?: string;               // rntl_voucher_number
+  serialNumber?: number;                // rntl_mser (0 = first invoice)
+  handoverDate: string;                 // rsrv_handover_datm (date only, no time)
+  
+  // Legacy fields (kept for backward compatibility, but deprecated)
+  pci?: string;
+  pickupDate?: string;
+  rateCode?: string;
+  agency?: string;
+  iata?: string;
+  fee?: number;
 }
 
 export interface GdsDcfValidationResult {

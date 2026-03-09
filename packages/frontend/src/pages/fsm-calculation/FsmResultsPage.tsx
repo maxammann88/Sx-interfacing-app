@@ -17,21 +17,10 @@ const SummaryGrid = styled.div`
 
 const StatCard = styled.div`
   padding: 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #ff5f00 0%, #ff8533 100%);
   border-radius: 8px;
   color: white;
-  
-  &:nth-child(2) {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-  }
-  
-  &:nth-child(3) {
-    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-  }
-  
-  &:nth-child(4) {
-    background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
-  }
+  box-shadow: 0 4px 8px rgba(255, 95, 0, 0.2);
 `;
 
 const StatLabel = styled.div`
@@ -45,11 +34,34 @@ const StatValue = styled.div`
   font-weight: 700;
 `;
 
+const FilterSection = styled.div`
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+`;
+
 const FilterBar = styled.div`
   display: flex;
   gap: 12px;
   margin-bottom: 20px;
   flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+`;
+
+const ExportButtons = styled.div`
+  display: flex;
+  gap: 8px;
+`;
+
+const ExportButton = styled(Button)`
+  font-size: 13px;
+  padding: 8px 16px;
+  background: ${props => props.theme.colors.primary};
+  
+  &:hover {
+    opacity: 0.9;
+  }
 `;
 
 const Select = styled.select`
@@ -166,18 +178,21 @@ export default function FsmResultsPage() {
   const [filteredResults, setFilteredResults] = useState<GdsDcfValidationResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterPartner, setFilterPartner] = useState('all');
-  const [filterChargeable, setFilterChargeable] = useState('all');
+  const [filterFeeType, setFilterFeeType] = useState('all'); // New: GDS/DCF filter
+  const [filterCountry, setFilterCountry] = useState('all'); // New: Country filter
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [franchiseMandants, setFranchiseMandants] = useState<any[]>([]);
 
   useEffect(() => {
     if (uploadId) {
       loadResults(parseInt(uploadId, 10));
+      loadFranchiseMandants();
     }
   }, [uploadId]);
 
   useEffect(() => {
     applyFilters();
-  }, [results, filterPartner, filterChargeable]);
+  }, [results, filterPartner, filterFeeType, filterCountry, franchiseMandants]);
 
   const loadResults = async (id: number) => {
     try {
@@ -195,18 +210,58 @@ export default function FsmResultsPage() {
     }
   };
 
+  const loadFranchiseMandants = async () => {
+    try {
+      const response = await fetch('/api/gds-dcf/mandants');
+      const result = await response.json();
+      if (result.success) {
+        setFranchiseMandants(result.data);
+      }
+    } catch (err) {
+      console.error('Failed to load franchise mandants:', err);
+    }
+  };
+
   const applyFilters = () => {
     let filtered = [...results];
 
+    // Partner filter
     if (filterPartner !== 'all') {
       filtered = filtered.filter(r => r.partner === filterPartner);
     }
 
-    if (filterChargeable === 'chargeable') {
-      filtered = filtered.filter(r => r.isChargeable);
-    } else if (filterChargeable === 'non-chargeable') {
-      filtered = filtered.filter(r => !r.isChargeable);
+    // Fee Type filter (GDS/DCF)
+    if (filterFeeType !== 'all') {
+      filtered = filtered.filter(r => {
+        const pName = r.partner.toLowerCase();
+        const isGDS = pName.includes('amadeus') || pName.includes('galileo') || 
+                      pName.includes('worldspan') || pName.includes('sabre') || 
+                      pName.includes('travelport');
+        const isDCF = pName.includes('expedia') || pName.includes('priceline') || 
+                      pName.includes('meili');
+        
+        if (filterFeeType === 'GDS') return isGDS;
+        if (filterFeeType === 'DCF') return isDCF;
+        return true;
+      });
     }
+
+    // Country filter
+    if (filterCountry !== 'all') {
+      filtered = filtered.filter(r => {
+        const mandant = franchiseMandants.find(m => m.fir === r.reservation.mandantCode);
+        return mandant && mandant.iso === filterCountry;
+      });
+    }
+
+    console.log('Filter applied:', { 
+      totalResults: results.length, 
+      filteredResults: filtered.length,
+      filterPartner, 
+      filterFeeType, 
+      filterCountry,
+      mandantsLoaded: franchiseMandants.length
+    });
 
     setFilteredResults(filtered);
   };
@@ -221,9 +276,27 @@ export default function FsmResultsPage() {
     setExpandedRows(newExpanded);
   };
 
+  const handleExportPDF = () => {
+    window.open(`/api/gds-dcf/export/pdf/${uploadId}`, '_blank');
+  };
+
+  const handleExportExcel = () => {
+    window.open(`/api/gds-dcf/export/excel/${uploadId}`, '_blank');
+  };
+
   const uniquePartners = Array.from(new Set(results.map(r => r.partner)));
-  const chargeableCount = results.filter(r => r.isChargeable).length;
-  const totalFees = results.filter(r => r.isChargeable).reduce((sum, r) => sum + r.calculatedFee, 0);
+  const uniqueCountries = Array.from(new Set(
+    results
+      .map(r => {
+        const mandant = franchiseMandants.find(m => m.fir === r.reservation.mandantCode);
+        return mandant ? mandant.iso : null;
+      })
+      .filter(Boolean)
+  ));
+  
+  // Calculate dynamic summary stats based on filtered results
+  const filteredChargeableCount = filteredResults.length;
+  const filteredTotalFees = filteredResults.reduce((sum, r) => sum + r.calculatedFee, 0);
 
   if (loading) {
     return (
@@ -260,39 +333,51 @@ export default function FsmResultsPage() {
           <SummaryGrid>
             <StatCard>
               <StatLabel>Total Reservations</StatLabel>
-              <StatValue>{results.length}</StatValue>
+              <StatValue>{filteredChargeableCount}</StatValue>
             </StatCard>
             <StatCard>
               <StatLabel>Chargeable</StatLabel>
-              <StatValue>{chargeableCount}</StatValue>
+              <StatValue>{filteredChargeableCount}</StatValue>
             </StatCard>
             <StatCard>
-              <StatLabel>Non-Chargeable</StatLabel>
-              <StatValue>{results.length - chargeableCount}</StatValue>
-            </StatCard>
-            <StatCard>
-              <StatLabel>Total Fees</StatLabel>
-              <StatValue>{totalFees.toFixed(2)}</StatValue>
+              <StatLabel>Total Fees (EUR)</StatLabel>
+              <StatValue>€{filteredTotalFees.toFixed(2)}</StatValue>
             </StatCard>
           </SummaryGrid>
 
           <FilterBar>
-            <Select value={filterPartner} onChange={(e) => setFilterPartner(e.target.value)}>
-              <option value="all">All Partners</option>
-              {uniquePartners.map(p => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </Select>
+            <FilterSection>
+              <Select value={filterPartner} onChange={(e) => setFilterPartner(e.target.value)}>
+                <option value="all">All Partners</option>
+                {uniquePartners.map(p => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </Select>
 
-            <Select value={filterChargeable} onChange={(e) => setFilterChargeable(e.target.value)}>
-              <option value="all">All Reservations</option>
-              <option value="chargeable">Chargeable Only</option>
-              <option value="non-chargeable">Non-Chargeable Only</option>
-            </Select>
+              <Select value={filterFeeType} onChange={(e) => setFilterFeeType(e.target.value)}>
+                <option value="all">All Fee Types</option>
+                <option value="GDS">GDS</option>
+                <option value="DCF">DCF</option>
+              </Select>
 
-            <Button onClick={() => alert('Export feature coming soon')}>
-              Export to Excel
-            </Button>
+              <Select value={filterCountry} onChange={(e) => setFilterCountry(e.target.value)}>
+                <option value="all">All Countries</option>
+                {uniqueCountries.sort().map(country => (
+                  <option key={country} value={country}>
+                    {country} - {franchiseMandants.filter(m => m.iso === country).map(m => m.fir).join(', ')}
+                  </option>
+                ))}
+              </Select>
+            </FilterSection>
+
+            <ExportButtons>
+              <ExportButton onClick={handleExportPDF}>
+                📄 Export PDF
+              </ExportButton>
+              <ExportButton onClick={handleExportExcel}>
+                📊 Export Excel
+              </ExportButton>
+            </ExportButtons>
           </FilterBar>
 
           <div style={{ overflowX: 'auto' }}>
@@ -300,12 +385,14 @@ export default function FsmResultsPage() {
               <thead>
                 <tr>
                   <th>RES-NUMBER</th>
-                  <th>SOURCE</th>
-                  <th>POS</th>
+                  <th>Source Ch2</th>
+                  <th>Source Ch3</th>
+                  <th>Mandant</th>
+                  <th>POS Country</th>
+                  <th>Status</th>
                   <th>Partner</th>
-                  <th>Region</th>
                   <th>Chargeable</th>
-                  <th>Fee</th>
+                  <th>Fee (EUR)</th>
                   <th>Details</th>
                 </tr>
               </thead>
@@ -314,10 +401,12 @@ export default function FsmResultsPage() {
                   <React.Fragment key={result.reservation.resNumber}>
                     <tr>
                       <td>{result.reservation.resNumber}</td>
-                      <td>{result.reservation.source}</td>
-                      <td>{result.reservation.pos}</td>
+                      <td>{result.reservation.sourceChannel2}</td>
+                      <td>{result.reservation.sourceChannel3}</td>
+                      <td>{result.reservation.mandantCode}</td>
+                      <td>{result.reservation.posCountryCode}</td>
+                      <td>{result.reservation.statusExtended}</td>
                       <td>{result.partner}</td>
-                      <td>{result.region}</td>
                       <td>
                         <ChargeableBadge chargeable={result.isChargeable}>
                           {result.isChargeable ? 'YES' : 'NO'}
@@ -325,7 +414,7 @@ export default function FsmResultsPage() {
                       </td>
                       <td>
                         {result.isChargeable ? (
-                          <strong>{result.currency} {result.calculatedFee.toFixed(2)}</strong>
+                          <strong>EUR {result.calculatedFee.toFixed(2)}</strong>
                         ) : (
                           <span style={{ color: '#999' }}>0.00</span>
                         )}
@@ -338,7 +427,7 @@ export default function FsmResultsPage() {
                     </tr>
                     {expandedRows.has(result.reservation.resNumber) && (
                       <DetailRow>
-                        <DetailCell colSpan={8}>
+                        <DetailCell colSpan={10}>
                           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
                             Validation Steps:
                           </div>

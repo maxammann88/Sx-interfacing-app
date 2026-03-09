@@ -612,6 +612,38 @@ export default function FsmParametersPage() {
     }
   };
 
+  const updateAmadeusDfrCode = (variant: 'without' | 'with', oldCode: string, newCode: string) => {
+    if (!editingPartner || !newCode || newCode === oldCode) return;
+    
+    if (variant === 'without') {
+      const currentFee = editingPartner.dfrFeesWithoutEVoucher?.[oldCode];
+      if (!currentFee) return;
+      
+      const { [oldCode]: removed, ...remaining } = editingPartner.dfrFeesWithoutEVoucher || {};
+      
+      setEditingPartner({
+        ...editingPartner,
+        dfrFeesWithoutEVoucher: {
+          ...remaining,
+          [newCode]: currentFee,
+        },
+      });
+    } else {
+      const currentFee = editingPartner.dfrFeesWithEVoucher?.[oldCode];
+      if (!currentFee) return;
+      
+      const { [oldCode]: removed, ...remaining } = editingPartner.dfrFeesWithEVoucher || {};
+      
+      setEditingPartner({
+        ...editingPartner,
+        dfrFeesWithEVoucher: {
+          ...remaining,
+          [newCode]: currentFee,
+        },
+      });
+    }
+  };
+
   const removeDfrCode = (codeToRemove: string) => {
     if (!editingPartner || !editingPartner.voucherRules) return;
     
@@ -639,6 +671,25 @@ export default function FsmParametersPage() {
             ...currentFee,
             [field]: field === 'amount' ? (parseFloat(value) || 0) : value,
           },
+        },
+      },
+    });
+  };
+
+  const updateDfrCode = (oldCode: string, newCode: string) => {
+    if (!editingPartner || !editingPartner.voucherRules || !newCode || newCode === oldCode) return;
+    
+    const currentFee = editingPartner.voucherRules.dfrFees[oldCode];
+    if (!currentFee) return;
+    
+    const { [oldCode]: removed, ...remainingFees } = editingPartner.voucherRules.dfrFees;
+    
+    setEditingPartner({
+      ...editingPartner,
+      voucherRules: {
+        dfrFees: {
+          ...remainingFees,
+          [newCode]: currentFee,
         },
       },
     });
@@ -968,8 +1019,15 @@ export default function FsmParametersPage() {
                         <div key={dfrCode} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                           <Input
                             value={dfrCode}
-                            disabled
-                            style={{ flex: '0 0 100px', background: '#f5f5f5' }}
+                            onChange={(e) => updateAmadeusDfrCode('without', dfrCode, e.target.value)}
+                            onBlur={(e) => {
+                              const newCode = e.target.value.trim();
+                              if (newCode && newCode !== dfrCode) {
+                                updateAmadeusDfrCode('without', dfrCode, newCode);
+                              }
+                            }}
+                            style={{ flex: '0 0 100px' }}
+                            placeholder="DFR Code"
                           />
                           <Input
                             type="number"
@@ -1021,8 +1079,15 @@ export default function FsmParametersPage() {
                         <div key={dfrCode} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                           <Input
                             value={dfrCode}
-                            disabled
-                            style={{ flex: '0 0 100px', background: '#f5f5f5' }}
+                            onChange={(e) => updateAmadeusDfrCode('with', dfrCode, e.target.value)}
+                            onBlur={(e) => {
+                              const newCode = e.target.value.trim();
+                              if (newCode && newCode !== dfrCode) {
+                                updateAmadeusDfrCode('with', dfrCode, newCode);
+                              }
+                            }}
+                            style={{ flex: '0 0 100px' }}
+                            placeholder="DFR Code"
                           />
                           <Input
                             type="number"
@@ -1081,8 +1146,15 @@ export default function FsmParametersPage() {
                       <div key={dfrCode} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                         <Input
                           value={dfrCode}
-                          disabled
-                          style={{ flex: '0 0 100px', background: '#f5f5f5' }}
+                          onChange={(e) => updateDfrCode(dfrCode, e.target.value)}
+                          onBlur={(e) => {
+                            const newCode = e.target.value.trim();
+                            if (newCode && newCode !== dfrCode) {
+                              updateDfrCode(dfrCode, newCode);
+                            }
+                          }}
+                          style={{ flex: '0 0 100px' }}
+                          placeholder="DFR Code"
                         />
                         <Input
                           type="number"

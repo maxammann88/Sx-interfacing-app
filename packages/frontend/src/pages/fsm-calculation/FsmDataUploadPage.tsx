@@ -91,6 +91,19 @@ const StatusBadge = styled.span<{ status?: string }>`
   }};
 `;
 
+const ActionButtons = styled.div`
+  display: flex;
+  gap: 8px;
+`;
+
+const DeleteButton = styled(Button)`
+  background: #dc3545;
+  
+  &:hover {
+    background: #c82333;
+  }
+`;
+
 const ProgressBar = styled.div`
   width: 100%;
   height: 6px;
@@ -208,6 +221,30 @@ export default function FsmDataUploadPage() {
     window.location.href = `/fsm/results?uploadId=${uploadId}`;
   };
 
+  const handleDeleteUpload = async (uploadId: number) => {
+    if (!confirm('Are you sure you want to delete this upload? This will also delete all associated validation results.')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/gds-dcf/upload/${uploadId}`, {
+        method: 'DELETE',
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert('Upload deleted successfully');
+        await loadUploads();
+      } else {
+        alert(`Failed to delete upload: ${result.error}`);
+      }
+    } catch (err) {
+      console.error('Delete error:', err);
+      alert('Failed to delete upload. Please try again.');
+    }
+  };
+
   return (
     <div>
       <PageTitle>Data Upload - GDS & DCF Reservations</PageTitle>
@@ -226,9 +263,7 @@ export default function FsmDataUploadPage() {
               {uploading ? 'Uploading and validating...' : 'Drop your reservation file here or click to browse'}
             </UploadText>
             <UploadHint>
-              Supported formats: Excel (.xlsx, .xls) or CSV (.csv)<br/>
-              Required columns: RES-NUMBER, SOURCE, POS<br/>
-              Optional columns: MANDANT/FIR, STATUS, INVOICE TYPE, MSER, VOUCHER, DFR
+              Supported formats: Excel (.xlsx, .xls) or CSV (.csv)
             </UploadHint>
             {uploading && (
               <ProgressBar>
@@ -281,9 +316,14 @@ export default function FsmDataUploadPage() {
                         </StatusBadge>
                       </td>
                       <td>
-                        <Button onClick={() => handleViewResults(upload.id)}>
-                          View Results
-                        </Button>
+                        <ActionButtons>
+                          <Button onClick={() => handleViewResults(upload.id)}>
+                            View Results
+                          </Button>
+                          <DeleteButton onClick={() => handleDeleteUpload(upload.id)}>
+                            🗑️ Delete
+                          </DeleteButton>
+                        </ActionButtons>
                       </td>
                     </tr>
                   ))}
