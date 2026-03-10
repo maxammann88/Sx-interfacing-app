@@ -2,9 +2,6 @@ import { GdsDcfPartner, GdsDcfReservation, GdsDcfValidationResult } from '@sixt/
 
 const USD_TO_EUR_RATE = 0.92; // Stand März 2026
 
-// Track how many validations we've logged
-let loggedValidationCount = 0;
-
 export class GdsDcfValidator {
   private partners: GdsDcfPartner[];
   private franchiseMandantCodes: string[];
@@ -16,10 +13,6 @@ export class GdsDcfValidator {
 
   validateReservation(reservation: GdsDcfReservation): GdsDcfValidationResult {
     const validationSteps: { step: string; passed: boolean; reason?: string }[] = [];
-    
-    // #region agent log
-    if (loggedValidationCount < 5) { fetch('http://127.0.0.1:7547/ingest/248c0622-6415-452e-9b8c-db914f2f5ef1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f53c65'},body:JSON.stringify({sessionId:'f53c65',location:'gdsDcfValidator.ts:22',message:'Validating reservation',data:{resNumber:reservation.resNumber,sourceChannel2:reservation.sourceChannel2,sourceChannel3:reservation.sourceChannel3,statusExtended:reservation.statusExtended,mandantCode:reservation.mandantCode,serialNumber:reservation.serialNumber,valNum:loggedValidationCount},hypothesisId:'BCDE',timestamp:Date.now()})}).catch(()=>{}); loggedValidationCount++; }
-    // #endregion
     
     // Step 1: Validate reservation number
     const step1 = this.validateReservationNumber(reservation.resNumber);
@@ -69,8 +62,10 @@ export class GdsDcfValidator {
 
     // Calculate fee based on GDS or DCF
     let feeResult: { fee: number; currency: string; partner: string; region: string };
+    let feeType: 'GDS' | 'DCF';
     
     if (isGDS) {
+      feeType = 'GDS';
       feeResult = this.calculateGDSFee(
         reservation.sourceChannel2,
         reservation.sourceChannel3,
@@ -78,6 +73,7 @@ export class GdsDcfValidator {
         reservation.customerParentNum
       );
     } else {
+      feeType = 'DCF';
       feeResult = this.calculateDCFFee(
         reservation.sourceChannel2,
         reservation.sourceChannel3,
@@ -104,6 +100,7 @@ export class GdsDcfValidator {
       currency: 'EUR', // Always return EUR
       partner: feeResult.partner,
       region: feeResult.region,
+      feeType, // NEW: GDS or DCF
       validationSteps,
     };
   }
@@ -120,13 +117,7 @@ export class GdsDcfValidator {
   private isGDSBooking(channel2: string, channel3: string): boolean {
     const gdsKeywords = ['galileo', 'worldspan', 'sabre', 'amadeus'];
     const combined = `${channel2} ${channel3}`.toLowerCase();
-    const result = gdsKeywords.some(keyword => combined.includes(keyword));
-    
-    // #region agent log
-    if (loggedValidationCount <= 5) { fetch('http://127.0.0.1:7547/ingest/248c0622-6415-452e-9b8c-db914f2f5ef1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f53c65'},body:JSON.stringify({sessionId:'f53c65',location:'gdsDcfValidator.ts:125',message:'GDS check',data:{channel2,channel3,combined,result},hypothesisId:'C',timestamp:Date.now()})}).catch(()=>{}); }
-    // #endregion
-    
-    return result;
+    return gdsKeywords.some(keyword => combined.includes(keyword));
   }
 
   private isDCFBooking(channel2: string, channel3: string): boolean {
@@ -146,10 +137,6 @@ export class GdsDcfValidator {
     
     // If no franchise mandants uploaded, pass with warning
     if (this.franchiseMandantCodes.length === 0) {
-      // #region agent log
-      if (loggedValidationCount <= 5) { fetch('http://127.0.0.1:7547/ingest/248c0622-6415-452e-9b8c-db914f2f5ef1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f53c65'},body:JSON.stringify({sessionId:'f53c65',location:'gdsDcfValidator.ts:153',message:'Mandant check lenient mode',data:{mandantCode,franchiseMandantsLength:this.franchiseMandantCodes.length},hypothesisId:'D',timestamp:Date.now()})}).catch(()=>{}); }
-      // #endregion
-      
       return {
         step: '3. Franchise Mandant Check',
         passed: true,
@@ -158,10 +145,6 @@ export class GdsDcfValidator {
     }
     
     const passed = this.franchiseMandantCodes.includes(mandantCode);
-    
-    // #region agent log
-    if (loggedValidationCount <= 5) { fetch('http://127.0.0.1:7547/ingest/248c0622-6415-452e-9b8c-db914f2f5ef1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f53c65'},body:JSON.stringify({sessionId:'f53c65',location:'gdsDcfValidator.ts:165',message:'Mandant check strict mode',data:{mandantCode,franchiseMandants:this.franchiseMandantCodes.length,passed,firstMandant:this.franchiseMandantCodes[0]},hypothesisId:'D',timestamp:Date.now()})}).catch(()=>{}); }
-    // #endregion
     
     return {
       step: '3. Franchise Mandant Check',
@@ -185,10 +168,6 @@ export class GdsDcfValidator {
     const statusLower = status.toLowerCase();
     const passed = validStatuses.some(s => statusLower.includes(s));
 
-    // #region agent log
-    if (loggedValidationCount <= 5) { fetch('http://127.0.0.1:7547/ingest/248c0622-6415-452e-9b8c-db914f2f5ef1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f53c65'},body:JSON.stringify({sessionId:'f53c65',location:'gdsDcfValidator.ts:179',message:'Status check',data:{status,statusLower,passed,validStatuses},hypothesisId:'B',timestamp:Date.now()})}).catch(()=>{}); }
-    // #endregion
-
     return {
       step: '4. Reservation Status Check',
       passed,
@@ -200,10 +179,6 @@ export class GdsDcfValidator {
 
   private validateFirstTimeFee(serialNumber?: number): { step: string; passed: boolean; reason?: string } {
     const isFirstTime = serialNumber === undefined || serialNumber === null || serialNumber === 0;
-    
-    // #region agent log
-    if (loggedValidationCount <= 5) { fetch('http://127.0.0.1:7547/ingest/248c0622-6415-452e-9b8c-db914f2f5ef1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f53c65'},body:JSON.stringify({sessionId:'f53c65',location:'gdsDcfValidator.ts:203',message:'Serial number check',data:{serialNumber,isFirstTime,type:typeof serialNumber},hypothesisId:'E',timestamp:Date.now()})}).catch(()=>{}); }
-    // #endregion
     
     return {
       step: '5. First Time Fee Check',
@@ -356,6 +331,7 @@ export class GdsDcfValidator {
       currency: 'EUR',
       partner,
       region,
+      feeType: 'GDS', // Default to GDS for failed results
       validationSteps,
     };
   }

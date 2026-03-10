@@ -271,6 +271,7 @@ export interface GdsDcfValidationResult {
   currency: string;
   partner: string;
   region: string;
+  feeType: 'GDS' | 'DCF'; // NEW: Which fee calculation was used
   validationSteps: {
     step: string;
     passed: boolean;

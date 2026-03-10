@@ -104,6 +104,7 @@ router.post('/validate/:uploadId', async (req: Request, res: Response, next: Nex
         currency: result.currency,
         partner: result.partner,
         region: result.region,
+        feeType: result.feeType, // NEW: GDS or DCF
         validationSteps: JSON.stringify(result.validationSteps),
       })),
     });
@@ -320,6 +321,102 @@ router.get('/mandants', async (req: Request, res: Response, next: NextFunction) 
     res.json({
       success: true,
       data: mandants,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Get aggregated report metadata for download page
+router.get('/reports', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { period, country, feeType } = req.query;
+
+    // Build where clause
+    const where: any = {};
+    
+    // Filter by invoicing period (extracted from handoverDate)
+    if (period && typeof period === 'string') {
+      // period format: "2025-01"
+      where.reservation = {
+        handoverDate: {
+          startsWith: period
+        }
+      };
+    }
+
+    // Get all validation results
+    const allResults = await (prisma as any).gdsDcfValidationResult.findMany({
+      where,
+    });
+
+    // Deserialize and filter in memory
+    const results = allResults.map((r: any) => deserializeValidationResult(r));
+
+    // Load franchise mandants for country mapping
+    const mandants = await (prisma as any).franchiseMandant.findMany();
+    const mandantMap = new Map(mandants.map((m: any) => [m.fir, m]));
+
+    // Group results
+    const reportGroups = new Map<string, {
+      feeType: string;
+      country: string;
+      countryName: string;
+      fir: string;
+      invoicingPeriod: string;
+      totalFees: number;
+      count: number;
+    }>();
+
+    for (const result of results) {
+      const handoverDate = result.reservation.handoverDate;
+      const invoicingPeriod = handoverDate ? handoverDate.substring(0, 7) : 'Unknown';
+      
+      const mandantCode = result.reservation.mandantCode;
+      const mandant = mandantMap.get(mandantCode);
+      const countryCode = mandant?.iso || result.reservation.posCountryCode || 'Unknown';
+      const countryName = mandant?.countryName || countryCode;
+      const fir = mandant?.fir || mandantCode;
+
+      // Group GDS and DCF together as "GDS & DCF"
+      const reportFeeType = (result.feeType === 'GDS' || result.feeType === 'DCF') ? 'GDS & DCF' : result.feeType;
+
+      // Apply filters
+      if (country && countryCode !== country) continue;
+      if (feeType && feeType !== 'all' && reportFeeType !== feeType) continue;
+
+      const key = `${reportFeeType}|${countryCode}|${invoicingPeriod}`;
+      
+      if (!reportGroups.has(key)) {
+        reportGroups.set(key, {
+          feeType: reportFeeType,
+          country: countryCode,
+          countryName,
+          fir,
+          invoicingPeriod,
+          totalFees: 0,
+          count: 0,
+        });
+      }
+
+      const group = reportGroups.get(key)!;
+      group.totalFees += result.calculatedFee;
+      group.count += 1;
+    }
+
+    // Convert to array and sort
+    const reports = Array.from(reportGroups.values())
+      .sort((a, b) => {
+        // Sort by period desc, then country asc
+        if (a.invoicingPeriod !== b.invoicingPeriod) {
+          return b.invoicingPeriod.localeCompare(a.invoicingPeriod);
+        }
+        return a.country.localeCompare(b.country);
+      });
+
+    res.json({
+      success: true,
+      data: reports,
     });
   } catch (err) {
     next(err);

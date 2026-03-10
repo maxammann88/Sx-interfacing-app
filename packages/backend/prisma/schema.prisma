@@ -365,6 +365,7 @@ model GdsDcfValidationResult {
   currency         String
   partner          String
   region           String
+  feeType          String   @default("GDS") // 'GDS' or 'DCF'
   validationSteps  String   // JSON array as string
 
   @@index([uploadId])

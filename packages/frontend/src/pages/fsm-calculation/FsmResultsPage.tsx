@@ -178,10 +178,12 @@ export default function FsmResultsPage() {
   const [filteredResults, setFilteredResults] = useState<GdsDcfValidationResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterPartner, setFilterPartner] = useState('all');
-  const [filterFeeType, setFilterFeeType] = useState('all'); // New: GDS/DCF filter
-  const [filterCountry, setFilterCountry] = useState('all'); // New: Country filter
+  const [filterFeeType, setFilterFeeType] = useState('all');
+  const [filterCountry, setFilterCountry] = useState('all');
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [franchiseMandants, setFranchiseMandants] = useState<any[]>([]);
+  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   useEffect(() => {
     if (uploadId) {
@@ -193,6 +195,12 @@ export default function FsmResultsPage() {
   useEffect(() => {
     applyFilters();
   }, [results, filterPartner, filterFeeType, filterCountry, franchiseMandants]);
+
+  useEffect(() => {
+    if (sortField) {
+      applySorting();
+    }
+  }, [filteredResults, sortField, sortDirection]);
 
   const loadResults = async (id: number) => {
     try {
@@ -225,28 +233,14 @@ export default function FsmResultsPage() {
   const applyFilters = () => {
     let filtered = [...results];
 
-    // Partner filter
     if (filterPartner !== 'all') {
       filtered = filtered.filter(r => r.partner === filterPartner);
     }
 
-    // Fee Type filter (GDS/DCF)
     if (filterFeeType !== 'all') {
-      filtered = filtered.filter(r => {
-        const pName = r.partner.toLowerCase();
-        const isGDS = pName.includes('amadeus') || pName.includes('galileo') || 
-                      pName.includes('worldspan') || pName.includes('sabre') || 
-                      pName.includes('travelport');
-        const isDCF = pName.includes('expedia') || pName.includes('priceline') || 
-                      pName.includes('meili');
-        
-        if (filterFeeType === 'GDS') return isGDS;
-        if (filterFeeType === 'DCF') return isDCF;
-        return true;
-      });
+      filtered = filtered.filter(r => r.feeType === filterFeeType);
     }
 
-    // Country filter
     if (filterCountry !== 'all') {
       filtered = filtered.filter(r => {
         const mandant = franchiseMandants.find(m => m.fir === r.reservation.mandantCode);
@@ -254,16 +248,56 @@ export default function FsmResultsPage() {
       });
     }
 
-    console.log('Filter applied:', { 
-      totalResults: results.length, 
-      filteredResults: filtered.length,
-      filterPartner, 
-      filterFeeType, 
-      filterCountry,
-      mandantsLoaded: franchiseMandants.length
+    setFilteredResults(filtered);
+  };
+
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      // Toggle direction if same field
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // New field, start with ascending
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const applySorting = () => {
+    if (!sortField) return;
+
+    const sorted = [...filteredResults].sort((a, b) => {
+      let aVal: any;
+      let bVal: any;
+
+      switch (sortField) {
+        case 'feeType':
+          aVal = a.feeType || '';
+          bVal = b.feeType || '';
+          break;
+        case 'country':
+          const aMandant = franchiseMandants.find(m => m.fir === a.reservation.mandantCode);
+          const bMandant = franchiseMandants.find(m => m.fir === b.reservation.mandantCode);
+          aVal = aMandant?.iso || '';
+          bVal = bMandant?.iso || '';
+          break;
+        case 'fee':
+          aVal = a.calculatedFee;
+          bVal = b.calculatedFee;
+          break;
+        case 'partner':
+          aVal = a.partner;
+          bVal = b.partner;
+          break;
+        default:
+          return 0;
+      }
+
+      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
     });
 
-    setFilteredResults(filtered);
+    setFilteredResults(sorted);
   };
 
   const toggleExpand = (resNumber: string) => {
@@ -388,11 +422,32 @@ export default function FsmResultsPage() {
                   <th>Source Ch2</th>
                   <th>Source Ch3</th>
                   <th>Mandant</th>
-                  <th>POS Country</th>
+                  <th 
+                    onClick={() => handleSort('country')}
+                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                  >
+                    POS Country {sortField === 'country' && (sortDirection === 'asc' ? '▲' : '▼')}
+                  </th>
                   <th>Status</th>
-                  <th>Partner</th>
+                  <th 
+                    onClick={() => handleSort('partner')}
+                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                  >
+                    Partner {sortField === 'partner' && (sortDirection === 'asc' ? '▲' : '▼')}
+                  </th>
+                  <th 
+                    onClick={() => handleSort('feeType')}
+                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                  >
+                    Fee Type {sortField === 'feeType' && (sortDirection === 'asc' ? '▲' : '▼')}
+                  </th>
                   <th>Chargeable</th>
-                  <th>Fee (EUR)</th>
+                  <th 
+                    onClick={() => handleSort('fee')}
+                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                  >
+                    Fee (EUR) {sortField === 'fee' && (sortDirection === 'asc' ? '▲' : '▼')}
+                  </th>
                   <th>Details</th>
                 </tr>
               </thead>
@@ -407,6 +462,18 @@ export default function FsmResultsPage() {
                       <td>{result.reservation.posCountryCode}</td>
                       <td>{result.reservation.statusExtended}</td>
                       <td>{result.partner}</td>
+                      <td>
+                        <span style={{ 
+                          padding: '4px 8px', 
+                          borderRadius: '4px', 
+                          fontSize: '12px',
+                          fontWeight: 'bold',
+                          backgroundColor: result.feeType === 'GDS' ? '#e3f2fd' : '#fff3e0',
+                          color: result.feeType === 'GDS' ? '#1976d2' : '#f57c00'
+                        }}>
+                          {result.feeType || 'N/A'}
+                        </span>
+                      </td>
                       <td>
                         <ChargeableBadge chargeable={result.isChargeable}>
                           {result.isChargeable ? 'YES' : 'NO'}

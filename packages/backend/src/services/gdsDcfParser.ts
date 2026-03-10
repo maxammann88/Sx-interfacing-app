@@ -107,9 +107,6 @@ function parseCSVLine(line: string): string[] {
   return result;
 }
 
-// Track how many rows we've logged
-let loggedRowCount = 0;
-
 function parseReservationRow(headers: string[], values: any[]): GdsDcfReservation | null {
   // Find column indices - flexible matching
   const getIndex = (patterns: string[]) => {
@@ -129,10 +126,6 @@ function parseReservationRow(headers: string[], values: any[]): GdsDcfReservatio
   const serialNumberIdx = getIndex(['rntl_mser']);
   const handoverDateIdx = getIndex(['rsrv_handover_datm']);
 
-  // #region agent log
-  if (loggedRowCount < 3) { fetch('http://127.0.0.1:7547/ingest/248c0622-6415-452e-9b8c-db914f2f5ef1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f53c65'},body:JSON.stringify({sessionId:'f53c65',location:'gdsDcfParser.ts:111',message:'Column indices found',data:{resNumberIdx,sourceChannel2Idx,sourceChannel3Idx,mandantCodeIdx,statusExtendedIdx,serialNumberIdx},hypothesisId:'A',timestamp:Date.now()})}).catch(()=>{}); }
-  // #endregion
-
   // Reservation number is mandatory
   if (resNumberIdx === -1) return null;
   
@@ -149,10 +142,6 @@ function parseReservationRow(headers: string[], values: any[]): GdsDcfReservatio
     posCountryCode: posCountryCodeIdx >= 0 ? String(values[posCountryCodeIdx] || '').trim() : '',
     handoverDate: handoverDateIdx >= 0 ? cleanDateValue(values[handoverDateIdx]) : '',
   };
-
-  // #region agent log
-  if (loggedRowCount < 3) { fetch('http://127.0.0.1:7547/ingest/248c0622-6415-452e-9b8c-db914f2f5ef1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f53c65'},body:JSON.stringify({sessionId:'f53c65',location:'gdsDcfParser.ts:137',message:'Parsed reservation',data:{resNumber:reservation.resNumber,sourceChannel2:reservation.sourceChannel2,sourceChannel3:reservation.sourceChannel3,mandantCode:reservation.mandantCode,statusExtended:reservation.statusExtended,serialNumber:reservation.serialNumber,rowNum:loggedRowCount},hypothesisId:'ABC',timestamp:Date.now()})}).catch(()=>{}); loggedRowCount++; }
-  // #endregion
 
   // Optional fields
   if (voucherNumberIdx >= 0 && values[voucherNumberIdx]) {

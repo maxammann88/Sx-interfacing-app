@@ -15,9 +15,11 @@ interface ExportData {
 
 export class GdsDcfExporter {
   private results: GdsDcfValidationResult[];
+  private countryCode?: string;
 
-  constructor(results: GdsDcfValidationResult[]) {
+  constructor(results: GdsDcfValidationResult[], countryCode?: string) {
     this.results = results;
+    this.countryCode = countryCode;
   }
 
   // Group results by country and month
@@ -67,36 +69,47 @@ export class GdsDcfExporter {
   // Generate Excel export
   async generateExcel(): Promise<Buffer> {
     const workbook = new ExcelJS.Workbook();
-    const data = this.groupData();
+    
+    // Create a single worksheet
+    const worksheet = workbook.addWorksheet('GDS & DCF Fees');
 
-    // Create a sheet for each country/month combination
-    for (const [country, countryData] of data.byCountry) {
-      for (const [month, monthData] of countryData.byMonth) {
-        const sheetName = `${country}_${month}`.substring(0, 31); // Excel limit
-        const worksheet = workbook.addWorksheet(sheetName);
+    // Get all results and separate by type
+    const gdsResults = this.results.filter(r => r.feeType === 'GDS' || r.region === 'GDS');
+    const dcfResults = this.results.filter(r => r.feeType === 'DCF' || (r.feeType !== 'GDS' && r.region !== 'GDS'));
 
-        // Add title
-        worksheet.addRow([`GDS & DCF Fees - ${country} - ${month}`]);
-        worksheet.addRow([]);
-
-        // GDS Section
-        if (monthData.gds.length > 0) {
-          this.addGDSSectionToExcel(worksheet, monthData.gds);
-          worksheet.addRow([]);
-        }
-
-        // DCF Section
-        if (monthData.dcf.length > 0) {
-          this.addDCFSectionToExcel(worksheet, monthData.dcf);
-        }
-
-        // Format headers
-        worksheet.getRow(3).font = { bold: true };
-        worksheet.columns.forEach(column => {
-          column.width = 15;
-        });
-      }
+    // Add title
+    if (this.results.length > 0) {
+      const country = this.countryCode || this.results[0].reservation.posCountryCode || 'Unknown';
+      const period = this.results[0].reservation.handoverDate ? this.results[0].reservation.handoverDate.substring(0, 7) : '';
+      worksheet.addRow([`GDS & DCF Fees Report - ${country} - ${period}`]);
+      worksheet.addRow([]);
     }
+
+    // GDS Section
+    if (gdsResults.length > 0) {
+      this.addGDSSectionToExcel(worksheet, gdsResults);
+      worksheet.addRow([]);
+      worksheet.addRow([]);
+    }
+
+    // DCF Section
+    if (dcfResults.length > 0) {
+      this.addDCFSectionToExcel(worksheet, dcfResults);
+    }
+
+    // Format headers - make them bold
+    worksheet.eachRow((row, rowNumber) => {
+      if (row.getCell(1).value === '=== GDS FEES ===' || 
+          row.getCell(1).value === '=== DCF FEES ===' ||
+          (typeof row.getCell(1).value === 'string' && row.getCell(1).value.includes('Reservation #'))) {
+        row.font = { bold: true };
+      }
+    });
+
+    // Auto-adjust column widths
+    worksheet.columns.forEach(column => {
+      column.width = 15;
+    });
 
     return await workbook.xlsx.writeBuffer() as Buffer;
   }
@@ -115,9 +128,7 @@ export class GdsDcfExporter {
       'Voucher #',
       'Customer #',
       'Handover Date',
-      'Partner',
       'Fee (EUR)',
-      'Chargeable',
     ];
     worksheet.addRow(headers);
 
@@ -134,9 +145,7 @@ export class GdsDcfExporter {
         r.voucherNumber || '',
         r.customerParentNum || '',
         r.handoverDate,
-        result.partner,
         result.isChargeable ? result.calculatedFee.toFixed(2) : '0.00',
-        result.isChargeable ? 'Yes' : 'No',
       ]);
     }
 
@@ -145,13 +154,13 @@ export class GdsDcfExporter {
     const totalGDS = results
       .filter(r => r.isChargeable)
       .reduce((sum, r) => sum + r.calculatedFee, 0);
-    worksheet.addRow(['Total GDS Fees (EUR):', '', '', '', '', '', '', '', '', '', totalGDS.toFixed(2)]);
+    worksheet.addRow(['Total GDS Fees (EUR):', '', '', '', '', '', '', '', '', totalGDS.toFixed(2)]);
   }
 
   private addDCFSectionToExcel(worksheet: ExcelJS.Worksheet, results: GdsDcfValidationResult[]) {
     worksheet.addRow(['=== DCF FEES ===']);
     
-    // Headers
+    // Headers - same as GDS for alignment
     const headers = [
       'Reservation #',
       'Source Ch2',
@@ -159,11 +168,10 @@ export class GdsDcfExporter {
       'Mandant Code',
       'Status',
       'POS Country',
+      'Voucher #',
       'Customer #',
       'Handover Date',
-      'Partner',
       'Fee (EUR)',
-      'Chargeable',
     ];
     worksheet.addRow(headers);
 
@@ -177,11 +185,10 @@ export class GdsDcfExporter {
         r.mandantCode,
         r.statusExtended,
         r.posCountryCode,
+        '', // Voucher # - always empty for DCF
         r.customerParentNum || '',
         r.handoverDate,
-        result.partner,
         result.isChargeable ? result.calculatedFee.toFixed(2) : '0.00',
-        result.isChargeable ? 'Yes' : 'No',
       ]);
     }
 
