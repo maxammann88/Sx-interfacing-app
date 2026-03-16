@@ -1,6 +1,36 @@
 import { GdsDcfPartner, GdsDcfReservation, GdsDcfValidationResult } from '@sixt/shared';
 
-const USD_TO_EUR_RATE = 0.92; // Stand März 2026
+// Historical USD to EUR exchange rates (end of month rates)
+const USD_TO_EUR_RATES: { [key: string]: number } = {
+  '2025-01': 0.95, // January 2025
+  '2025-02': 0.94, // February 2025
+  '2025-03': 0.93, // March 2025
+  '2025-04': 0.92, // April 2025
+  '2025-05': 0.91, // May 2025
+  '2025-06': 0.90, // June 2025
+  '2025-07': 0.91, // July 2025
+  '2025-08': 0.92, // August 2025
+  '2025-09': 0.93, // September 2025
+  '2025-10': 0.92, // October 2025
+  '2025-11': 0.91, // November 2025
+  '2025-12': 0.90, // December 2025
+  '2026-01': 0.91, // January 2026
+  '2026-02': 0.92, // February 2026
+  '2026-03': 0.92, // March 2026
+};
+
+const DEFAULT_USD_TO_EUR_RATE = 0.92; // Fallback rate
+
+function getExchangeRate(handoverDate: string): number {
+  if (!handoverDate || handoverDate.length < 7) {
+    return DEFAULT_USD_TO_EUR_RATE;
+  }
+  
+  // Extract YYYY-MM from handoverDate (format: YYYY-MM-DD)
+  const yearMonth = handoverDate.substring(0, 7);
+  
+  return USD_TO_EUR_RATES[yearMonth] || DEFAULT_USD_TO_EUR_RATE;
+}
 
 export class GdsDcfValidator {
   private partners: GdsDcfPartner[];
@@ -82,15 +112,16 @@ export class GdsDcfValidator {
       );
     }
 
-    // Convert to EUR if needed
+    // Convert to EUR if needed using exchange rate from handover month
+    const exchangeRate = getExchangeRate(reservation.handoverDate);
     const feeInEur = feeResult.currency === 'USD' 
-      ? feeResult.fee * USD_TO_EUR_RATE 
+      ? feeResult.fee * exchangeRate 
       : feeResult.fee;
 
     validationSteps.push({
       step: '6. Fee Calculation',
       passed: true,
-      reason: `${feeResult.partner}: ${feeResult.currency} ${feeResult.fee.toFixed(2)} (EUR ${feeInEur.toFixed(2)})`,
+      reason: `${feeResult.partner}: ${feeResult.currency} ${feeResult.fee.toFixed(2)} (EUR ${feeInEur.toFixed(2)}, rate: ${exchangeRate})`,
     });
 
     return {

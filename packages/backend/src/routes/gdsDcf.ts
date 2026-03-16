@@ -35,18 +35,27 @@ router.post('/upload', upload.single('file'), async (req: Request, res: Response
 
     const { reservations, detectedColumns, missingColumns } = parseResult;
 
+    // Deduplicate by reservation number - keep first occurrence
+    const uniqueReservations = reservations.reduce((acc, reservation) => {
+      const existing = acc.find(r => r.resNumber === reservation.resNumber);
+      if (!existing) {
+        acc.push(reservation);
+      }
+      return acc;
+    }, [] as GdsDcfReservation[]);
+
     const uploadRecord = await (prisma as any).gdsDcfUpload.create({
       data: {
         filename,
         uploadedAt: new Date().toISOString(),
-        recordCount: reservations.length,
+        recordCount: uniqueReservations.length,
         chargeableCount: 0,
         totalFees: 0,
       },
     });
 
     await (prisma as any).gdsDcfReservation.createMany({
-      data: reservations.map((r: GdsDcfReservation) => ({
+      data: uniqueReservations.map((r: GdsDcfReservation) => ({
         uploadId: uploadRecord.id,
         ...r,
       })),
@@ -57,7 +66,7 @@ router.post('/upload', upload.single('file'), async (req: Request, res: Response
       data: {
         uploadId: uploadRecord.id,
         filename,
-        recordCount: reservations.length,
+        recordCount: uniqueReservations.length,
         detectedColumns,
         missingColumns,
       },
@@ -70,6 +79,11 @@ router.post('/upload', upload.single('file'), async (req: Request, res: Response
 router.post('/validate/:uploadId', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const uploadId = parseInt(req.params.uploadId, 10);
+    
+    // Delete any existing validation results for this upload to prevent duplicates
+    await (prisma as any).gdsDcfValidationResult.deleteMany({
+      where: { uploadId },
+    });
     
     const partners = await (prisma as any).gdsDcfPartner.findMany();
     const partnerConfigs = partners.length > 0 

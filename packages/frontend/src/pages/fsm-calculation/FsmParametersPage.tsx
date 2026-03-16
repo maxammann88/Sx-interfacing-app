@@ -500,6 +500,22 @@ export default function FsmParametersPage() {
     setEditingPartner({ ...editingPartner, feesByRegion: updatedFees });
   };
 
+  const updateRegionFeeWithoutEVoucher = (region: 'EMEA' | 'Americas' | 'Other', field: 'amount' | 'currency', value: any) => {
+    if (!editingPartner) return;
+
+    const currentFees = editingPartner.feesByRegionWithoutEVoucher || [
+      { region: 'EMEA', amount: 5.29, currency: 'EUR' },
+      { region: 'Americas', amount: 5.29, currency: 'EUR' },
+      { region: 'Other', amount: 5.29, currency: 'EUR' },
+    ];
+
+    const updatedFees = currentFees.map(fee =>
+      fee.region === region ? { ...fee, [field]: field === 'amount' ? parseFloat(value) || 0 : value } : fee
+    );
+
+    setEditingPartner({ ...editingPartner, feesByRegionWithoutEVoucher: updatedFees });
+  };
+
   const addDfrCode = () => {
     if (!editingPartner) return;
     
@@ -719,14 +735,36 @@ export default function FsmParametersPage() {
               {partner.id === 'amadeus' ? 'Without eVoucher' : 'Standard Fee'}
             </VariantLabel>
             <RegionFees>
-              {partner.feesByRegion.map(fee => (
-                <FeeItem key={fee.region}>
-                  <label>POS: {fee.region}</label>
-                  <div className="value">
-                    {fee.currency} {(partner.id === 'amadeus' ? 5.29 : fee.amount).toFixed(2)}
-                  </div>
-                </FeeItem>
-              ))}
+              {partner.id === 'amadeus' ? (
+                partner.feesByRegionWithoutEVoucher ? (
+                  partner.feesByRegionWithoutEVoucher.map(fee => (
+                    <FeeItem key={fee.region}>
+                      <label>POS: {fee.region}</label>
+                      <div className="value">
+                        {fee.currency} {fee.amount.toFixed(2)}
+                      </div>
+                    </FeeItem>
+                  ))
+                ) : (
+                  partner.feesByRegion.map(fee => (
+                    <FeeItem key={fee.region}>
+                      <label>POS: {fee.region}</label>
+                      <div className="value">
+                        {fee.currency} {(5.29).toFixed(2)}
+                      </div>
+                    </FeeItem>
+                  ))
+                )
+              ) : (
+                partner.feesByRegion.map(fee => (
+                  <FeeItem key={fee.region}>
+                    <label>POS: {fee.region}</label>
+                    <div className="value">
+                      {fee.currency} {fee.amount.toFixed(2)}
+                    </div>
+                  </FeeItem>
+                ))
+              )}
             </RegionFees>
             
             {/* DFR Exceptions for without eVoucher (Amadeus) or standard (others) */}
@@ -968,7 +1006,55 @@ export default function FsmParametersPage() {
               />
             </FormGroup>
 
-            <SectionTitle>Fee by Region (Standard)</SectionTitle>
+            {/* Amadeus: Without eVoucher fees */}
+            {editingPartner.id === 'amadeus' && (
+              <>
+                <div style={{ marginTop: 20, marginBottom: 8 }}>
+                  <SectionTitle>Fee by Region - Without eVoucher</SectionTitle>
+                </div>
+                
+                {['EMEA', 'Americas', 'Other'].map(region => {
+                  const fee = editingPartner.feesByRegionWithoutEVoucher?.find(f => f.region === region);
+                  return (
+                    <div key={region} style={{ marginBottom: 16 }}>
+                      <label style={{ display: 'block', marginBottom: 8, fontWeight: 600 }}>{region}</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                        <FormGroup style={{ marginBottom: 0 }}>
+                          <label>Amount</label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={fee?.amount ?? 5.29}
+                            onChange={(e) => updateRegionFeeWithoutEVoucher(region as any, 'amount', e.target.value)}
+                            placeholder="0.00"
+                          />
+                        </FormGroup>
+                        <FormGroup style={{ marginBottom: 0 }}>
+                          <label>Currency</label>
+                          <select
+                            style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+                            value={fee?.currency || 'EUR'}
+                            onChange={(e) => updateRegionFeeWithoutEVoucher(region as any, 'currency', e.target.value)}
+                          >
+                            <option value="EUR">EUR</option>
+                            <option value="USD">USD</option>
+                          </select>
+                        </FormGroup>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                <div style={{ marginTop: 20, marginBottom: 8 }}>
+                  <SectionTitle>Fee by Region - With eVoucher</SectionTitle>
+                </div>
+              </>
+            )}
+
+            {/* Standard Fee by Region title for non-Amadeus or With eVoucher for Amadeus */}
+            {editingPartner.id !== 'amadeus' && (
+              <SectionTitle>Fee by Region (Standard)</SectionTitle>
+            )}
             
             {['EMEA', 'Americas', 'Other'].map(region => {
               const fee = editingPartner.feesByRegion.find(f => f.region === region);

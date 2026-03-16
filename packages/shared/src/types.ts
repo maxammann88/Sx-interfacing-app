@@ -211,6 +211,12 @@ export interface GdsDcfPartner {
     amount: number;
     currency: string;
   }[];
+  // For Amadeus: separate fees by region for without eVoucher
+  feesByRegionWithoutEVoucher?: {
+    region: 'EMEA' | 'Americas' | 'Other';
+    amount: number;
+    currency: string;
+  }[];
   voucherRules?: {
     dfrFees: { 
       [dfrCode: string]: { 
