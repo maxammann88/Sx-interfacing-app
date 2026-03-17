@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { PageTitle, Card, Button, Input } from '../../components/ui';
 import { GdsDcfPartner, FranchiseMandant } from '@sixt/shared';
+import ValidationRulesEditor from './ValidationRulesEditor';
 
 const ParamsContainer = styled.div`
   padding: 20px;
@@ -332,13 +333,25 @@ export default function FsmParametersPage() {
   const [uploadMessage, setUploadMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [editingPartner, setEditingPartner] = useState<GdsDcfPartner | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyData, setHistoryData] = useState<any[]>([]);
+  const [historyPartner, setHistoryPartner] = useState<GdsDcfPartner | null>(null);
   const [gdsOpen, setGdsOpen] = useState(false);
   const [dcfOpen, setDcfOpen] = useState(false);
   const [mandantsOpen, setMandantsOpen] = useState(false);
+  const [regionsOpen, setRegionsOpen] = useState(false);
+  const [validationRulesOpen, setValidationRulesOpen] = useState(false);
+  const [regions, setRegions] = useState<any[]>([]);
+  const [showRegionModal, setShowRegionModal] = useState(false);
+  const [editingRegion, setEditingRegion] = useState<{ regionName: string; countries: string; validFrom?: string; validTo?: string; notes?: string } | null>(null);
+  const [showRegionHistoryModal, setShowRegionHistoryModal] = useState(false);
+  const [regionHistoryData, setRegionHistoryData] = useState<any[]>([]);
+  const [historyRegionName, setHistoryRegionName] = useState<string>('');
 
   useEffect(() => {
     loadPartners();
     loadMandants();
+    loadRegions();
   }, []);
 
   const loadPartners = async () => {
@@ -364,6 +377,27 @@ export default function FsmParametersPage() {
       }
     } catch (err) {
       console.error('Failed to load mandants:', err);
+    }
+  };
+
+  const loadRegions = async () => {
+    try {
+      // Add cache-busting parameter to force fresh data
+      const timestamp = new Date().getTime();
+      const response = await fetch(`/api/gds-dcf/regions?_=${timestamp}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+      const result = await response.json();
+      if (result.success) {
+        console.log('Loaded regions:', result.data);
+        setRegions(result.data);
+      }
+    } catch (err) {
+      console.error('Failed to load regions:', err);
     }
   };
 
@@ -424,6 +458,218 @@ export default function FsmParametersPage() {
   const handleEdit = (partner: GdsDcfPartner) => {
     setEditingPartner({ ...partner });
     setShowModal(true);
+  };
+
+  const handleHistory = async (partner: GdsDcfPartner) => {
+    try {
+      const response = await fetch(`/api/gds-dcf/partners/${partner.id}/history`);
+      const result = await response.json();
+      
+      if (result.success) {
+        setHistoryData(result.data);
+        setHistoryPartner(partner);
+        setShowHistoryModal(true);
+      } else {
+        alert('Failed to load history');
+      }
+    } catch (err) {
+      console.error('Failed to load history:', err);
+      alert('Failed to load partner history');
+    }
+  };
+
+  const handleDeleteFuturePartnerVersion = async (partnerId: string, revision: number) => {
+    if (!confirm(`Are you sure you want to delete this future revision?\n\nThis action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/gds-dcf/partners/${partnerId}/history/${revision}`, {
+        method: 'DELETE',
+      });
+      const result = await response.json();
+      
+      if (result.success) {
+        alert(`Future revision deleted successfully`);
+        // Reload history
+        if (historyPartner) {
+          await handleHistory(historyPartner);
+        }
+      } else {
+        alert(result.error || 'Failed to delete future revision');
+      }
+    } catch (err) {
+      console.error('Failed to delete future revision:', err);
+      alert('Failed to delete future revision');
+    }
+  };
+
+  const handleAddRegion = () => {
+    setEditingRegion({ 
+      regionName: '', 
+      countries: '',
+      validFrom: new Date().toISOString().split('T')[0],
+      validTo: '',
+      notes: '',
+    });
+    setShowRegionModal(true);
+  };
+
+  const handleEditRegion = async (region: any) => {
+    // When editing a region, we're creating a NEW version
+    // So we should default to today's date, not the old validFrom
+    setEditingRegion({
+      regionName: region.regionName,
+      countries: region.countries?.join(', ') || '',
+      validFrom: new Date().toISOString().split('T')[0],
+      validTo: '',
+      notes: '',
+    });
+    setShowRegionModal(true);
+  };
+
+  const handleRegionHistory = async (regionName: string) => {
+    try {
+      const response = await fetch(`/api/gds-dcf/regions/${regionName}/history`);
+      const result = await response.json();
+      
+      if (result.success) {
+        setRegionHistoryData(result.data);
+        setHistoryRegionName(regionName);
+        setShowRegionHistoryModal(true);
+      } else {
+        alert('Failed to load region history');
+      }
+    } catch (err) {
+      console.error('Failed to load region history:', err);
+      alert('Failed to load region history');
+    }
+  };
+
+  const handleDeleteFutureRegionVersion = async (regionName: string, validFrom: string) => {
+    if (!confirm(`Are you sure you want to delete this future version of ${regionName}?\n\nThis action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/gds-dcf/regions/${regionName}/future/${validFrom}`, {
+        method: 'DELETE',
+      });
+      const result = await response.json();
+      
+      if (result.success) {
+        alert(`Future version deleted successfully`);
+        // Reload history
+        await handleRegionHistory(regionName);
+        // Reload regions list
+        await loadRegions();
+      } else {
+        alert(result.error || 'Failed to delete future version');
+      }
+    } catch (err) {
+      console.error('Failed to delete future version:', err);
+      alert('Failed to delete future version');
+    }
+  };
+
+  const handleSaveRegion = async () => {
+    if (!editingRegion || !editingRegion.regionName || !editingRegion.countries) {
+      alert('Please provide region name and country codes');
+      return;
+    }
+
+    try {
+      const countryCodes = editingRegion.countries
+        .split(',')
+        .map(c => c.trim().toLowerCase())
+        .filter(c => c.length > 0);
+
+      // Client-side validation: Check for 2-character format
+      const invalidFormat = countryCodes.filter(code => code.length !== 2);
+      if (invalidFormat.length > 0) {
+        alert(`Invalid country codes (must be exactly 2 characters):\n${invalidFormat.map(c => c.toUpperCase()).join(', ')}`);
+        return;
+      }
+
+      // Client-side validation: Check for duplicates within the list
+      const codeCount = new Map<string, number>();
+      for (const code of countryCodes) {
+        codeCount.set(code, (codeCount.get(code) || 0) + 1);
+      }
+      
+      const duplicates = Array.from(codeCount.entries())
+        .filter(([_, count]) => count > 1)
+        .map(([code, count]) => `${code.toUpperCase()} (${count} times)`);
+      
+      if (duplicates.length > 0) {
+        alert(`Duplicate countries found in your list:\n${duplicates.join(', ')}\n\nPlease remove duplicates and try again.`);
+        return;
+      }
+
+      // Use timestamp with milliseconds to avoid conflicts
+      // But respect the date selected by the user for validFrom
+      let validFromDate: Date;
+      
+      if (editingRegion.validFrom) {
+        // Parse the date string (format: YYYY-MM-DD) and create a date in local timezone
+        const [year, month, day] = editingRegion.validFrom.split('-').map(Number);
+        validFromDate = new Date(year, month - 1, day);
+        
+        // Set to start of day (00:00:00) so it's immediately active
+        validFromDate.setHours(0, 0, 0, 0);
+      } else {
+        validFromDate = new Date();
+        validFromDate.setHours(0, 0, 0, 0);
+      }
+      
+      // Add a small timestamp offset to make it unique (milliseconds only)
+      validFromDate.setMilliseconds(new Date().getMilliseconds());
+
+      console.log('Saving region with validFrom:', editingRegion.validFrom, '→', validFromDate.toISOString());
+
+      const response = await fetch('/api/gds-dcf/regions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          regionName: editingRegion.regionName,
+          countryCodes,
+          validFrom: validFromDate.toISOString(),
+          validTo: editingRegion.validTo ? new Date(editingRegion.validTo).toISOString() : null,
+          notes: editingRegion.notes || undefined,
+        }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        await loadRegions();
+        setShowRegionModal(false);
+        setEditingRegion(null);
+      } else {
+        alert(result.error || 'Failed to save region mapping');
+      }
+    } catch (err) {
+      console.error('Failed to save region:', err);
+      alert('Failed to save region mapping');
+    }
+  };
+
+  const handleDeleteRegion = async (regionName: string) => {
+    if (!confirm(`Are you sure you want to close the mapping for region "${regionName}"?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/gds-dcf/regions/${regionName}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        await loadRegions();
+      }
+    } catch (err) {
+      console.error('Failed to delete region:', err);
+      alert('Failed to delete region mapping');
+    }
   };
 
   const handleSave = async () => {
@@ -723,6 +969,9 @@ export default function FsmParametersPage() {
             <PartnerName>{partner.name}</PartnerName>
             <ButtonGroup>
               <Button onClick={() => handleEdit(partner)}>Edit</Button>
+              <Button onClick={() => handleHistory(partner)} style={{ background: '#6c757d' }}>
+                📜 History
+              </Button>
               <Button onClick={() => handleDelete(partner.id)} style={{ background: '#dc3545' }}>
                 Delete
               </Button>
@@ -985,6 +1234,98 @@ export default function FsmParametersPage() {
               </SectionContent>
             </CollapsibleSection>
           </Section>
+
+          <Section>
+            <CollapsibleSection>
+              <SectionHeader isOpen={regionsOpen} onClick={() => setRegionsOpen(!regionsOpen)}>
+                <SectionTitle>
+                  <CategoryBadge type="franchise" style={{ background: '#e3f2fd', color: '#1976d2' }}>REGIONS</CategoryBadge>
+                  Region-Country Mapping
+                  <span style={{ fontSize: 14, fontWeight: 'normal', color: '#666', marginLeft: 8 }}>
+                    ({regions.length} regions)
+                  </span>
+                </SectionTitle>
+                <ExpandIcon isOpen={regionsOpen}>▼</ExpandIcon>
+              </SectionHeader>
+              <SectionContent isOpen={regionsOpen}>
+                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingRight: 12 }}>
+                  <div style={{ fontSize: 13, color: '#666' }}>
+                    Define which countries belong to which region (EMEA is default for unmapped countries)
+                  </div>
+                  <Button onClick={handleAddRegion} style={{ fontSize: 13 }}>
+                    + Add Region
+                  </Button>
+                </div>
+
+                {regions.length === 0 ? (
+                  <InfoMessage>No custom regions defined yet. Click "+ Add Region" to create one.</InfoMessage>
+                ) : (
+                  <PartnersGrid>
+                    {regions.map((region: any) => (
+                      <PartnerCard key={region.regionName}>
+                        <PartnerHeader>
+                          <PartnerName>{region.regionName}</PartnerName>
+                          <ButtonGroup>
+                            <Button onClick={() => handleEditRegion(region)}>Edit</Button>
+                            <Button onClick={() => handleRegionHistory(region.regionName)} style={{ background: '#6c757d' }}>
+                              📜 History
+                            </Button>
+                            <Button onClick={() => handleDeleteRegion(region.regionName)} style={{ background: '#dc3545' }}>
+                              Close
+                            </Button>
+                          </ButtonGroup>
+                        </PartnerHeader>
+                        
+                        <div style={{ marginTop: 12, fontSize: 13 }}>
+                          <div style={{ fontWeight: 600, marginBottom: 8 }}>
+                            {region.countryCount} {region.countryCount === 1 ? 'country' : 'countries'}
+                          </div>
+                          {region.countries && region.countries.length > 0 && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                              {[...region.countries].sort().map((code: string) => (
+                                <span 
+                                  key={code}
+                                  style={{
+                                    background: '#e3f2fd',
+                                    color: '#1976d2',
+                                    padding: '4px 8px',
+                                    borderRadius: '4px',
+                                    fontSize: 11,
+                                    fontWeight: 600,
+                                    textTransform: 'uppercase',
+                                  }}
+                                >
+                                  {code}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </PartnerCard>
+                    ))}
+                  </PartnersGrid>
+                )}
+              </SectionContent>
+            </CollapsibleSection>
+          </Section>
+
+          <Section>
+            <CollapsibleSection>
+              <SectionHeader isOpen={validationRulesOpen} onClick={() => setValidationRulesOpen(!validationRulesOpen)}>
+                <SectionTitle>
+                  <CategoryBadge type="franchise" style={{ background: '#f3e5f5', color: '#7b1fa2' }}>RULES</CategoryBadge>
+                  Validation Rules Configuration
+                  <span style={{ fontSize: 14, fontWeight: 'normal', color: '#666', marginLeft: 8 }}>
+                    (temporally versioned)
+                  </span>
+                </SectionTitle>
+                <ExpandIcon isOpen={validationRulesOpen}>▼</ExpandIcon>
+              </SectionHeader>
+              <SectionContent isOpen={validationRulesOpen}>
+                <ValidationRulesEditor />
+              </SectionContent>
+            </CollapsibleSection>
+          </Section>
         </ParamsContainer>
       </Card>
 
@@ -1003,6 +1344,46 @@ export default function FsmParametersPage() {
               <Input
                 value={editingPartner.name}
                 onChange={(e) => setEditingPartner({ ...editingPartner, name: e.target.value })}
+              />
+            </FormGroup>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16 }}>
+              <FormGroup>
+                <label>Valid From *</label>
+                <Input
+                  type="date"
+                  value={editingPartner.validFrom || new Date().toISOString().split('T')[0]}
+                  onChange={(e) => setEditingPartner({ ...editingPartner, validFrom: e.target.value } as any)}
+                  required
+                />
+              </FormGroup>
+
+              <FormGroup>
+                <label>Valid To (leave empty for indefinite)</label>
+                <Input
+                  type="date"
+                  value={editingPartner.validTo || ''}
+                  onChange={(e) => setEditingPartner({ ...editingPartner, validTo: e.target.value || null } as any)}
+                />
+              </FormGroup>
+            </div>
+
+            <FormGroup style={{ marginTop: 16 }}>
+              <label>Notes (optional - describe what changed in this revision)</label>
+              <textarea
+                value={(editingPartner as any).notes || ''}
+                onChange={(e) => setEditingPartner({ ...editingPartner, notes: e.target.value } as any)}
+                placeholder="e.g., 'Increased EMEA fee due to market changes' or 'Added new DFR exception for customer 12345'"
+                style={{
+                  width: '100%',
+                  minHeight: '80px',
+                  padding: '10px',
+                  borderRadius: '4px',
+                  border: '1px solid #ccc',
+                  fontSize: '14px',
+                  fontFamily: 'inherit',
+                  resize: 'vertical',
+                }}
               />
             </FormGroup>
 
@@ -1283,6 +1664,477 @@ export default function FsmParametersPage() {
               <Button onClick={handleSave} style={{ flex: 1 }}>Save Changes</Button>
               <Button onClick={() => setShowModal(false)} style={{ flex: 1, background: '#6c757d' }}>
                 Cancel
+              </Button>
+            </div>
+          </ModalContent>
+        </Modal>
+      )}
+
+      {showHistoryModal && historyPartner && (
+        <Modal onClick={() => setShowHistoryModal(false)}>
+          <ModalContent onClick={(e) => e.stopPropagation()} style={{ maxWidth: '800px', maxHeight: '80vh', overflow: 'auto' }}>
+            <ModalHeader>
+              <ModalTitle>
+                History: {historyPartner.name}
+              </ModalTitle>
+              <Button onClick={() => setShowHistoryModal(false)}>✕</Button>
+            </ModalHeader>
+
+            {historyData.length === 0 ? (
+              <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
+                No history records found
+              </div>
+            ) : (
+              <div style={{ padding: '20px' }}>
+                <div style={{ marginBottom: '16px', fontSize: '14px', color: '#666' }}>
+                  {historyData.length} revision{historyData.length !== 1 ? 's' : ''} found
+                </div>
+                
+                {historyData.map((revision: any, index: number) => {
+                  const isFuture = new Date(revision.validFrom) > new Date();
+                  
+                  return (
+                  <div 
+                    key={revision.id} 
+                    style={{
+                      border: '1px solid #e0e0e0',
+                      borderRadius: '8px',
+                      padding: '16px',
+                      marginBottom: '12px',
+                      background: index === 0 ? '#f8f9fa' : 'white',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                        <span style={{
+                          background: index === 0 ? '#28a745' : '#6c757d',
+                          color: 'white',
+                          padding: '4px 12px',
+                          borderRadius: '12px',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                        }}>
+                          v{revision.revision}
+                        </span>
+                        {index === 0 && !isFuture && (
+                          <span style={{
+                            background: '#28a745',
+                            color: 'white',
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                          }}>
+                            Current
+                          </span>
+                        )}
+                        {isFuture && (
+                          <span style={{
+                            background: '#ffc107',
+                            color: '#000',
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                          }}>
+                            Future
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        {isFuture && (
+                          <button
+                            onClick={() => handleDeleteFuturePartnerVersion(historyPartner?.id || '', revision.revision)}
+                            style={{
+                              background: '#dc3545',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              padding: '4px 8px',
+                              cursor: 'pointer',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                            }}
+                          >
+                            🗑️ Delete
+                          </button>
+                        )}
+                        <div style={{ fontSize: '13px', color: '#666' }}>
+                          {new Date(revision.createdAt).toLocaleString('de-DE')}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '13px', marginBottom: '12px' }}>
+                      <div>
+                        <strong>Valid From:</strong> {new Date(revision.validFrom).toLocaleDateString('de-DE')}
+                      </div>
+                      <div>
+                        <strong>Valid To:</strong> {revision.validTo ? new Date(revision.validTo).toLocaleDateString('de-DE') : 'Indefinite'}
+                      </div>
+                      <div>
+                        <strong>Category:</strong> {revision.category.toUpperCase()}
+                      </div>
+                      <div>
+                        <strong>Created By:</strong> {revision.createdBy}
+                      </div>
+                    </div>
+
+                    {/* Fees by Region */}
+                    {revision.feesByRegion && revision.feesByRegion.length > 0 && (
+                      <div style={{ marginTop: '12px', padding: '12px', background: 'white', borderRadius: '6px', border: '1px solid #e8e8e8' }}>
+                        <div style={{ fontWeight: 600, fontSize: '13px', marginBottom: '8px', color: '#333' }}>
+                          {revision.partnerId === 'amadeus' ? 'Fees by Region (With eVoucher):' : 'Fees by Region:'}
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                          {revision.feesByRegion.map((fee: any) => (
+                            <div key={fee.region} style={{ fontSize: '12px', padding: '6px 8px', background: '#f8f9fa', borderRadius: '4px' }}>
+                              <div style={{ fontWeight: 600, color: '#666', marginBottom: '2px' }}>{fee.region}</div>
+                              <div style={{ fontSize: '13px', color: '#000' }}>{fee.currency} {fee.amount.toFixed(2)}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Fees Without eVoucher (Amadeus) */}
+                    {revision.feesByRegionWithoutEVoucher && revision.feesByRegionWithoutEVoucher.length > 0 && (
+                      <div style={{ marginTop: '12px', padding: '12px', background: 'white', borderRadius: '6px', border: '1px solid #e8e8e8' }}>
+                        <div style={{ fontWeight: 600, fontSize: '13px', marginBottom: '8px', color: '#333' }}>
+                          Fees by Region (Without eVoucher):
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                          {revision.feesByRegionWithoutEVoucher.map((fee: any) => (
+                            <div key={fee.region} style={{ fontSize: '12px', padding: '6px 8px', background: '#f8f9fa', borderRadius: '4px' }}>
+                              <div style={{ fontWeight: 600, color: '#666', marginBottom: '2px' }}>{fee.region}</div>
+                              <div style={{ fontSize: '13px', color: '#000' }}>{fee.currency} {fee.amount.toFixed(2)}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* DFR Exceptions */}
+                    {revision.voucherRules && revision.voucherRules.dfrFees && Object.keys(revision.voucherRules.dfrFees).length > 0 && (
+                      <div style={{ marginTop: '12px', padding: '12px', background: 'white', borderRadius: '6px', border: '1px solid #fff3e0' }}>
+                        <div style={{ fontWeight: 600, fontSize: '13px', marginBottom: '8px', color: '#333' }}>
+                          DFR Exceptions:
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                          {Object.entries(revision.voucherRules.dfrFees).map(([code, fee]: [string, any]) => (
+                            <div key={code} style={{ fontSize: '12px', padding: '6px 12px', background: '#fff3e0', borderRadius: '4px', border: '1px solid #ffecb3' }}>
+                              <span style={{ fontWeight: 600 }}>{code}:</span> {fee.currency} {fee.amount.toFixed(2)}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* DFR Without eVoucher (Amadeus) */}
+                    {revision.dfrFeesWithoutEVoucher && Object.keys(revision.dfrFeesWithoutEVoucher).length > 0 && (
+                      <div style={{ marginTop: '12px', padding: '12px', background: 'white', borderRadius: '6px', border: '1px solid #e3f2fd' }}>
+                        <div style={{ fontWeight: 600, fontSize: '13px', marginBottom: '8px', color: '#333' }}>
+                          DFR Exceptions (Without eVoucher):
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                          {Object.entries(revision.dfrFeesWithoutEVoucher).map(([code, fee]: [string, any]) => (
+                            <div key={code} style={{ fontSize: '12px', padding: '6px 12px', background: '#e3f2fd', borderRadius: '4px', border: '1px solid #bbdefb' }}>
+                              <span style={{ fontWeight: 600 }}>{code}:</span> {fee.currency} {fee.amount.toFixed(2)}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* DFR With eVoucher (Amadeus) */}
+                    {revision.dfrFeesWithEVoucher && Object.keys(revision.dfrFeesWithEVoucher).length > 0 && (
+                      <div style={{ marginTop: '12px', padding: '12px', background: 'white', borderRadius: '6px', border: '1px solid #e8f5e9' }}>
+                        <div style={{ fontWeight: 600, fontSize: '13px', marginBottom: '8px', color: '#333' }}>
+                          DFR Exceptions (With eVoucher):
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                          {Object.entries(revision.dfrFeesWithEVoucher).map(([code, fee]: [string, any]) => (
+                            <div key={code} style={{ fontSize: '12px', padding: '6px 12px', background: '#e8f5e9', borderRadius: '4px', border: '1px solid #c8e6c9' }}>
+                              <span style={{ fontWeight: 600 }}>{code}:</span> {fee.currency} {fee.amount.toFixed(2)}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {revision.notes && (
+                      <div style={{ marginTop: '12px', fontSize: '13px', color: '#666', fontStyle: 'italic', padding: '8px', background: '#fffbf0', borderRadius: '4px' }}>
+                        📝 Note: {revision.notes}
+                      </div>
+                    )}
+                  </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 12, padding: '0 20px 20px' }}>
+              <Button onClick={() => setShowHistoryModal(false)} style={{ flex: 1 }}>
+                Close
+              </Button>
+            </div>
+          </ModalContent>
+        </Modal>
+      )}
+
+      {showRegionModal && editingRegion && (
+        <Modal onClick={() => setShowRegionModal(false)}>
+          <ModalContent onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+            <ModalHeader>
+              <ModalTitle>
+                {regions.some(r => r.regionName === editingRegion.regionName) ? 'Edit' : 'Add'} Region Mapping
+              </ModalTitle>
+              <Button onClick={() => setShowRegionModal(false)}>✕</Button>
+            </ModalHeader>
+
+            <FormGroup>
+              <label>Region Name *</label>
+              <Input
+                value={editingRegion.regionName}
+                onChange={(e) => setEditingRegion({ ...editingRegion, regionName: e.target.value })}
+                placeholder="e.g., Americas, DACH, Asia-Pacific"
+                disabled={regions.some(r => r.regionName === editingRegion.regionName)}
+              />
+              {regions.some(r => r.regionName === editingRegion.regionName) && (
+                <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+                  Region name cannot be changed. To rename, close this region and create a new one.
+                </div>
+              )}
+            </FormGroup>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16 }}>
+              <FormGroup>
+                <label>Valid From *</label>
+                <Input
+                  type="date"
+                  value={editingRegion.validFrom || new Date().toISOString().split('T')[0]}
+                  onChange={(e) => setEditingRegion({ ...editingRegion, validFrom: e.target.value })}
+                  required
+                />
+              </FormGroup>
+
+              <FormGroup>
+                <label>Valid To (leave empty for indefinite)</label>
+                <Input
+                  type="date"
+                  value={editingRegion.validTo || ''}
+                  onChange={(e) => setEditingRegion({ ...editingRegion, validTo: e.target.value })}
+                />
+              </FormGroup>
+            </div>
+
+            <FormGroup style={{ marginTop: 16 }}>
+              <label>Notes (optional - describe what changed in this revision)</label>
+              <textarea
+                value={editingRegion.notes || ''}
+                onChange={(e) => setEditingRegion({ ...editingRegion, notes: e.target.value })}
+                placeholder="e.g., 'Added DACH countries to separate region' or 'Moved UK from EMEA to Other due to policy change'"
+                style={{
+                  width: '100%',
+                  minHeight: '80px',
+                  padding: '10px',
+                  borderRadius: '4px',
+                  border: '1px solid #ccc',
+                  fontSize: '14px',
+                  fontFamily: 'inherit',
+                  resize: 'vertical',
+                }}
+              />
+            </FormGroup>
+
+            <FormGroup style={{ marginTop: 16 }}>
+              <label>Country Codes * (comma-separated)</label>
+              <textarea
+                value={editingRegion.countries}
+                onChange={(e) => setEditingRegion({ ...editingRegion, countries: e.target.value })}
+                placeholder="e.g., us, ca, mx, br, ar, cl, pe, co"
+                style={{
+                  width: '100%',
+                  minHeight: '120px',
+                  padding: '10px',
+                  borderRadius: '4px',
+                  border: '1px solid #ccc',
+                  fontSize: '14px',
+                  fontFamily: 'monospace',
+                  resize: 'vertical',
+                }}
+              />
+              <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+                Enter ISO country codes in lowercase, separated by commas. Example: us, ca, mx, br
+              </div>
+              <div style={{ fontSize: 12, color: '#d9534f', marginTop: 8, fontWeight: 600 }}>
+                ⚠️ Validation Rules:
+                <ul style={{ margin: '4px 0', paddingLeft: 20 }}>
+                  <li>Country codes must be exactly 2 characters (ISO 3166-1 alpha-2)</li>
+                  <li>No duplicate codes within the same list</li>
+                  <li>Each country can only belong to ONE region</li>
+                  <li>Duplicates across regions are not allowed</li>
+                </ul>
+              </div>
+            </FormGroup>
+
+            <div style={{ marginTop: 16, padding: '12px', background: '#e3f2fd', borderRadius: '6px', fontSize: 13 }}>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>💡 Info:</div>
+              <ul style={{ margin: '4px 0', paddingLeft: 20 }}>
+                <li>Countries not in any region default to <strong>EMEA</strong></li>
+                <li>Changes are effective immediately for new validations</li>
+                <li>Existing validations use the mapping from their handover date</li>
+              </ul>
+            </div>
+
+            <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+              <Button onClick={handleSaveRegion} style={{ flex: 1 }}>Save Region</Button>
+              <Button onClick={() => setShowRegionModal(false)} style={{ flex: 1, background: '#6c757d' }}>
+                Cancel
+              </Button>
+            </div>
+          </ModalContent>
+        </Modal>
+      )}
+
+      {showRegionHistoryModal && (
+        <Modal onClick={() => setShowRegionHistoryModal(false)}>
+          <ModalContent onClick={(e) => e.stopPropagation()} style={{ maxWidth: '800px', maxHeight: '80vh', overflow: 'auto' }}>
+            <ModalHeader>
+              <ModalTitle>
+                Region History: {historyRegionName}
+              </ModalTitle>
+              <Button onClick={() => setShowRegionHistoryModal(false)}>✕</Button>
+            </ModalHeader>
+
+            {regionHistoryData.length === 0 ? (
+              <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
+                No history records found
+              </div>
+            ) : (
+              <div style={{ padding: '20px' }}>
+                <div style={{ marginBottom: '16px', fontSize: '14px', color: '#666' }}>
+                  {regionHistoryData.length} time {regionHistoryData.length !== 1 ? 'periods' : 'period'} found
+                </div>
+                
+                {regionHistoryData.map((period: any, index: number) => {
+                  const isFuture = new Date(period.validFrom) > new Date();
+                  
+                  return (
+                  <div 
+                    key={index} 
+                    style={{
+                      border: '1px solid #e0e0e0',
+                      borderRadius: '8px',
+                      padding: '16px',
+                      marginBottom: '12px',
+                      background: index === 0 ? '#f8f9fa' : 'white',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                        {index === 0 && !isFuture && (
+                          <span style={{
+                            background: '#28a745',
+                            color: 'white',
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                          }}>
+                            Current
+                          </span>
+                        )}
+                        {isFuture && (
+                          <span style={{
+                            background: '#ffc107',
+                            color: '#000',
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                          }}>
+                            Future
+                          </span>
+                        )}
+                        <span style={{ fontSize: '13px', fontWeight: 600 }}>
+                          {period.countries.length} {period.countries.length === 1 ? 'country' : 'countries'}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        {isFuture && (
+                          <button
+                            onClick={() => handleDeleteFutureRegionVersion(historyRegionName, new Date(period.validFrom).toISOString())}
+                            style={{
+                              background: '#dc3545',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              padding: '4px 8px',
+                              cursor: 'pointer',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                            }}
+                          >
+                            🗑️ Delete
+                          </button>
+                        )}
+                        <div style={{ fontSize: '13px', color: '#666' }}>
+                          {new Date(period.createdAt).toLocaleString('de-DE')}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '13px', marginBottom: '12px' }}>
+                      <div>
+                        <strong>Valid From:</strong> {new Date(period.validFrom).toLocaleDateString('de-DE')}
+                      </div>
+                      <div>
+                        <strong>Valid To:</strong> {period.validTo ? new Date(period.validTo).toLocaleDateString('de-DE') : 'Indefinite'}
+                      </div>
+                      <div>
+                        <strong>Created By:</strong> {period.createdBy}
+                      </div>
+                    </div>
+
+                    {/* Country Codes */}
+                    <div style={{ marginTop: '12px', padding: '12px', background: 'white', borderRadius: '6px', border: '1px solid #e3f2fd' }}>
+                      <div style={{ fontWeight: 600, fontSize: '13px', marginBottom: '8px', color: '#333' }}>
+                        Country Codes:
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {period.countries.map((code: string) => (
+                          <span 
+                            key={code}
+                            style={{
+                              background: '#e3f2fd',
+                              color: '#1976d2',
+                              padding: '4px 8px',
+                              borderRadius: '4px',
+                              fontSize: 11,
+                              fontWeight: 600,
+                              textTransform: 'uppercase',
+                            }}
+                          >
+                            {code}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {period.notes && (
+                      <div style={{ marginTop: '12px', fontSize: '13px', color: '#666', fontStyle: 'italic', padding: '8px', background: '#fffbf0', borderRadius: '4px' }}>
+                        📝 Note: {period.notes}
+                      </div>
+                    )}
+                  </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 12, padding: '0 20px 20px' }}>
+              <Button onClick={() => setShowRegionHistoryModal(false)} style={{ flex: 1 }}>
+                Close
               </Button>
             </div>
           </ModalContent>

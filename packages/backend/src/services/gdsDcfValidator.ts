@@ -1,4 +1,5 @@
 import { GdsDcfPartner, GdsDcfReservation, GdsDcfValidationResult } from '@sixt/shared';
+import { ValidationRuleConfig } from './validationRuleConfigService';
 
 // Historical USD to EUR exchange rates (end of month rates)
 const USD_TO_EUR_RATES: { [key: string]: number } = {
@@ -35,62 +36,73 @@ function getExchangeRate(handoverDate: string): number {
 export class GdsDcfValidator {
   private partners: GdsDcfPartner[];
   private franchiseMandantCodes: string[];
+  private regionMappings: Map<string, string>;
+  private ruleConfig: ValidationRuleConfig;
 
-  constructor(partners: GdsDcfPartner[], franchiseMandantCodes: string[]) {
+  constructor(
+    partners: GdsDcfPartner[], 
+    franchiseMandantCodes: string[], 
+    regionMappings: Map<string, string> = new Map(),
+    ruleConfig: ValidationRuleConfig
+  ) {
     this.partners = partners;
     this.franchiseMandantCodes = franchiseMandantCodes;
+    this.regionMappings = regionMappings;
+    this.ruleConfig = ruleConfig;
   }
 
   validateReservation(reservation: GdsDcfReservation): GdsDcfValidationResult {
     const validationSteps: { step: string; passed: boolean; reason?: string }[] = [];
     
-    // Step 1: Validate reservation number
+    // Step 1: Validate reservation number (always checked)
     const step1 = this.validateReservationNumber(reservation.resNumber);
     validationSteps.push(step1);
     if (!step1.passed) {
       return this.createFailedResult(reservation, validationSteps, 'N/A', 'N/A');
     }
 
-    // Step 2: Determine if GDS or DCF
-    const isGDS = this.isGDSBooking(reservation.sourceChannel2, reservation.sourceChannel3);
-    const isDCF = this.isDCFBooking(reservation.sourceChannel2, reservation.sourceChannel3);
-    
-    const step2 = {
-      step: '2. GDS/DCF Channel Check',
-      passed: isGDS || isDCF,
-      reason: isGDS 
-        ? `GDS booking detected (${reservation.sourceChannel2 || reservation.sourceChannel3})` 
-        : isDCF 
-        ? `DCF booking detected (${reservation.sourceChannel2}/${reservation.sourceChannel3})`
-        : `Not a GDS/DCF booking (source: ${reservation.sourceChannel2}/${reservation.sourceChannel3})`,
-    };
-    validationSteps.push(step2);
-    if (!step2.passed) {
-      return this.createFailedResult(reservation, validationSteps, 'N/A', 'N/A');
+    // Step 2: Determine if GDS or DCF (conditional based on config)
+    if (this.ruleConfig.enableChannelCheck) {
+      const isGDS = this.isGDSBooking(reservation.sourceChannel2, reservation.sourceChannel3);
+      const isDCF = this.isDCFBooking(reservation.sourceChannel2, reservation.sourceChannel3);
+      
+      const step2 = {
+        step: '2. GDS/DCF Channel Check',
+        passed: isGDS || isDCF,
+        reason: isGDS 
+          ? `GDS booking detected (${reservation.sourceChannel2 || reservation.sourceChannel3})` 
+          : isDCF 
+          ? `DCF booking detected (${reservation.sourceChannel2}/${reservation.sourceChannel3})`
+          : `Not a GDS/DCF booking (source: ${reservation.sourceChannel2}/${reservation.sourceChannel3})`,
+      };
+      validationSteps.push(step2);
+      if (!step2.passed) {
+        return this.createFailedResult(reservation, validationSteps, 'N/A', 'N/A');
+      }
     }
 
-    // Step 3: Validate mandant code
-    const step3 = this.validateMandantCode(reservation.mandantCode);
-    validationSteps.push(step3);
-    if (!step3.passed) {
-      return this.createFailedResult(reservation, validationSteps, 'N/A', 'N/A');
+    // Step 3: Validate mandant code (conditional based on config)
+    if (this.ruleConfig.enableMandantCheck) {
+      const step3 = this.validateMandantCode(reservation.mandantCode);
+      validationSteps.push(step3);
+      if (!step3.passed) {
+        return this.createFailedResult(reservation, validationSteps, 'N/A', 'N/A');
+      }
     }
 
-    // Step 4: Validate status
-    const step4 = this.validateStatus(reservation.statusExtended);
-    validationSteps.push(step4);
-    if (!step4.passed) {
-      return this.createFailedResult(reservation, validationSteps, 'N/A', 'N/A');
-    }
-
-    // Step 5: Validate first time fee (serial number = 0 or empty)
-    const step5 = this.validateFirstTimeFee(reservation.serialNumber);
-    validationSteps.push(step5);
-    if (!step5.passed) {
-      return this.createFailedResult(reservation, validationSteps, 'N/A', 'N/A');
+    // Step 4: Validate status (conditional based on config)
+    if (this.ruleConfig.enableStatusCheck) {
+      const step4 = this.validateStatus(reservation.statusExtended);
+      validationSteps.push(step4);
+      if (!step4.passed) {
+        return this.createFailedResult(reservation, validationSteps, 'N/A', 'N/A');
+      }
     }
 
     // Calculate fee based on GDS or DCF
+    const isGDS = this.isGDSBooking(reservation.sourceChannel2, reservation.sourceChannel3);
+    const isDCF = this.isDCFBooking(reservation.sourceChannel2, reservation.sourceChannel3);
+    
     let feeResult: { fee: number; currency: string; partner: string; region: string };
     let feeType: 'GDS' | 'DCF';
     
@@ -100,7 +112,8 @@ export class GdsDcfValidator {
         reservation.sourceChannel2,
         reservation.sourceChannel3,
         reservation.voucherNumber,
-        reservation.customerParentNum
+        reservation.customerParentNum,
+        reservation.posCountryCode
       );
     } else {
       feeType = 'DCF';
@@ -119,7 +132,7 @@ export class GdsDcfValidator {
       : feeResult.fee;
 
     validationSteps.push({
-      step: '6. Fee Calculation',
+      step: '5. Fee Calculation',
       passed: true,
       reason: `${feeResult.partner}: ${feeResult.currency} ${feeResult.fee.toFixed(2)} (EUR ${feeInEur.toFixed(2)}, rate: ${exchangeRate})`,
     });
@@ -195,28 +208,16 @@ export class GdsDcfValidator {
       };
     }
 
-    const validStatuses = ['invoice', 'no show', 'open'];
+    const validStatuses = this.ruleConfig.validStatuses;
     const statusLower = status.toLowerCase();
-    const passed = validStatuses.some(s => statusLower.includes(s));
+    const passed = validStatuses.some(s => statusLower.includes(s.toLowerCase()));
 
     return {
       step: '4. Reservation Status Check',
       passed,
       reason: passed 
         ? `Status valid: ${status}` 
-        : `Invalid status for fee charging: ${status}`,
-    };
-  }
-
-  private validateFirstTimeFee(serialNumber?: number): { step: string; passed: boolean; reason?: string } {
-    const isFirstTime = serialNumber === undefined || serialNumber === null || serialNumber === 0;
-    
-    return {
-      step: '5. First Time Fee Check',
-      passed: isFirstTime,
-      reason: isFirstTime 
-        ? 'Fee charged for first time (MSER = 0 or empty)' 
-        : `Fee already charged (MSER = ${serialNumber})`,
+        : `Invalid status for fee charging: ${status} (valid: ${validStatuses.join(', ')})`,
     };
   }
 
@@ -224,67 +225,79 @@ export class GdsDcfValidator {
     channel2: string, 
     channel3: string,
     voucherNumber?: string,
-    customerParentNum?: string
+    customerParentNum?: string,
+    posCountryCode?: string
   ): { fee: number; currency: string; partner: string; region: string } {
     const combined = `${channel2} ${channel3}`.toLowerCase();
 
-    // Galileo or Worldspan: USD 8.60
-    if (combined.includes('galileo') || combined.includes('worldspan')) {
+    const partner = this.partners.find(p => 
+      p.category === 'gds' && 
+      p.sourceChannels.some(ch => combined.includes(ch.toLowerCase()))
+    );
+
+    if (!partner) {
       return {
-        fee: 8.60,
-        currency: 'USD',
-        partner: 'Travelport (Galileo/Worldspan)',
-        region: 'GDS',
-      };
-    }
-
-    // Sabre: USD 7.17
-    if (combined.includes('sabre')) {
-      return {
-        fee: 7.17,
-        currency: 'USD',
-        partner: 'Sabre',
-        region: 'GDS',
-      };
-    }
-
-    // Amadeus: Complex rules
-    if (combined.includes('amadeus')) {
-      // Rule 1 (highest priority): TPRA + parent 10355 -> EUR 5.29
-      if (combined.includes('tpra') && customerParentNum === '10355') {
-        return {
-          fee: 5.29,
-          currency: 'EUR',
-          partner: 'Amadeus (Special TPRA)',
-          region: 'GDS',
-        };
-      }
-
-      // Rule 2: Voucher filled -> EUR 6.55
-      if (voucherNumber && voucherNumber.trim() !== '' && voucherNumber.trim() !== ' ') {
-        return {
-          fee: 6.55,
-          currency: 'EUR',
-          partner: 'Amadeus (with eVoucher)',
-          region: 'GDS',
-        };
-      }
-
-      // Rule 3 (default): No voucher -> EUR 5.29
-      return {
-        fee: 5.29,
+        fee: 0,
         currency: 'EUR',
-        partner: 'Amadeus',
+        partner: 'Unknown GDS',
         region: 'GDS',
       };
     }
 
-    // Fallback (should not reach here if validation passed)
+    const region = this.determineRegion(posCountryCode || '');
+
+    if (partner.id === 'amadeus') {
+      if (combined.includes('tpra') && customerParentNum === '10355') {
+        const tpraFee = partner.dfrFeesWithoutEVoucher?.['10355'];
+        if (tpraFee) {
+          return {
+            fee: tpraFee.amount,
+            currency: tpraFee.currency,
+            partner: `${partner.name} (Special TPRA)`,
+            region,
+          };
+        }
+      }
+
+      if (voucherNumber && voucherNumber.trim() !== '' && voucherNumber.trim() !== ' ') {
+        const regionFee = partner.feesByRegion.find(f => f.region === region);
+        if (regionFee) {
+          return {
+            fee: regionFee.amount,
+            currency: regionFee.currency,
+            partner: `${partner.name} (with eVoucher)`,
+            region,
+          };
+        }
+      }
+
+      const withoutVoucherFees = partner.feesByRegionWithoutEVoucher || partner.feesByRegion;
+      const regionFee = withoutVoucherFees.find(f => f.region === region);
+      if (regionFee) {
+        return {
+          fee: regionFee.amount,
+          currency: regionFee.currency,
+          partner: partner.name,
+          region,
+        };
+      }
+    }
+
+    const regionFee = partner.feesByRegion.find(f => f.region === region);
+    if (regionFee) {
+      return {
+        fee: regionFee.amount,
+        currency: regionFee.currency,
+        partner: partner.name,
+        region,
+      };
+    }
+
     return {
       fee: 0,
       currency: 'EUR',
-      partner: 'Unknown GDS',
-      region: 'GDS',
+      partner: partner.name,
+      region,
     };
   }
 
@@ -296,57 +309,63 @@ export class GdsDcfValidator {
   ): { fee: number; currency: string; partner: string; region: string } {
     const channel3Lower = channel3.toLowerCase();
 
-    // Expedia
-    if (channel3Lower.includes('expedia')) {
-      const americasCountries = ['ar', 'au', 'br', 'mx', 'nz'];
-      const isAmericas = americasCountries.includes(posCountryCode.toLowerCase());
-      
+    const partner = this.partners.find(p => 
+      p.category === 'dcf' && 
+      p.sourceChannels.some(ch => channel3Lower.includes(ch.toLowerCase()))
+    );
+
+    if (!partner) {
       return {
-        fee: isAmericas ? 4.00 : 3.00,
+        fee: 0,
         currency: 'EUR',
-        partner: 'Expedia',
-        region: isAmericas ? 'Americas' : 'EMEA',
+        partner: 'Unknown DCF',
+        region: 'DCF',
       };
     }
 
-    // Priceline
-    if (channel3Lower.includes('priceline')) {
-      const americasCountries = [
-        'us', 'ca', 'ai', 'ag', 'ar', 'aw', 'bs', 'bb', 'bz', 'bo', 'br', 
-        'vg', 'bq', 'ky', 'cl', 'co', 'cr', 'cw', 'dm', 'do', 'ec', 'sv', 
-        'gf', 'gd', 'gp', 'gt', 'gy', 'ht', 'hn', 'jm', 'mq', 'mx', 'ms', 
-        'ni', 'pa', 'py', 'pe', 'kn', 'lc', 'mf', 'vc', 'sx', 'sr', 'tt', 
-        'tc', 'uy', 've'
-      ];
-      const isAmericas = americasCountries.includes(posCountryCode.toLowerCase());
-      
+    const region = this.determineRegion(posCountryCode);
+
+    if (customerParentNum && partner.voucherRules?.dfrFees?.[customerParentNum]) {
+      const dfrFee = partner.voucherRules.dfrFees[customerParentNum];
       return {
-        fee: isAmericas ? 3.25 : 1.50,
-        currency: 'USD',
-        partner: 'Priceline',
-        region: isAmericas ? 'Americas' : 'Other',
+        fee: dfrFee.amount,
+        currency: dfrFee.currency,
+        partner: `${partner.name} (DFR ${customerParentNum})`,
+        region,
       };
     }
 
-    // Meili
-    if (channel3Lower.includes('meili')) {
-      const isSpecialCustomer = customerParentNum === '10897';
-      
+    const regionFee = partner.feesByRegion.find(f => f.region === region);
+    if (regionFee) {
       return {
-        fee: isSpecialCustomer ? 2.75 : 5.50,
-        currency: 'EUR',
-        partner: 'Meili',
-        region: isSpecialCustomer ? 'Special' : 'Standard',
+        fee: regionFee.amount,
+        currency: regionFee.currency,
+        partner: partner.name,
+        region,
       };
     }
 
-    // Fallback
     return {
       fee: 0,
       currency: 'EUR',
-      partner: 'Unknown DCF',
-      region: 'DCF',
+      partner: partner.name,
+      region,
     };
+  }
+
+  private determineRegion(posCountryCode: string): 'EMEA' | 'Americas' | 'Other' {
+    if (!posCountryCode) {
+      return 'EMEA';
+    }
+
+    const mappedRegion = this.regionMappings.get(posCountryCode.toLowerCase());
+    if (mappedRegion) {
+      if (mappedRegion === 'Americas') return 'Americas';
+      if (mappedRegion === 'Other') return 'Other';
+      return 'EMEA';
+    }
+
+    return 'EMEA';
   }
 
   private createFailedResult(

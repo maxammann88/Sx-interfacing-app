@@ -71,7 +71,7 @@ const navItems = [
   { path: '/fsm/feature-requests', label: 'Feature Request List' },
   { path: '/fsm/data-upload', label: 'Data Upload' },
   { path: '/fsm/parameters', label: 'Parameter Maintenance' },
-  { path: '/fsm/calculation', label: 'Calculation Rules' },
+  { path: '/fsm/calculation-rules', label: 'Calculation Rules' },
   { path: '/fsm/reporting', label: 'Download' },
 ];
 

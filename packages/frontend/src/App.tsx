@@ -78,7 +78,7 @@ import PaymentTermsPage from './pages/parameter-maintenance/PaymentTermsPage';
 import FsmFeatureRequestsPage from './pages/fsm-calculation/FsmFeatureRequestsPage';
 import FsmDataUploadPage from './pages/fsm-calculation/FsmDataUploadPage';
 import FsmParametersPage from './pages/fsm-calculation/FsmParametersPage';
-import FsmCalculationPage from './pages/fsm-calculation/FsmCalculationPage';
+import FsmCalculationRulesPage from './pages/fsm-calculation/FsmCalculationRulesPage';
 import FsmReportingPage from './pages/fsm-calculation/FsmReportingPage';
 import FsmResultsPage from './pages/fsm-calculation/FsmResultsPage';
 
@@ -135,7 +135,7 @@ export default function App() {
             <Route path="feature-requests" element={<FsmFeatureRequestsPage />} />
             <Route path="data-upload" element={<FsmDataUploadPage />} />
             <Route path="parameters" element={<FsmParametersPage />} />
-            <Route path="calculation" element={<FsmCalculationPage />} />
+            <Route path="calculation-rules" element={<FsmCalculationRulesPage />} />
             <Route path="reporting" element={<FsmReportingPage />} />
             <Route path="results" element={<FsmResultsPage />} />
           </Route>

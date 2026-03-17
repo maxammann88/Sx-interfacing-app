@@ -380,3 +380,91 @@ model FranchiseMandant {
 
   @@map("franchise_mandants")
 }
+
+// Partner History for Revision-Safe Storage
+model GdsDcfPartnerHistory {
+  id                      Int      @id @default(autoincrement())
+  partnerId               String
+  revision                Int
+  name                    String
+  category                String
+  sourceChannels          String
+  feesByRegion            String
+  feesByRegionWithoutEVoucher String?
+  voucherRules            String?
+  dfrFeesWithoutEVoucher  String?
+  dfrFeesWithEVoucher     String?
+  validFrom               DateTime
+  validTo                 DateTime?
+  createdBy               String   @default("System")
+  createdAt               DateTime @default(now())
+  notes                   String?
+  
+  @@unique([partnerId, revision])
+  @@index([partnerId, validFrom, validTo])
+  @@map("gds_dcf_partner_history")
+}
+
+// Region to Country Mapping with Temporal Validity
+model RegionCountryMapping {
+  id              Int      @id @default(autoincrement())
+  regionName      String
+  countryCode     String
+  validFrom       DateTime
+  validTo         DateTime?
+  createdBy       String   @default("System")
+  createdAt       DateTime @default(now())
+  notes           String?
+  
+  @@unique([regionName, countryCode, validFrom])
+  @@index([countryCode, validFrom, validTo])
+  @@index([regionName, validFrom, validTo])
+  @@map("region_country_mappings")
+}
+
+// Calculation Rule Snapshots for Downloads
+model CalculationRuleSnapshot {
+  id               Int      @id @default(autoincrement())
+  snapshotDate     DateTime @default(now())
+  validFrom        DateTime
+  validTo          DateTime?
+  rulesetName      String
+  rulesetVersion   String
+  fullRulesetJson  String
+  excelFile        Bytes?
+  pdfFile          Bytes?
+  createdBy        String   @default("System")
+  
+  @@index([validFrom, validTo])
+  @@index([snapshotDate])
+  @@map("calculation_rule_snapshots")
+}
+
+// Validation Rule Configuration with Temporal Validity
+model ValidationRuleConfigHistory {
+  id                    Int      @id @default(autoincrement())
+  configId              String   // "default" for main config
+  revision              Int
+  
+  // Rule Flags (individually toggleable)
+  enableDuplicateCheck  Boolean  @default(true)
+  enableStatusCheck     Boolean  @default(true)
+  enableMandantCheck    Boolean  @default(true)
+  enableChannelCheck    Boolean  @default(true)
+  
+  // Status Rules (when enabled)
+  validStatuses         String   // JSON: ["invoice", "no show", "open"]
+  
+  // Duplicate Rule (when enabled)
+  duplicateStrategy     String   @default("first") // "first" | "all" | "latest"
+  
+  validFrom             DateTime
+  validTo               DateTime?
+  createdBy             String   @default("System")
+  createdAt             DateTime @default(now())
+  notes                 String?
+  
+  @@unique([configId, revision])
+  @@index([configId, validFrom, validTo])
+  @@map("validation_rule_config_history")
+}
