@@ -510,7 +510,14 @@ export default function ValidationRulesEditor() {
                   {cfg.enableStatusCheck && (
                     <div><strong>Valid Statuses:</strong> {cfg.validStatuses.join(', ')}</div>
                   )}
+                  {cfg.validReservationStatuses && cfg.validReservationStatuses.length > 0 && (
+                    <div><strong>Fee Calculation Statuses:</strong> {cfg.validReservationStatuses.join(', ')}</div>
+                  )}
                   <div><strong>Created By:</strong> {cfg.createdBy}</div>
+                  <div><strong>Created At:</strong> {cfg.createdAt ? new Date(cfg.createdAt).toLocaleString('de-DE') : '-'}</div>
+                  {cfg.updatedAt && (
+                    <div><strong>Updated At:</strong> {new Date(cfg.updatedAt).toLocaleString('de-DE')}</div>
+                  )}
                   {cfg.notes && <div><strong>Notes:</strong> {cfg.notes}</div>}
                 </HistoryDetails>
               </HistoryItem>
