@@ -27,6 +27,7 @@ export interface RuleSnapshot {
   rules: CalculationRule[];
   partners: any[];
   regionMappings: any[];
+  validationConfig?: any; // NEW: Validation rule configuration
 }
 
 export class RuleGenerator {
@@ -99,6 +100,7 @@ export class RuleGenerator {
       rules,
       partners: partnersRaw,
       regionMappings: regionMappingsRaw,
+      validationConfig: ruleConfig, // NEW: Include validation config
     };
   }
 

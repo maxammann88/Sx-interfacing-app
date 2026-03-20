@@ -208,7 +208,8 @@ export class GdsDcfValidator {
       };
     }
 
-    const validStatuses = this.ruleConfig.validStatuses;
+    // Use validReservationStatuses for fee calculation (new config-driven field)
+    const validStatuses = this.ruleConfig.validReservationStatuses || this.ruleConfig.validStatuses;
     const statusLower = status.toLowerCase();
     const passed = validStatuses.some(s => statusLower.includes(s.toLowerCase()));
 

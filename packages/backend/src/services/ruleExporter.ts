@@ -136,12 +136,12 @@ export class RuleExporter {
   private addCombinedCalculationRulesSheet(workbook: ExcelJS.Workbook, snapshot: RuleSnapshot) {
     const sheet = workbook.addWorksheet('Calculation Rules');
     
-    // NEUE Header mit DFR und eVoucher Spalten, ohne Notes
+    // NEUE Header mit DFR und eVoucher Spalten, ohne Notes, mit Created By und Updated At
     const headerRow = sheet.addRow([
       'Rule ID', 'Partner', 'Category', 'Region/Type', 'Fee Amount', 'Currency',
       'DFR', 'eVoucher',
       'Res. Number', 'Channel Detection', 'Mandant', 'Reservation Status', 'Duplicates',
-      'Valid From', 'Valid To'
+      'Valid From', 'Valid To', 'Created By', 'Updated At'
     ]);
     headerRow.font = { bold: true };
     headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF424242' } };
@@ -190,7 +190,9 @@ export class RuleExporter {
           validationRules.status,
           validationRules.duplicates,
           partner.validFrom ? new Date(partner.validFrom).toISOString().split('T')[0] : '-',
-          partner.validTo ? new Date(partner.validTo).toISOString().split('T')[0] : 'Indefinite'
+          partner.validTo ? new Date(partner.validTo).toISOString().split('T')[0] : 'Indefinite',
+          partner.createdBy || 'System',
+          partner.updatedAt ? new Date(partner.updatedAt).toISOString().replace('T', ' ').split('.')[0] : '-'
         ]);
         row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fillColor } };
       }
@@ -217,7 +219,9 @@ export class RuleExporter {
               validationRules.status,
               validationRules.duplicates,
               partner.validFrom ? new Date(partner.validFrom).toISOString().split('T')[0] : '-',
-              partner.validTo ? new Date(partner.validTo).toISOString().split('T')[0] : 'Indefinite'
+              partner.validTo ? new Date(partner.validTo).toISOString().split('T')[0] : 'Indefinite',
+              partner.createdBy || 'System',
+              partner.updatedAt ? new Date(partner.updatedAt).toISOString().replace('T', ' ').split('.')[0] : '-'
             ]);
             row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9E6CC' } };
           }
@@ -244,7 +248,9 @@ export class RuleExporter {
               validationRules.status,
               validationRules.duplicates,
               partner.validFrom ? new Date(partner.validFrom).toISOString().split('T')[0] : '-',
-              partner.validTo ? new Date(partner.validTo).toISOString().split('T')[0] : 'Indefinite'
+              partner.validTo ? new Date(partner.validTo).toISOString().split('T')[0] : 'Indefinite',
+              partner.createdBy || 'System',
+              partner.updatedAt ? new Date(partner.updatedAt).toISOString().replace('T', ' ').split('.')[0] : '-'
             ]);
             row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9E6CC' } };
           }
@@ -271,7 +277,9 @@ export class RuleExporter {
               validationRules.status,
               validationRules.duplicates,
               partner.validFrom ? new Date(partner.validFrom).toISOString().split('T')[0] : '-',
-              partner.validTo ? new Date(partner.validTo).toISOString().split('T')[0] : 'Indefinite'
+              partner.validTo ? new Date(partner.validTo).toISOString().split('T')[0] : 'Indefinite',
+              partner.createdBy || 'System',
+              partner.updatedAt ? new Date(partner.updatedAt).toISOString().replace('T', ' ').split('.')[0] : '-'
             ]);
             row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9E6CC' } };
           }
@@ -300,7 +308,9 @@ export class RuleExporter {
               validationRules.status,
               validationRules.duplicates,
               partner.validFrom ? new Date(partner.validFrom).toISOString().split('T')[0] : '-',
-              partner.validTo ? new Date(partner.validTo).toISOString().split('T')[0] : 'Indefinite'
+              partner.validTo ? new Date(partner.validTo).toISOString().split('T')[0] : 'Indefinite',
+              partner.createdBy || 'System',
+              partner.updatedAt ? new Date(partner.updatedAt).toISOString().replace('T', ' ').split('.')[0] : '-'
             ]);
             row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEAA7' } };
           }
@@ -308,7 +318,7 @@ export class RuleExporter {
       }
     }
     
-    // Spaltenbreiten optimieren (mit neuen DFR/eVoucher Spalten)
+    // Spaltenbreiten optimieren (mit neuen DFR/eVoucher Spalten + Created By + Updated At)
     sheet.getColumn(1).width = 35; // Rule ID
     sheet.getColumn(2).width = 25; // Partner
     sheet.getColumn(3).width = 12; // Category
@@ -324,6 +334,8 @@ export class RuleExporter {
     sheet.getColumn(13).width = 25; // Duplicates
     sheet.getColumn(14).width = 15; // Valid From
     sheet.getColumn(15).width = 15; // Valid To
+    sheet.getColumn(16).width = 20; // Created By
+    sheet.getColumn(17).width = 22; // Updated At
   }
 
   private getDfrCondition(partner: any, dfr: string): string {
@@ -424,31 +436,61 @@ export class RuleExporter {
   }
 
   private buildValidationConditions(snapshot: RuleSnapshot): ValidationConditions {
-    const validationRules = snapshot.rules.filter(r => r.category === 'Validation');
+    const config = snapshot.validationConfig;
     
-    // VAL-001: Reservation Number (always active)
+    // If no config, fall back to old rule-based logic
+    if (!config) {
+      const validationRules = snapshot.rules.filter(r => r.category === 'Validation');
+      
+      const resNumberRule = 'Must exist';
+      const channelRule = validationRules.find(r => r.ruleId === 'VAL-002')
+        ? 'Must match GDS/DCF keywords'
+        : 'Not applicable (check disabled)';
+      const mandantRule = validationRules.find(r => r.ruleId === 'VAL-003')
+        ? 'Must be franchise mandant'
+        : 'Not applicable (check disabled)';
+      const statusRule = validationRules.find(r => r.ruleId === 'VAL-004');
+      const statusCondition = statusRule
+        ? `All except: ${this.getNegativeStatusList(statusRule)}`
+        : 'Not applicable (check disabled)';
+      const dupRule = validationRules.find(r => r.ruleId === 'VAL-005');
+      const dupCondition = dupRule
+        ? this.formatDuplicateStrategy(dupRule)
+        : 'Not checked';
+      
+      return { 
+        resNumber: resNumberRule, 
+        channel: channelRule, 
+        mandant: mandantRule,
+        status: statusCondition,
+        duplicates: dupCondition
+      };
+    }
+    
+    // NEW: Use config-driven approach
     const resNumberRule = 'Must exist';
     
-    // VAL-002: Channel Detection
-    const channelRule = validationRules.find(r => r.ruleId === 'VAL-002')
+    const channelRule = config.enableChannelCheck
       ? 'Must match GDS/DCF keywords'
       : 'Not applicable (check disabled)';
     
-    // VAL-003: Mandant
-    const mandantRule = validationRules.find(r => r.ruleId === 'VAL-003')
+    const mandantRule = config.enableMandantCheck
       ? 'Must be franchise mandant'
       : 'Not applicable (check disabled)';
     
-    // VAL-004: Status - Negativliste
-    const statusRule = validationRules.find(r => r.ruleId === 'VAL-004');
-    const statusCondition = statusRule
-      ? `All except: ${this.getNegativeStatusList(statusRule)}`
+    // Use validReservationStatuses for dynamic status list
+    const validStatuses = config.validReservationStatuses || config.validStatuses || [];
+    const allStatuses = ['invoice', 'no show', 'open', 'cancelled', 'storno', 'voided', 'booking error'];
+    const invalidStatuses = allStatuses.filter(s => !validStatuses.map((v: string) => v.toLowerCase()).includes(s.toLowerCase()));
+    
+    const statusCondition = config.enableStatusCheck
+      ? (invalidStatuses.length > 0 
+          ? `All except: ${invalidStatuses.join(', ')}`
+          : `Must be: ${validStatuses.join(', ')}`)
       : 'Not applicable (check disabled)';
     
-    // VAL-005: Duplicates
-    const dupRule = validationRules.find(r => r.ruleId === 'VAL-005');
-    const dupCondition = dupRule
-      ? this.formatDuplicateStrategy(dupRule)
+    const dupCondition = config.enableDuplicateCheck
+      ? this.formatDuplicateStrategyFromConfig(config.duplicateStrategy)
       : 'Not checked';
     
     return { 
@@ -494,6 +536,19 @@ export class RuleExporter {
       return 'All occurrences';
     }
     return dupRule.logic.ifTrue;
+  }
+
+  private formatDuplicateStrategyFromConfig(strategy: string): string {
+    switch (strategy) {
+      case 'first':
+        return 'First occurrence only';
+      case 'latest':
+        return 'Latest occurrence only';
+      case 'all':
+        return 'All occurrences';
+      default:
+        return 'Unknown strategy';
+    }
   }
 
 
