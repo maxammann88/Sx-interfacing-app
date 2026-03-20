@@ -247,6 +247,32 @@ export class GdsDcfValidator {
     const region = this.determineRegion(posCountryCode || '');
 
     if (partner.id === 'amadeus') {
+      // Check for DFR 10335 with eVoucher FIRST
+      if (customerParentNum === '10335' && voucherNumber && voucherNumber.trim() !== '' && voucherNumber.trim() !== ' ') {
+        const dfrFee = partner.dfrFeesWithEVoucher?.['10335'];
+        if (dfrFee) {
+          return {
+            fee: dfrFee.amount,
+            currency: dfrFee.currency,
+            partner: `${partner.name} (DFR 10335 with eVoucher)`,
+            region,
+          };
+        }
+      }
+
+      // Check for DFR 10335 without eVoucher
+      if (customerParentNum === '10335' && (!voucherNumber || voucherNumber.trim() === '' || voucherNumber.trim() === ' ')) {
+        const dfrFee = partner.dfrFeesWithoutEVoucher?.['10335'];
+        if (dfrFee) {
+          return {
+            fee: dfrFee.amount,
+            currency: dfrFee.currency,
+            partner: `${partner.name} (DFR 10335 without eVoucher)`,
+            region,
+          };
+        }
+      }
+
       if (combined.includes('tpra') && customerParentNum === '10355') {
         const tpraFee = partner.dfrFeesWithoutEVoucher?.['10355'];
         if (tpraFee) {

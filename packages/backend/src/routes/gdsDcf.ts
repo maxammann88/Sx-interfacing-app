@@ -916,11 +916,15 @@ router.post('/validation-config', async (req: Request, res: Response, next: Next
       enableChannelCheck,
       validStatuses,
       duplicateStrategy,
+      validReservationStatuses,
       validFrom,
       notes,
+      createdBy,
     } = req.body;
     
     const validFromDate = new Date(validFrom);
+    const userFromHeader = req.headers['x-modified-by'] as string;
+    const actualUser = createdBy || userFromHeader || 'Anonymous';
     
     const config = await validationRuleConfigService.saveRevision(
       {
@@ -931,13 +935,14 @@ router.post('/validation-config', async (req: Request, res: Response, next: Next
         enableChannelCheck: enableChannelCheck ?? true,
         validStatuses: validStatuses || ['invoice', 'no show', 'open'],
         duplicateStrategy: duplicateStrategy || 'first',
+        validReservationStatuses: validReservationStatuses || ['invoice', 'no show', 'open'],
         validFrom: validFromDate,
         validTo: null,
-        createdBy: 'User', // TODO: Add actual user from auth
+        createdBy: actualUser,
       },
       validFromDate,
       null,
-      'User', // TODO: Add actual user from auth
+      actualUser,
       notes
     );
     

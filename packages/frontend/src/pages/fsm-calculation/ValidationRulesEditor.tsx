@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { Button } from '../../components/ui';
+import { useUser } from '../../context/UserContext';
 
 const Container = styled.div`
   padding: 20px;
@@ -202,6 +203,7 @@ interface ValidationRuleConfig {
 }
 
 export default function ValidationRulesEditor() {
+  const { currentUser } = useUser();
   const [config, setConfig] = useState<ValidationRuleConfig | null>(null);
   const [history, setHistory] = useState<ValidationRuleConfig[]>([]);
   const [showHistory, setShowHistory] = useState(false);
@@ -237,6 +239,7 @@ export default function ValidationRulesEditor() {
         setEnableChannelCheck(result.data.enableChannelCheck);
         setDuplicateStrategy(result.data.duplicateStrategy);
         setValidStatuses(result.data.validStatuses.join(', '));
+        setValidReservationStatuses(result.data.validReservationStatuses || ['invoice', 'no show', 'open']);
         setValidFrom(new Date().toISOString().split('T')[0]);
       }
     } catch (error) {
@@ -260,12 +263,20 @@ export default function ValidationRulesEditor() {
   };
 
   const handleSave = async () => {
+    if (!currentUser) {
+      alert('Please set your name in the header before saving changes.');
+      return;
+    }
+    
     try {
       setSaving(true);
       
       const response = await fetch('/api/gds-dcf/validation-config', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Modified-By': currentUser,
+        },
         body: JSON.stringify({
           enableDuplicateCheck,
           enableStatusCheck,
@@ -273,8 +284,10 @@ export default function ValidationRulesEditor() {
           enableChannelCheck,
           validStatuses: validStatuses.split(',').map(s => s.trim()),
           duplicateStrategy,
+          validReservationStatuses,
           validFrom,
           notes,
+          createdBy: currentUser,
         }),
       });
       
@@ -386,6 +399,31 @@ export default function ValidationRulesEditor() {
               />
             </FormGroup>
           )}
+
+          <FormGroup>
+            <Label>Reservation Status Rules (for Fee Calculation)</Label>
+            <div style={{ fontSize: 13, color: '#666', marginBottom: 8 }}>
+              Select which reservation statuses should incur fees:
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {['invoice', 'no show', 'open', 'cancelled', 'storno', 'voided'].map(status => (
+                <label key={status} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={validReservationStatuses.includes(status)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setValidReservationStatuses([...validReservationStatuses, status]);
+                      } else {
+                        setValidReservationStatuses(validReservationStatuses.filter(s => s !== status));
+                      }
+                    }}
+                  />
+                  <span style={{ textTransform: 'capitalize' }}>{status}</span>
+                </label>
+              ))}
+            </div>
+          </FormGroup>
 
           <FormGroup>
             <Label>Duplicate Check</Label>

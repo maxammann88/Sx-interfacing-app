@@ -1,6 +1,15 @@
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
-import { RuleSnapshot } from './ruleGenerator';
+import { RuleSnapshot, CalculationRule } from './ruleGenerator';
+import prisma from '../prismaClient';
+
+interface ValidationConditions {
+  resNumber: string;
+  channel: string;
+  mandant: string;
+  status: string;
+  duplicates: string;
+}
 
 export class RuleExporter {
   async generateExcel(snapshot: RuleSnapshot): Promise<Buffer> {
@@ -10,12 +19,14 @@ export class RuleExporter {
     workbook.created = new Date();
     
     this.addOverviewSheet(workbook, snapshot);
-    this.addValidationRulesSheet(workbook, snapshot);
-    this.addPartnerFeesSheet(workbook, snapshot);
+    this.addCombinedCalculationRulesSheet(workbook, snapshot);
+    await this.addFranchiseMandantsSheet(workbook);  // ASYNC!
+    this.addChannelDetectionSheet(workbook, snapshot);
     this.addRegionMappingSheet(workbook, snapshot);
     this.addExchangeRatesSheet(workbook);
     
-    return await workbook.xlsx.writeBuffer() as Buffer;
+    const buffer = await workbook.xlsx.writeBuffer();
+    return Buffer.from(buffer);
   }
 
   private addOverviewSheet(workbook: ExcelJS.Workbook, snapshot: RuleSnapshot) {
@@ -39,143 +50,6 @@ export class RuleExporter {
     
     sheet.addRow([]);
     sheet.addRow(['Description:', 'This document contains the complete calculation logic for GDS and DCF fees']);
-  }
-
-  private addValidationRulesSheet(workbook: ExcelJS.Workbook, snapshot: RuleSnapshot) {
-    const sheet = workbook.addWorksheet('Validation Rules');
-    
-    const headerRow = sheet.addRow(['Rule ID', 'Order', 'Title', 'Description', 'Condition', 'If True', 'If False']);
-    headerRow.font = { bold: true };
-    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE3F2FD' } };
-    
-    const validationRules = snapshot.rules.filter(r => r.category === 'Validation');
-    
-    for (const rule of validationRules) {
-      sheet.addRow([
-        rule.ruleId,
-        rule.ruleOrder,
-        rule.title,
-        rule.description,
-        rule.logic.condition,
-        rule.logic.ifTrue,
-        rule.logic.ifFalse,
-      ]);
-    }
-    
-    sheet.columns.forEach(col => col.width = 20);
-  }
-
-  private addPartnerFeesSheet(workbook: ExcelJS.Workbook, snapshot: RuleSnapshot) {
-    const sheet = workbook.addWorksheet('Partner Fees');
-    
-    const headerRow = sheet.addRow(['Partner', 'Category', 'Region / Type', 'Fee Amount', 'Currency', 'Conditions', 'Valid From', 'Valid To']);
-    headerRow.font = { bold: true };
-    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF3E0' } };
-    
-    for (const partner of snapshot.partners) {
-      const feesByRegion = JSON.parse(partner.feesByRegion);
-      const isGDS = partner.category === 'gds';
-      const fillColor = isGDS ? 'FFE3F2FD' : 'FFFFF3E0';
-      
-      // Standard fees by region
-      for (const fee of feesByRegion) {
-        const row = sheet.addRow([
-          partner.name,
-          partner.category.toUpperCase(),
-          fee.region,
-          fee.amount,
-          fee.currency,
-          'Standard rate',
-          partner.validFrom ? new Date(partner.validFrom).toISOString().split('T')[0] : '-',
-          partner.validTo ? new Date(partner.validTo).toISOString().split('T')[0] : 'Indefinite',
-        ]);
-        row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fillColor } };
-      }
-      
-      // Amadeus special cases
-      if (partner.partnerId === 'amadeus') {
-        // Without eVoucher regional fees
-        if (partner.feesByRegionWithoutEVoucher) {
-          const feesWithoutEVoucher = JSON.parse(partner.feesByRegionWithoutEVoucher);
-          for (const fee of feesWithoutEVoucher) {
-            const row = sheet.addRow([
-              partner.name,
-              partner.category.toUpperCase(),
-              `${fee.region} (without eVoucher)`,
-              fee.amount,
-              fee.currency,
-              'Only when no eVoucher',
-              partner.validFrom ? new Date(partner.validFrom).toISOString().split('T')[0] : '-',
-              partner.validTo ? new Date(partner.validTo).toISOString().split('T')[0] : 'Indefinite',
-            ]);
-            row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9E6CC' } };
-          }
-        }
-        
-        // DFR with eVoucher
-        if (partner.dfrFeesWithEVoucher) {
-          const dfrFeesWithEVoucher = JSON.parse(partner.dfrFeesWithEVoucher);
-          for (const [dfr, fee] of Object.entries(dfrFeesWithEVoucher)) {
-            const row = sheet.addRow([
-              partner.name,
-              partner.category.toUpperCase(),
-              `DFR ${dfr} (with eVoucher)`,
-              (fee as any).amount,
-              (fee as any).currency,
-              'Only when eVoucher present',
-              partner.validFrom ? new Date(partner.validFrom).toISOString().split('T')[0] : '-',
-              partner.validTo ? new Date(partner.validTo).toISOString().split('T')[0] : 'Indefinite',
-            ]);
-            row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9E6CC' } };
-          }
-        }
-        
-        // DFR without eVoucher
-        if (partner.dfrFeesWithoutEVoucher) {
-          const dfrFeesWithoutEVoucher = JSON.parse(partner.dfrFeesWithoutEVoucher);
-          for (const [dfr, fee] of Object.entries(dfrFeesWithoutEVoucher)) {
-            const row = sheet.addRow([
-              partner.name,
-              partner.category.toUpperCase(),
-              `DFR ${dfr} (without eVoucher)`,
-              (fee as any).amount,
-              (fee as any).currency,
-              'Only when no eVoucher',
-              partner.validFrom ? new Date(partner.validFrom).toISOString().split('T')[0] : '-',
-              partner.validTo ? new Date(partner.validTo).toISOString().split('T')[0] : 'Indefinite',
-            ]);
-            row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9E6CC' } };
-          }
-        }
-      }
-      
-      // DCF partner DFR exceptions (e.g., Meili)
-      if (partner.category === 'dcf' && partner.voucherRules) {
-        const voucherRules = JSON.parse(partner.voucherRules);
-        if (voucherRules.dfrFees) {
-          for (const [dfr, fee] of Object.entries(voucherRules.dfrFees)) {
-            const row = sheet.addRow([
-              partner.name,
-              partner.category.toUpperCase(),
-              `DFR ${dfr}`,
-              (fee as any).amount,
-              (fee as any).currency,
-              `Special rate for Customer Parent ${dfr}`,
-              partner.validFrom ? new Date(partner.validFrom).toISOString().split('T')[0] : '-',
-              partner.validTo ? new Date(partner.validTo).toISOString().split('T')[0] : 'Indefinite',
-            ]);
-            row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEAA7' } };
-          }
-        }
-      }
-    }
-    
-    sheet.columns.forEach((col, idx) => {
-      if (idx === 0) col.width = 30; // Partner name
-      else if (idx === 2) col.width = 35; // Region/Type
-      else if (idx === 5) col.width = 35; // Conditions
-      else col.width = 15;
-    });
   }
 
   private addRegionMappingSheet(workbook: ExcelJS.Workbook, snapshot: RuleSnapshot) {
@@ -258,6 +132,370 @@ export class RuleExporter {
     sheet.getColumn(2).width = 20;
     sheet.getColumn(3).width = 30;
   }
+
+  private addCombinedCalculationRulesSheet(workbook: ExcelJS.Workbook, snapshot: RuleSnapshot) {
+    const sheet = workbook.addWorksheet('Calculation Rules');
+    
+    // NEUE Header mit DFR und eVoucher Spalten, ohne Notes
+    const headerRow = sheet.addRow([
+      'Rule ID', 'Partner', 'Category', 'Region/Type', 'Fee Amount', 'Currency',
+      'DFR', 'eVoucher',
+      'Res. Number', 'Channel Detection', 'Mandant', 'Reservation Status', 'Duplicates',
+      'Valid From', 'Valid To'
+    ]);
+    headerRow.font = { bold: true };
+    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF424242' } };
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    });
+    
+    // Build validation conditions once (same for all rows)
+    const validationRules = this.buildValidationConditions(snapshot);
+    
+    // SORTIERUNG: Zuerst GDS, dann DCF
+    const gdsPartners = snapshot.partners.filter(p => p.category === 'gds');
+    const dcfPartners = snapshot.partners.filter(p => p.category === 'dcf');
+    const sortedPartners = [...gdsPartners, ...dcfPartners];
+    
+    // Für jeden Partner und jede Fee-Variante eine Zeile erstellen
+    for (const partner of sortedPartners) {
+      const feesByRegion = JSON.parse(partner.feesByRegion);
+      const isGDS = partner.category === 'gds';
+      const fillColor = isGDS ? 'FFE3F2FD' : 'FFFFF3E0';
+      
+      // Für Expedia: Skip erste EMEA Zeile, für Priceline: Skip erste Americas
+      const feesToProcess = partner.partnerId === 'expedia' 
+        ? feesByRegion.filter((f: any, idx: number) => !(idx === 0 && f.region === 'EMEA'))
+        : partner.partnerId === 'priceline'
+        ? feesByRegion.filter((f: any, idx: number) => !(idx === 0 && f.region === 'Americas'))
+        : feesByRegion;
+      
+      // Standard fees by region
+      for (const fee of feesToProcess) {
+        // Rule ID: Einfaches Format ohne EVOUCHER/STD Suffixe
+        const ruleId = `FEE-${partner.partnerId.toUpperCase()}-${fee.region.toUpperCase()}`;
+        
+        const row = sheet.addRow([
+          ruleId,
+          partner.name,
+          partner.category.toUpperCase(),
+          fee.region,
+          fee.amount,
+          fee.currency,
+          partner.partnerId === 'meili' ? 'All but 10897' : 'N/A',  // DFR
+          partner.partnerId === 'amadeus' ? 'Must be present' : 'N/A',  // eVoucher
+          validationRules.resNumber,
+          validationRules.channel,
+          validationRules.mandant,
+          validationRules.status,
+          validationRules.duplicates,
+          partner.validFrom ? new Date(partner.validFrom).toISOString().split('T')[0] : '-',
+          partner.validTo ? new Date(partner.validTo).toISOString().split('T')[0] : 'Indefinite'
+        ]);
+        row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fillColor } };
+      }
+      
+      // Amadeus special cases
+      if (partner.partnerId === 'amadeus') {
+        // Without eVoucher regional fees
+        if (partner.feesByRegionWithoutEVoucher) {
+          const feesWithoutEVoucher = JSON.parse(partner.feesByRegionWithoutEVoucher);
+          for (const fee of feesWithoutEVoucher) {
+            const ruleId = `FEE-AMADEUS-${fee.region.toUpperCase()}`;
+            const row = sheet.addRow([
+              ruleId,
+              partner.name,
+              partner.category.toUpperCase(),
+              fee.region,  // Entferne "(without eVoucher)" Text
+              fee.amount,
+              fee.currency,
+              'N/A',  // DFR
+              'Must not be present',  // eVoucher
+              validationRules.resNumber,
+              validationRules.channel,
+              validationRules.mandant,
+              validationRules.status,
+              validationRules.duplicates,
+              partner.validFrom ? new Date(partner.validFrom).toISOString().split('T')[0] : '-',
+              partner.validTo ? new Date(partner.validTo).toISOString().split('T')[0] : 'Indefinite'
+            ]);
+            row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9E6CC' } };
+          }
+        }
+        
+        // DFR with eVoucher
+        if (partner.dfrFeesWithEVoucher) {
+          const dfrFeesWithEVoucher = JSON.parse(partner.dfrFeesWithEVoucher);
+          for (const [dfr, fee] of Object.entries(dfrFeesWithEVoucher)) {
+            const ruleId = `FEE-AMADEUS-DFR${dfr}`;
+            const dfrCondition = this.getDfrCondition(partner, dfr);
+            const row = sheet.addRow([
+              ruleId,
+              partner.name,
+              partner.category.toUpperCase(),
+              `DFR ${dfr}`,  // Entferne "(with eVoucher)" Text
+              (fee as any).amount,
+              (fee as any).currency,
+              dfrCondition,  // DFR Bedingung
+              'Must be present',  // eVoucher
+              validationRules.resNumber,
+              validationRules.channel,
+              validationRules.mandant,
+              validationRules.status,
+              validationRules.duplicates,
+              partner.validFrom ? new Date(partner.validFrom).toISOString().split('T')[0] : '-',
+              partner.validTo ? new Date(partner.validTo).toISOString().split('T')[0] : 'Indefinite'
+            ]);
+            row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9E6CC' } };
+          }
+        }
+        
+        // DFR without eVoucher
+        if (partner.dfrFeesWithoutEVoucher) {
+          const dfrFeesWithoutEVoucher = JSON.parse(partner.dfrFeesWithoutEVoucher);
+          for (const [dfr, fee] of Object.entries(dfrFeesWithoutEVoucher)) {
+            const ruleId = `FEE-AMADEUS-DFR${dfr}`;
+            const dfrCondition = this.getDfrCondition(partner, dfr);
+            const row = sheet.addRow([
+              ruleId,
+              partner.name,
+              partner.category.toUpperCase(),
+              `DFR ${dfr}`,  // Entferne "(without eVoucher)" Text
+              (fee as any).amount,
+              (fee as any).currency,
+              dfrCondition,  // DFR Bedingung
+              'Must not be present',  // eVoucher
+              validationRules.resNumber,
+              validationRules.channel,
+              validationRules.mandant,
+              validationRules.status,
+              validationRules.duplicates,
+              partner.validFrom ? new Date(partner.validFrom).toISOString().split('T')[0] : '-',
+              partner.validTo ? new Date(partner.validTo).toISOString().split('T')[0] : 'Indefinite'
+            ]);
+            row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9E6CC' } };
+          }
+        }
+      }
+      
+      // DCF partner DFR exceptions (e.g., Meili)
+      if (partner.category === 'dcf' && partner.voucherRules) {
+        const voucherRules = JSON.parse(partner.voucherRules);
+        if (voucherRules.dfrFees) {
+          for (const [dfr, fee] of Object.entries(voucherRules.dfrFees)) {
+            const ruleId = `FEE-${partner.partnerId.toUpperCase()}-DFR${dfr}`;
+            const dfrCondition = this.getDfrCondition(partner, dfr);
+            const row = sheet.addRow([
+              ruleId,
+              partner.name,
+              partner.category.toUpperCase(),
+              `DFR ${dfr}`,
+              (fee as any).amount,
+              (fee as any).currency,
+              dfrCondition,  // DFR Bedingung
+              'N/A',  // eVoucher
+              validationRules.resNumber,
+              validationRules.channel,
+              validationRules.mandant,
+              validationRules.status,
+              validationRules.duplicates,
+              partner.validFrom ? new Date(partner.validFrom).toISOString().split('T')[0] : '-',
+              partner.validTo ? new Date(partner.validTo).toISOString().split('T')[0] : 'Indefinite'
+            ]);
+            row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEAA7' } };
+          }
+        }
+      }
+    }
+    
+    // Spaltenbreiten optimieren (mit neuen DFR/eVoucher Spalten)
+    sheet.getColumn(1).width = 35; // Rule ID
+    sheet.getColumn(2).width = 25; // Partner
+    sheet.getColumn(3).width = 12; // Category
+    sheet.getColumn(4).width = 30; // Region/Type
+    sheet.getColumn(5).width = 12; // Fee Amount
+    sheet.getColumn(6).width = 10; // Currency
+    sheet.getColumn(7).width = 25; // DFR
+    sheet.getColumn(8).width = 25; // eVoucher
+    sheet.getColumn(9).width = 15; // Res. Number
+    sheet.getColumn(10).width = 30; // Channel Detection
+    sheet.getColumn(11).width = 30; // Mandant
+    sheet.getColumn(12).width = 35; // Reservation Status
+    sheet.getColumn(13).width = 25; // Duplicates
+    sheet.getColumn(14).width = 15; // Valid From
+    sheet.getColumn(15).width = 15; // Valid To
+  }
+
+  private getDfrCondition(partner: any, dfr: string): string {
+    // For Amadeus, check if DFR is 10335
+    if (partner.partnerId === 'amadeus' && dfr === '10335') {
+      return 'Must be 10335';
+    }
+    
+    // For Meili, check if DFR is 10897
+    if (partner.partnerId === 'meili' && dfr === '10897') {
+      return 'Must be 10897';
+    }
+    
+    // Fallback (should not happen with current data)
+    return 'N/A';
+  }
+
+  private addChannelDetectionSheet(workbook: ExcelJS.Workbook, snapshot: RuleSnapshot) {
+    const sheet = workbook.addWorksheet('Channel Detection');
+    
+    // Title
+    const titleRow = sheet.addRow(['Channel Detection Rules']);
+    titleRow.font = { size: 14, bold: true };
+    titleRow.height = 25;
+    sheet.addRow([]);
+    
+    // GDS Section
+    const gdsTitle = sheet.addRow(['GDS Partners']);
+    gdsTitle.font = { bold: true, size: 12 };
+    const logicRow1 = sheet.addRow(['Detection Logic:', 'sourceChannel2 OR sourceChannel3 contains GDS keywords']);
+    logicRow1.getCell(1).font = { bold: true };
+    sheet.addRow([]);
+    
+    const gdsHeaderRow = sheet.addRow(['Partner', 'Keywords', 'Example Channels']);
+    gdsHeaderRow.font = { bold: true };
+    gdsHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE3F2FD' } };
+    
+    sheet.addRow(['Amadeus', 'amadeus', 'Amadeus API, amadeus.com']);
+    sheet.addRow(['Sabre', 'sabre', 'Sabre GDS, sabre.com']);
+    sheet.addRow(['Travelport', 'galileo, worldspan', 'Galileo, Worldspan']);
+    
+    sheet.addRow([]);
+    sheet.addRow([]);
+    
+    // DCF Section
+    const dcfTitle = sheet.addRow(['DCF Partners']);
+    dcfTitle.font = { bold: true, size: 12 };
+    const logicRow2 = sheet.addRow(['Detection Logic:', 'sourceChannel2 contains SOAP or TPRA AND sourceChannel3 contains DCF keywords']);
+    logicRow2.getCell(1).font = { bold: true };
+    sheet.addRow([]);
+    
+    const dcfHeaderRow = sheet.addRow(['Partner', 'Channel2 Prefix', 'Channel3 Keywords', 'Example']);
+    dcfHeaderRow.font = { bold: true };
+    dcfHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF3E0' } };
+    
+    sheet.addRow(['Expedia', 'SOAP, TPRA', 'expedia', 'SOAP API + expedia.com']);
+    sheet.addRow(['Priceline', 'SOAP, TPRA', 'priceline', 'TPRA + priceline.com']);
+    sheet.addRow(['Meili', 'SOAP, TPRA', 'meili', 'SOAP + meili']);
+    
+    // Spaltenbreiten
+    sheet.getColumn(1).width = 20;
+    sheet.getColumn(2).width = 30;
+    sheet.getColumn(3).width = 30;
+    sheet.getColumn(4).width = 40;
+  }
+
+  private async addFranchiseMandantsSheet(workbook: ExcelJS.Workbook) {
+    const sheet = workbook.addWorksheet('Franchise Mandants');
+    
+    // Dynamisch aus DB laden
+    const franchiseMandants = await (prisma as any).franchiseMandant.findMany({
+      orderBy: { fir: 'asc' }
+    });
+    
+    const titleRow = sheet.addRow(['Franchise Mandant Codes']);
+    titleRow.font = { size: 14, bold: true };
+    titleRow.height = 25;
+    
+    const descRow = sheet.addRow(['These are the valid franchise mandant codes. Only reservations with these codes are processed.']);
+    descRow.font = { italic: true };
+    descRow.alignment = { wrapText: true };
+    sheet.mergeCells(`A${descRow.number}:B${descRow.number}`);
+    sheet.addRow([]);
+    
+    const headerRow = sheet.addRow(['Mandant Code (FIR)', 'Country']);
+    headerRow.font = { bold: true };
+    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F5E9' } };
+    
+    for (const mandant of franchiseMandants) {
+      sheet.addRow([
+        mandant.fir,
+        mandant.countryName || mandant.iso || '-'
+      ]);
+    }
+    
+    sheet.getColumn(1).width = 20;
+    sheet.getColumn(2).width = 40;
+  }
+
+  private buildValidationConditions(snapshot: RuleSnapshot): ValidationConditions {
+    const validationRules = snapshot.rules.filter(r => r.category === 'Validation');
+    
+    // VAL-001: Reservation Number (always active)
+    const resNumberRule = 'Must exist';
+    
+    // VAL-002: Channel Detection
+    const channelRule = validationRules.find(r => r.ruleId === 'VAL-002')
+      ? 'Must match GDS/DCF keywords'
+      : 'Not applicable (check disabled)';
+    
+    // VAL-003: Mandant
+    const mandantRule = validationRules.find(r => r.ruleId === 'VAL-003')
+      ? 'Must be franchise mandant'
+      : 'Not applicable (check disabled)';
+    
+    // VAL-004: Status - Negativliste
+    const statusRule = validationRules.find(r => r.ruleId === 'VAL-004');
+    const statusCondition = statusRule
+      ? `All except: ${this.getNegativeStatusList(statusRule)}`
+      : 'Not applicable (check disabled)';
+    
+    // VAL-005: Duplicates
+    const dupRule = validationRules.find(r => r.ruleId === 'VAL-005');
+    const dupCondition = dupRule
+      ? this.formatDuplicateStrategy(dupRule)
+      : 'Not checked';
+    
+    return { 
+      resNumber: resNumberRule, 
+      channel: channelRule, 
+      mandant: mandantRule,
+      status: statusCondition,
+      duplicates: dupCondition
+    };
+  }
+
+  private getNegativeStatusList(statusRule: CalculationRule): string {
+    // Alle bekannten Status
+    const allStatuses = [
+      'Invoice', 'No show', 'Open', 'Cancelled', 
+      'Booking error', 'Customer cancellation', 'Cancellation by Sixt'
+    ];
+    
+    // Extrahiere valide Status aus der Regel
+    const validStatuses = statusRule.logic.condition
+      .match(/"([^"]+)"/g)
+      ?.map(s => s.replace(/"/g, '').toLowerCase());
+    
+    if (!validStatuses || validStatuses.length === 0) {
+      return 'All statuses';
+    }
+    
+    // Erstelle Negativliste
+    const invalidStatuses = allStatuses.filter(s => 
+      !validStatuses.some(v => s.toLowerCase().includes(v))
+    );
+    
+    return invalidStatuses.length > 0 ? invalidStatuses.join(', ') : 'None';
+  }
+
+  private formatDuplicateStrategy(dupRule: CalculationRule): string {
+    const strategyText = dupRule.logic.ifTrue.toLowerCase();
+    if (strategyText.includes('first')) {
+      return 'First occurrence only';
+    } else if (strategyText.includes('latest')) {
+      return 'Latest occurrence only';
+    } else if (strategyText.includes('all')) {
+      return 'All occurrences';
+    }
+    return dupRule.logic.ifTrue;
+  }
+
 
   async generatePDF(snapshot: RuleSnapshot): Promise<Buffer> {
     return new Promise((resolve, reject) => {
@@ -435,7 +673,7 @@ export class RuleExporter {
     
     for (const [month, rate] of rates) {
       const x = startX + (col * colWidth);
-      doc.text(`${month}: ${rate.toFixed(4)}`, x, doc.y, { continued: col < 3 });
+      doc.text(`${month}: ${(rate as number).toFixed(4)}`, x, doc.y, { continued: col < 3 });
       col++;
       if (col >= 4) {
         col = 0;
