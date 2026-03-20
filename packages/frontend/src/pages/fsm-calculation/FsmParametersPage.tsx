@@ -59,15 +59,14 @@ const ExpandIcon = styled.span<{ isOpen: boolean }>`
 `;
 
 const SectionContent = styled.div<{ isOpen: boolean }>`
-  max-height: ${props => props.isOpen ? '2000px' : '0'};
-  overflow: hidden;
-  transition: max-height 0.3s ease-in-out;
+  max-height: ${props => props.isOpen ? 'none' : '0'};
+  overflow: ${props => props.isOpen ? 'visible' : 'hidden'};
+  transition: ${props => props.isOpen ? 'none' : 'max-height 0.3s ease-in-out'};
 `;
 
 const PartnersGrid = styled.div`
   display: grid;
   gap: 16px;
-  padding: 20px;
 `;
 
 const PartnerCard = styled.div`
@@ -336,11 +335,9 @@ export default function FsmParametersPage() {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [historyData, setHistoryData] = useState<any[]>([]);
   const [historyPartner, setHistoryPartner] = useState<GdsDcfPartner | null>(null);
-  const [gdsOpen, setGdsOpen] = useState(false);
-  const [dcfOpen, setDcfOpen] = useState(false);
+  const [gdsDcfOpen, setGdsDcfOpen] = useState(false);
   const [mandantsOpen, setMandantsOpen] = useState(false);
   const [regionsOpen, setRegionsOpen] = useState(false);
-  const [validationRulesOpen, setValidationRulesOpen] = useState(false);
   const [regions, setRegions] = useState<any[]>([]);
   const [showRegionModal, setShowRegionModal] = useState(false);
   const [editingRegion, setEditingRegion] = useState<{ regionName: string; countries: string; validFrom?: string; validTo?: string; notes?: string } | null>(null);
@@ -1108,54 +1105,78 @@ export default function FsmParametersPage() {
 
           <Section>
             <CollapsibleSection>
-              <SectionHeader isOpen={gdsOpen} onClick={() => setGdsOpen(!gdsOpen)}>
+              <SectionHeader isOpen={gdsDcfOpen} onClick={() => setGdsDcfOpen(!gdsDcfOpen)}>
                 <SectionTitle>
-                  <CategoryBadge type="gds">GDS</CategoryBadge>
-                  Global Distribution System
+                  <CategoryBadge type="gds" style={{ marginRight: 8 }}>GDS/DCF</CategoryBadge>
+                  Fee Configuration
                   <span style={{ fontSize: 14, fontWeight: 'normal', color: '#666', marginLeft: 8 }}>
-                    ({gdsPartners.length})
+                    ({gdsPartners.length + dcfPartners.length} partners)
                   </span>
                 </SectionTitle>
-                <ExpandIcon isOpen={gdsOpen}>▼</ExpandIcon>
+                <ExpandIcon isOpen={gdsDcfOpen}>▼</ExpandIcon>
               </SectionHeader>
-              <SectionContent isOpen={gdsOpen}>
-                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end', paddingRight: 12 }}>
-                  <Button onClick={() => handleAddPartner('gds')} style={{ fontSize: 13 }}>
-                    + Add GDS Partner
-                  </Button>
+              <SectionContent isOpen={gdsDcfOpen}>
+                {/* ===== GDS Section (direkt sichtbar) ===== */}
+                <div style={{ padding: '20px', borderBottom: '1px solid #e0e0e0' }}>
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center',
+                    marginBottom: 16 
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <CategoryBadge type="gds">GDS</CategoryBadge>
+                      <span style={{ fontSize: 16, fontWeight: 600 }}>Global Distribution System</span>
+                      <span style={{ fontSize: 14, color: '#666' }}>({gdsPartners.length})</span>
+                    </div>
+                    <Button onClick={() => handleAddPartner('gds')} style={{ fontSize: 13 }}>
+                      + Add GDS Partner
+                    </Button>
+                  </div>
+                  
+                  {gdsPartners.length === 0 ? (
+                    <InfoMessage>No GDS partners configured.</InfoMessage>
+                  ) : (
+                    renderPartners(gdsPartners)
+                  )}
                 </div>
-                {gdsPartners.length === 0 ? (
-                  <InfoMessage>No GDS partners configured.</InfoMessage>
-                ) : (
-                  renderPartners(gdsPartners)
-                )}
-              </SectionContent>
-            </CollapsibleSection>
-          </Section>
 
-          <Section>
-            <CollapsibleSection>
-              <SectionHeader isOpen={dcfOpen} onClick={() => setDcfOpen(!dcfOpen)}>
-                <SectionTitle>
-                  <CategoryBadge type="dcf">DCF</CategoryBadge>
-                  Direct Connect Fee
-                  <span style={{ fontSize: 14, fontWeight: 'normal', color: '#666', marginLeft: 8 }}>
-                    ({dcfPartners.length})
-                  </span>
-                </SectionTitle>
-                <ExpandIcon isOpen={dcfOpen}>▼</ExpandIcon>
-              </SectionHeader>
-              <SectionContent isOpen={dcfOpen}>
-                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end', paddingRight: 12 }}>
-                  <Button onClick={() => handleAddPartner('dcf')} style={{ fontSize: 13 }}>
-                    + Add DCF Partner
-                  </Button>
+                {/* ===== DCF Section (direkt sichtbar) ===== */}
+                <div style={{ padding: '20px', borderBottom: '1px solid #e0e0e0' }}>
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center',
+                    marginBottom: 16 
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <CategoryBadge type="dcf">DCF</CategoryBadge>
+                      <span style={{ fontSize: 16, fontWeight: 600 }}>Direct Connect Fee</span>
+                      <span style={{ fontSize: 14, color: '#666' }}>({dcfPartners.length})</span>
+                    </div>
+                    <Button onClick={() => handleAddPartner('dcf')} style={{ fontSize: 13 }}>
+                      + Add DCF Partner
+                    </Button>
+                  </div>
+                  
+                  {dcfPartners.length === 0 ? (
+                    <InfoMessage>No DCF partners configured.</InfoMessage>
+                  ) : (
+                    renderPartners(dcfPartners)
+                  )}
                 </div>
-                {dcfPartners.length === 0 ? (
-                  <InfoMessage>No DCF partners configured.</InfoMessage>
-                ) : (
-                  renderPartners(dcfPartners)
-                )}
+
+                {/* ===== Validation Rules Section (direkt sichtbar) ===== */}
+                <div style={{ padding: '20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                    <CategoryBadge type="franchise" style={{ background: '#f3e5f5', color: '#7b1fa2' }}>
+                      RULES
+                    </CategoryBadge>
+                    <span style={{ fontSize: 16, fontWeight: 600 }}>Validation Rules Configuration</span>
+                    <span style={{ fontSize: 14, color: '#666' }}>(temporally versioned)</span>
+                  </div>
+                  <ValidationRulesEditor />
+                </div>
               </SectionContent>
             </CollapsibleSection>
           </Section>
@@ -1305,24 +1326,6 @@ export default function FsmParametersPage() {
                     ))}
                   </PartnersGrid>
                 )}
-              </SectionContent>
-            </CollapsibleSection>
-          </Section>
-
-          <Section>
-            <CollapsibleSection>
-              <SectionHeader isOpen={validationRulesOpen} onClick={() => setValidationRulesOpen(!validationRulesOpen)}>
-                <SectionTitle>
-                  <CategoryBadge type="franchise" style={{ background: '#f3e5f5', color: '#7b1fa2' }}>RULES</CategoryBadge>
-                  Validation Rules Configuration
-                  <span style={{ fontSize: 14, fontWeight: 'normal', color: '#666', marginLeft: 8 }}>
-                    (temporally versioned)
-                  </span>
-                </SectionTitle>
-                <ExpandIcon isOpen={validationRulesOpen}>▼</ExpandIcon>
-              </SectionHeader>
-              <SectionContent isOpen={validationRulesOpen}>
-                <ValidationRulesEditor />
               </SectionContent>
             </CollapsibleSection>
           </Section>

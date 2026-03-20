@@ -10,10 +10,12 @@ export interface ValidationRuleConfig {
   enableChannelCheck: boolean;
   validStatuses: string[]; // ["invoice", "no show", "open"]
   duplicateStrategy: 'first' | 'all' | 'latest';
+  validReservationStatuses: string[]; // NEW: ["invoice", "no show", "open", "cancelled", etc.]
   validFrom: Date;
   validTo: Date | null;
   createdBy: string;
   createdAt?: Date;
+  updatedAt?: Date; // NEW
   notes?: string | null;
 }
 
@@ -109,6 +111,7 @@ export class ValidationRuleConfigService {
         enableChannelCheck: config.enableChannelCheck,
         validStatuses: JSON.stringify(config.validStatuses),
         duplicateStrategy: config.duplicateStrategy,
+        validReservationStatuses: JSON.stringify(config.validReservationStatuses || ['invoice', 'no show', 'open']),
         validFrom,
         validTo,
         createdBy,
@@ -160,10 +163,14 @@ export class ValidationRuleConfigService {
       enableChannelCheck: raw.enableChannelCheck,
       validStatuses: JSON.parse(raw.validStatuses),
       duplicateStrategy: raw.duplicateStrategy,
+      validReservationStatuses: raw.validReservationStatuses 
+        ? JSON.parse(raw.validReservationStatuses) 
+        : ['invoice', 'no show', 'open'], // Fallback for old records
       validFrom: new Date(raw.validFrom),
       validTo: raw.validTo ? new Date(raw.validTo) : null,
       createdBy: raw.createdBy,
       createdAt: new Date(raw.createdAt),
+      updatedAt: raw.updatedAt ? new Date(raw.updatedAt) : undefined,
       notes: raw.notes,
     };
   }
@@ -181,6 +188,7 @@ export class ValidationRuleConfigService {
       enableChannelCheck: true,
       validStatuses: ['invoice', 'no show', 'open'],
       duplicateStrategy: 'first',
+      validReservationStatuses: ['invoice', 'no show', 'open'],
       validFrom: new Date('2025-01-01'),
       validTo: null,
       createdBy: 'System',

@@ -192,10 +192,12 @@ interface ValidationRuleConfig {
   enableChannelCheck: boolean;
   validStatuses: string[];
   duplicateStrategy: 'first' | 'all' | 'latest';
+  validReservationStatuses: string[]; // NEW
   validFrom: Date;
   validTo: Date | null;
   createdBy: string;
   createdAt?: Date;
+  updatedAt?: Date; // NEW
   notes?: string | null;
 }
 
@@ -213,6 +215,7 @@ export default function ValidationRulesEditor() {
   const [enableChannelCheck, setEnableChannelCheck] = useState(true);
   const [duplicateStrategy, setDuplicateStrategy] = useState<'first' | 'all' | 'latest'>('first');
   const [validStatuses, setValidStatuses] = useState('invoice, no show, open');
+  const [validReservationStatuses, setValidReservationStatuses] = useState<string[]>(['invoice', 'no show', 'open']);
   const [validFrom, setValidFrom] = useState(new Date().toISOString().split('T')[0]);
   const [notes, setNotes] = useState('');
 

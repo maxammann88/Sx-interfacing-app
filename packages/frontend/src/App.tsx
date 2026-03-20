@@ -81,6 +81,7 @@ import FsmParametersPage from './pages/fsm-calculation/FsmParametersPage';
 import FsmCalculationRulesPage from './pages/fsm-calculation/FsmCalculationRulesPage';
 import FsmReportingPage from './pages/fsm-calculation/FsmReportingPage';
 import FsmResultsPage from './pages/fsm-calculation/FsmResultsPage';
+import { UserProvider } from './context/UserContext';
 
 export default function App() {
   const [, setRegistryReady] = useState(0);
@@ -98,11 +99,12 @@ export default function App() {
   }, []);
 
   return (
-    <ThemeProvider theme={theme}>
-      <GlobalStyles />
-      <BrowserRouter>
-        <FloatingFeedbackButton />
-        <Routes>
+    <UserProvider>
+      <ThemeProvider theme={theme}>
+        <GlobalStyles />
+        <BrowserRouter>
+          <FloatingFeedbackButton />
+          <Routes>
           <Route path="/" element={<PortalHomePage />} />
           <Route path="/feedback" element={<FeedbackPage />} />
           <Route path="/automation-controlling" element={<AutomationControllingPage />} />
@@ -146,5 +148,6 @@ export default function App() {
         </Routes>
       </BrowserRouter>
     </ThemeProvider>
+    </UserProvider>
   );
 }

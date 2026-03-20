@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, useLocation, Outlet } from 'react-router-dom';
 import styled from 'styled-components';
 import { theme } from '../styles/theme';
+import UserInput from './UserInput';
 
 const Wrapper = styled.div`
   min-height: 100vh;
@@ -95,6 +96,7 @@ export default function FsmLayout() {
           ))}
         </Nav>
         <HeaderRight>
+          <UserInput />
           <NavLink to="/feedback" $active={location.pathname === '/feedback'} style={{ fontSize: 12 }}>
             App Requests &amp; Bugs
           </NavLink>
